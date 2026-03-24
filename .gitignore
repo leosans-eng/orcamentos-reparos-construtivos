@@ -1,7 +1,9 @@
-sinapi_precos.csv
 create_venv.bat
 .venv/
 backup/
 logs/
 scripts antigos/
 prototipos/
+*sinapi_precos.csv
+sinapi/sinapi_processado/
+sinapi/sinapi_referencia/

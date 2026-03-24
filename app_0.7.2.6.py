@@ -6,6 +6,7 @@ import math
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 import os
+import unicodedata
 from datetime import datetime
 
 # ---------------------------- #
@@ -577,6 +578,14 @@ def nome_arquivo(texto):
 
     return texto[:80]
 
+def normalizar_texto(texto):
+    if texto is None:
+        return ""
+    texto = str(texto).strip()
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return texto.upper()
+
 # ---------------------------- #
 # GERAR ORÇAMENTO              #
 # ---------------------------- #
@@ -727,7 +736,7 @@ def gerar_orcamento():
 
     linha_total = pd.DataFrame([{
         "Código SINAPI": "",
-        "Descrição do item": "TOTAL SEM BDI",
+        "Descrição do item": "Total sem BDI",
         "Unid.": "",
         "Qtd.": "",
         "Valor Unit.": "",
@@ -752,7 +761,7 @@ def gerar_orcamento():
 
     linha_bdi = pd.DataFrame([{
         "Código SINAPI": "",
-        "Descrição do item": "BDI",
+        "Descrição do item": f"Total do BDI ({entrada_bdi.get()}%)",
         "Unid.": "",
         "Qtd.": "",
         "Valor Unit.": "",
@@ -775,7 +784,7 @@ def gerar_orcamento():
 
     linha_aluguel = pd.DataFrame([{
         "Código SINAPI": "",
-        "Descrição do item": "ALUGUEL (1 MÊS)",
+        "Descrição do item": "Aluguel (1 mês)",
         "Unid.": "",
         "Qtd.": "",
         "Valor Unit.": "",
@@ -959,11 +968,40 @@ def gerar_orcamento():
         # --------------------------- #
         # TOTAL SEM BDI, BDI, ALUGUEL #
         # --------------------------- #
-        if descricao in ("TOTAL SEM BDI", "BDI", "ALUGUEL (1 MÊS)"):
+        descricao_norm = normalizar_texto(descricao)
 
-            for cell in row:
+        if descricao_norm and (
+            descricao_norm == "TOTAL SEM BDI" or
+            descricao_norm.startswith("TOTAL DO BDI") or
+            descricao_norm == "ALUGUEL (1 MES)"
+        ):
+            linha_idx = row[0].row
+            descricao_formatada = str(descricao).strip()
+
+            if descricao_norm == "TOTAL SEM BDI":
+                descricao_formatada = "Total sem BDI"
+            elif descricao_norm == "ALUGUEL (1 MES)":
+                descricao_formatada = "Aluguel (1 mês)"
+            elif descricao_norm.startswith("TOTAL DO BDI"):
+                descricao_formatada = f"Total do BDI ({entrada_bdi.get()}%)"
+
+            # O texto original está na coluna B. Após mesclar, precisa ficar em A
+            ws.cell(row=linha_idx, column=1, value=descricao_formatada)
+            for col_idx in range(2, 6):
+                ws.cell(row=linha_idx, column=col_idx, value=None)
+
+            # Mesclar rótulo em A:E, como no modelo de referência.
+            ws.merge_cells(start_row=linha_idx, start_column=1, end_row=linha_idx, end_column=5)
+
+            for col_idx in range(1, 7):
+                cell = ws.cell(row=linha_idx, column=col_idx)
                 cell.fill = fundo_totais
-                cell.font = Font(bold=True, size=12)
+                cell.font = Font(bold=True, size=11)
+                cell.alignment = Alignment(
+                    horizontal="right" if col_idx == 1 else "center",
+                    vertical="center",
+                    wrap_text=True
+                )
 
         # ----------- #
         # TOTAL FINAL #

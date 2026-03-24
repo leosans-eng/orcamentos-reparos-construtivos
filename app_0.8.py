@@ -310,7 +310,7 @@ tree_anomalias = ttk.Treeview(
     frame_listbox,
     columns=("subtotal"),
     show="tree headings",
-    height=8
+    height=11
 )
 
 tree_anomalias.heading("#0", text="Anomalia")
@@ -442,7 +442,7 @@ def remover_anomalia():
 
     pai = tree_anomalias.parent(item_id)
 
-    # SE CLICAR NA ANOMALIA
+    # SE SELECIONAR APENAS A ANOMALIA
     if pai == "":
 
         indice = tree_anomalias.index(item_id)
@@ -450,7 +450,7 @@ def remover_anomalia():
         atualizar_tree()
         mostrar_feedback("Anomalia removida.", "orange red")
 
-    # SE CLICAR NO CÔMODO
+    # SE SELECIONAR UM CÔMODO
     else:
 
         indice_anomalia = tree_anomalias.index(pai)
@@ -464,6 +464,16 @@ def remover_anomalia():
         atualizar_tree()
 
         mostrar_feedback(f"Cômodo removido: {comodo}", "orange")
+
+def remover_todas_anomalias():
+
+    if not lista_anomalias:
+        mostrar_feedback("Não há anomalias para remover.", "orange")
+        return
+
+    lista_anomalias.clear()
+    atualizar_tree()
+    mostrar_feedback("Todas as anomalias foram removidas.", "orange red")
     
 # ---------------------------- #
 # BOTÕES                       #
@@ -479,6 +489,13 @@ tk.Button(
     frame_lista,
     text="Remover Anomalia Selecionada",
     command=remover_anomalia
+).pack(pady=5)
+
+tk.Button(
+    frame_lista,
+    text="Remover Todas as Anomalias",
+    underline=8,
+    command=remover_todas_anomalias
 ).pack(pady=5)
 
 # ---------------------------- #
@@ -1088,6 +1105,15 @@ botao_gerar = tk.Button(
     font=("Arial", 11, "bold"),
     padx=12,
     pady=6,
+    #   # cores do botão
+    #   bg="#006699",
+    #   fg="white",
+    #   activebackground="#00557a",
+    #   activeforeground="white",
+    #   relief="flat",
+    #   bd=0,
+    #   cursor="hand2",
+
     command=gerar_orcamento
 )
 

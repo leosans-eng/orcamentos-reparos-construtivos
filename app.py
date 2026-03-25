@@ -14,7 +14,7 @@ from datetime import datetime
 #  VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 #  ------------------------------------------- #
 
-APP_VERSION = "0.9.3.2"
+APP_VERSION = "0.9.3.3"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PASTA_SINAPI_PROCESSADO = os.path.join(BASE_DIR, "sinapi", "sinapi_processado")
@@ -714,10 +714,10 @@ def calcular_quantidade(etapa, medidas):
         return math.sqrt(medidas["piso"]) * 4 * etapa.get("coeficiente", 1)
 
     if tipo == "por_comodo":
-        return etapa["quantidade"]
+        return etapa["coeficiente"]
 
     if tipo == "fixo":
-        return etapa["quantidade"]
+        return etapa["coeficiente"]
 
     return 0
 

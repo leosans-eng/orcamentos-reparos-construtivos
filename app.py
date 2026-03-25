@@ -125,6 +125,11 @@ with open("vicios_construtivos.json", "r", encoding="utf-8") as f:
 if isinstance(dados_json, list):
     dados_json = dados_json[0]
 
+nomes_grupos_reparo = {
+    "reparo_pisos_ceramicos": "Reparo de Pisos Cerâmicos",
+    "reparo_azulejos": "Reparo de Azulejos"
+}
+
 caminho_sinapi_carregado, sinapi_referencia_rotulo = obter_csv_sinapi_mais_recente(
     PASTA_SINAPI_PROCESSADO
 )
@@ -783,7 +788,7 @@ def normalizar_texto(texto):
 
 def gerar_orcamento():
 
-    #Apenas para diagnosticar alguns bugs. Excluir essa print depois de gerar o primeiro orçamento completo
+    # para diagnosticar bugs
     print("LISTA_ANOMALIAS:", lista_anomalias)
 
     if not lista_anomalias:
@@ -794,6 +799,9 @@ def gerar_orcamento():
         return
 
     linhas = []
+
+    # controle para evitar duplicação de reparos
+    reparos_executados = set()
 
     for item in lista_anomalias:
 
@@ -807,9 +815,21 @@ def gerar_orcamento():
         print("Anomalia selecionada:", nome_anomalia)
         print("Chaves disponíveis no JSON:", dados_json["anomalias"].keys())
 
-        etapas = dados_json["anomalias"][nome_anomalia]["etapas"]
+        dados_anomalia = dados_json["anomalias"][nome_anomalia]
+
+        grupo_reparo = dados_anomalia.get("grupo_reparo", nome_anomalia)
+        print("GRUPO DE REPARO:", grupo_reparo)
+
+        etapas = dados_anomalia["etapas"]
 
         for comodo in comodos_afetados:
+            
+            chave_reparo = (grupo_reparo, comodo)
+            
+            if chave_reparo in reparos_executados:
+                continue
+
+            reparos_executados.add(chave_reparo)
 
             try:
 
@@ -864,7 +884,7 @@ def gerar_orcamento():
                 total = quantidade * valor
 
                 linhas.append({
-                    "Anomalia": nome_anomalia,
+                    "Anomalia": grupo_reparo,
                     "Ordem": ordem,
                     "Código SINAPI": codigo,
                     "Descrição do item": descricao,
@@ -899,10 +919,12 @@ def gerar_orcamento():
 
         subtotal = grupo["Total s/ BDI"].sum()
 
+        titulo = nomes_grupos_reparo.get(anomalia, anomalia)
+
         # subtítulo da anomalia
         linhas_final.append({
             "Código SINAPI": "",
-            "Descrição do item": anomalia.upper(),
+            "Descrição do item": titulo.upper(),
             "Unid.": "",
             "Qtd.": "",
             "Valor Unit.": "",

@@ -14,7 +14,7 @@ from datetime import datetime
 #  VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 #  ------------------------------------------- #
 
-APP_VERSION = "0.9.2.0"
+APP_VERSION = "0.9.3.2"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PASTA_SINAPI_PROCESSADO = os.path.join(BASE_DIR, "sinapi", "sinapi_processado")
@@ -127,7 +127,8 @@ if isinstance(dados_json, list):
 
 nomes_grupos_reparo = {
     "reparo_pisos_ceramicos": "Reparo de Pisos Cerâmicos",
-    "reparo_azulejos": "Reparo de Azulejos"
+    "reparo_azulejos": "Reparo de Azulejos",
+    "reparo_trincas": "Intervenção de fissuras e trincas"
 }
 
 caminho_sinapi_carregado, sinapi_referencia_rotulo = obter_csv_sinapi_mais_recente(
@@ -319,10 +320,16 @@ lista_comodos = [
     "Área de Serviço"
 ]
 
-comodos_com_ceramica = [
+comodos_area_molhada = [
     "Banheiro",
     "Cozinha",
     "Área de Serviço"
+]
+
+comodos_area_seca = [
+    "Sala",
+    "Dormitório 1",
+    "Dormitório 2"
 ]
 
 comodos = {}
@@ -337,7 +344,7 @@ for i, c in enumerate(lista_comodos, start=1):
     entrada_rev_arg = tk.Entry(frame_tabela, width=10)
     entrada_rev_arg.grid(row=i, column=2)
 
-    if c in comodos_com_ceramica:
+    if c in comodos_area_molhada:
 
         entrada_rev_cer = tk.Entry(frame_tabela, width=10)
 
@@ -362,18 +369,23 @@ frame_anomalia.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
 
 vicios = [
     "Desplacamento de pisos cerâmicos",
+    "Desplacamento de pisos cerâmicos em área molhada",
     "Desplacamento de azulejos",
     "Manchas nos pisos",
     "Manchas nos azulejos",
-    "Infiltração pela esquadria"
+    "Infiltração pela esquadria",
+    "Trinca na laje percorrendo o eletroduto"
 ]
 
 combo_vicio = ttk.Combobox(frame_anomalia, width=40, values=vicios, state="readonly")
 combo_vicio.pack(pady=5)
 
 comodos_bloqueados_por_vicio = {
-    "Desplacamento de azulejos": {"Sala", "Dormitório 1", "Dormitório 2"},
-    "Manchas nos azulejos": {"Sala", "Dormitório 1", "Dormitório 2"}
+    "Desplacamento de azulejos": comodos_area_seca,
+    "Desplacamento de pisos cerâmicos em área molhada": comodos_area_seca,
+    "Desplacamento de pisos cerâmicos": comodos_area_molhada,
+    "Manchas nos azulejos": comodos_area_seca,
+    "Manchas nos pisos": comodos_area_seca
 }
 
 # ---------------------------- #
@@ -1302,6 +1314,11 @@ botao_gerar = tk.Button(
 
     command=gerar_orcamento
 )
+
+for nome, dados in dados_json["anomalias"].items():
+    for etapa in dados["etapas"]:
+        if etapa["tipo_calculo"] in ("fixo", "por_comodo") and "quantidade" not in etapa:
+            print(f"Erro em {nome}: etapa sem quantidade ->", etapa)
 
 botao_gerar.pack(pady=(5,10))
 

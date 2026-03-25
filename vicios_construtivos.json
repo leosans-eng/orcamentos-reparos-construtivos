@@ -7,7 +7,7 @@
 
         {
           "codigo_sinapi": "97633",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
@@ -21,7 +21,7 @@
 
         {
           "codigo_sinapi": "87247",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
@@ -36,20 +36,62 @@
       ]
     },
 
-    "Manchas nos pisos": {
+    "Desplacamento de pisos cerâmicos em área molhada": {
       "grupo_reparo": "reparo_pisos_ceramicos",
       "etapas": [
 
         {
           "codigo_sinapi": "97633",
-          "unidade": "m2",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+
+        {
+          "codigo_sinapi": "98554",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+
+        {
+          "codigo_sinapi": "87757",
+          "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
 
         {
           "codigo_sinapi": "87247",
-          "unidade": "m2",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+
+        {
+          "codigo_sinapi": "1381",
+          "unidade": "KG",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 5.0
+        }
+
+      ]
+    },
+
+    "Manchas nos pisos": {
+      "grupo_reparo": "reparo_pisos_ceramicos",
+      "etapas": [
+
+        {
+          "codigo_sinapi": "97633",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+
+        {
+          "codigo_sinapi": "87247",
+          "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         }
@@ -63,14 +105,14 @@
 
         {
           "codigo_sinapi": "97633",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "area_rev_cer",
           "coeficiente": 1.0
         },
 
         {
           "codigo_sinapi": "87275",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "area_rev_cer",
           "coeficiente": 1.0
         }
@@ -84,14 +126,14 @@
 
         {
           "codigo_sinapi": "97633",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "area_rev_cer",
           "coeficiente": 1.0
         },
 
         {
           "codigo_sinapi": "87275",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "area_rev_cer",
           "coeficiente": 1.0
         }
@@ -118,7 +160,7 @@
 
         {
           "codigo_sinapi": "98562",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "por_comodo",
           "quantidade": 1
         },
@@ -139,20 +181,47 @@
 
         {
           "codigo_sinapi": "88485",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "area_rev_arg",
           "coeficiente": 1.0
         },
 
         {
           "codigo_sinapi": "104642",
-          "unidade": "m2",
+          "unidade": "m²",
           "tipo_calculo": "area_rev_arg",
           "coeficiente": 1.0
         }
 
       ]
-    }
+    },
 
+    "Trinca na laje percorrendo o eletroduto": {
+      "grupo_reparo": "reparo_trincas",
+      "etapas": [
+
+        {
+          "codigo_sinapi": "88309",
+          "unidade": "H",
+          "tipo_calculo": "por_comodo",
+          "quantidade": 2.0
+        },
+
+        {
+          "codigo_sinapi": "6094",
+          "unidade": "KG",
+          "tipo_calculo": "por_comodo",
+          "quantidade": 0.2
+        },
+
+        {
+          "codigo_sinapi": "104640",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        }
+
+      ]
+    }
   }
 }

@@ -14,7 +14,7 @@ from datetime import datetime
 #  VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 #  ------------------------------------------- #
 
-APP_VERSION = "0.9.0.0"
+APP_VERSION = "0.9.2.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PASTA_SINAPI_PROCESSADO = os.path.join(BASE_DIR, "sinapi", "sinapi_processado")
@@ -899,7 +899,7 @@ def gerar_orcamento():
     df = df.sort_values(["Anomalia", "Ordem"])
 
     df = df.groupby(
-        ["Anomalia", "Código SINAPI", "Descrição do item", "Unid.", "Valor Unit.", "Ordem"],
+        ["Anomalia", "Código SINAPI", "Descrição do item", "Unid.", "Valor Unit."],
         as_index=False,
         sort=False
     ).agg({
@@ -909,11 +909,9 @@ def gerar_orcamento():
 
     total_geral = df["Total s/ BDI"].sum()
 
-    df = df.sort_values(["Anomalia", "Ordem"])
+    df = df.sort_values(["Anomalia"])
 
     linhas_final = []
-
-    df = df.drop(columns=["Ordem"])
 
     for anomalia, grupo in df.groupby("Anomalia"):
 

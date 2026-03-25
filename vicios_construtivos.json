@@ -35,7 +35,61 @@
       ]
     },
 
+    "Manchas nos pisos": {
+      "etapas": [
+
+        {
+          "codigo_sinapi": "97633",
+          "unidade": "m2",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+
+        {
+          "codigo_sinapi": "97632",
+          "unidade": "m",
+          "tipo_calculo": "perimetro",
+          "coeficiente": 1.0
+        },
+
+        {
+          "codigo_sinapi": "87247",
+          "unidade": "m2",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+
+        {
+          "codigo_sinapi": "88648",
+          "unidade": "m",
+          "tipo_calculo": "perimetro",
+          "coeficiente": 1.0
+        }
+
+      ]
+    },
+
     "Desplacamento de azulejos": {
+      "etapas": [
+
+        {
+          "codigo_sinapi": "97633",
+          "unidade": "m2",
+          "tipo_calculo": "area_rev_cer",
+          "coeficiente": 1.0
+        },
+
+        {
+          "codigo_sinapi": "87275",
+          "unidade": "m2",
+          "tipo_calculo": "area_rev_cer",
+          "coeficiente": 1.0
+        }
+
+      ]
+    },
+
+    "Manchas nos azulejos": {
       "etapas": [
 
         {

@@ -358,6 +358,8 @@ frame_anomalia.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
 vicios = [
     "Desplacamento de pisos cerâmicos",
     "Desplacamento de azulejos",
+    "Manchas nos pisos",
+    "Manchas nos azulejos",
     "Infiltração pela esquadria"
 ]
 
@@ -365,7 +367,8 @@ combo_vicio = ttk.Combobox(frame_anomalia, width=40, values=vicios, state="reado
 combo_vicio.pack(pady=5)
 
 comodos_bloqueados_por_vicio = {
-    "Desplacamento de azulejos": {"Sala", "Dormitório 1", "Dormitório 2"}
+    "Desplacamento de azulejos": {"Sala", "Dormitório 1", "Dormitório 2"},
+    "Manchas nos azulejos": {"Sala", "Dormitório 1", "Dormitório 2"}
 }
 
 # ---------------------------- #

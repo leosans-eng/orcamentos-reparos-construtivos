@@ -13,7 +13,7 @@ from datetime import datetime
 # ------------------------------------------- #
 # VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 # ------------------------------------------- #
-APP_VERSION = "0.9.6.2"
+APP_VERSION = "0.9.6.3"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PASTA_SINAPI_PROCESSADO = os.path.join(BASE_DIR, "sinapi", "sinapi_processado")
@@ -239,7 +239,15 @@ frame_checkboxes.grid(row=1, column=0, columnspan=2, sticky="w", padx=5)
 # linha 1 - Proprietário / Autor
 tk.Label(frame_dados, text="Autor(a):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
-entrada_proprietario = tk.Entry(frame_dados)
+var_proprietario = tk.StringVar()
+
+def forcar_maiusculo(*args):
+    texto = var_proprietario.get()
+    var_proprietario.set(texto.upper())
+
+var_proprietario.trace_add("write", forcar_maiusculo)
+
+entrada_proprietario = tk.Entry(frame_dados, textvariable=var_proprietario)
 entrada_proprietario.grid(row=0, column=1, columnspan=3, sticky="ew", padx=5)
 
 frame_dados.columnconfigure(1, weight=1)

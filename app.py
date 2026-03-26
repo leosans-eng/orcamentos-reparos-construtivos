@@ -14,15 +14,14 @@ from datetime import datetime
 # VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 # ------------------------------------------- #
 
-APP_VERSION = "0.9.5.0"
+APP_VERSION = "0.9.5.1"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PASTA_SINAPI_PROCESSADO = os.path.join(BASE_DIR, "sinapi", "sinapi_processado")
 CAMINHO_FALLBACK_SINAPI = os.path.join(BASE_DIR, "sinapi_precos.csv")
 
-
 def _parse_referencia_do_nome_csv(nome_arquivo):
-    """Extrai (ano, mês) de SINAPI_Referência_YYYY_MM.csv (acento opcional em Referência)."""
+    #Extrai (ano, mês) de SINAPI_Referência_YYYY_MM.csv (acento opcional em Referência)
     m = re.match(
         r"(?i)SINAPI_Refer[eê]ncia_(\d{4})_(\d{2})\.csv$",
         nome_arquivo.strip(),
@@ -33,7 +32,6 @@ def _parse_referencia_do_nome_csv(nome_arquivo):
     if not (1 <= mes <= 12):
         return None
     return ano, mes
-
 
 def obter_csv_sinapi_mais_recente(pasta_processado):
     """
@@ -58,7 +56,6 @@ def obter_csv_sinapi_mais_recente(pasta_processado):
     rotulo = f"{mes:02d}/{ano}"
     return caminho, rotulo
 
-
 def informacoes_versao():
     return {
         "app": APP_VERSION,
@@ -66,11 +63,9 @@ def informacoes_versao():
         "arquivo_sinapi": os.path.basename(caminho_sinapi_carregado),
     }
 
-
 def texto_rodape_interface():
     info = informacoes_versao()
     return f"Sistema ORC v{info['app']} · SINAPI referência {info['sinapi']}"
-
 
 # Atraso antes do nome do CSV sair deslizando à direita (ms)
 RODAPE_CSV_SUMIR_APOS_MS = 3000
@@ -78,9 +73,7 @@ RODAPE_CSV_SUMIR_APOS_MS = 3000
 RODAPE_CSV_DESLIZE_INTERVALO_MS = 35
 RODAPE_CSV_DESLIZE_PASSO_PX = 4
 
-
 def _agendar_sumico_nome_csv_deslize_direita(label_csv, frame_rodape):
-    """Após um tempo, retira o rótulo do layout e o desloca para a direita até sumir."""
 
     def executar():
         if not label_csv.winfo_exists():
@@ -244,6 +237,9 @@ scrollbar.pack(side="right", fill="y")
 frame_dados = tk.LabelFrame(frame_principal, text="Dados do Orçamento")
 frame_dados.pack(fill="x", padx=10, pady=10)
 
+frame_checkboxes = tk.Frame(frame_dados)
+frame_checkboxes.grid(row=1, column=0, columnspan=2, sticky="w", padx=5)
+
 # linha 1 - Proprietário / Autor
 tk.Label(frame_dados, text="Autor(a):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
@@ -276,17 +272,17 @@ def obter_estado():
 
     return estado
 
-# linha 2 - Estado, Aluguel e BDI
+# linha 2 - Acompanhamento Técnico, Eventuais, Estado, Aluguel e BDI
 
 var_acompanhamento = tk.BooleanVar(value=True)
 
 chk_acompanhamento = tk.Checkbutton(
     frame_dados,
-    text="Acompanhamento Técnico",
+    text="Acompanhamento Técnico |",
     variable=var_acompanhamento
 )
 
-chk_acompanhamento.grid(row=1, column=0, columnspan=2, sticky="w", padx=5)
+chk_acompanhamento.pack(in_=frame_checkboxes, side="left")
 
 var_eventuais = tk.BooleanVar(value=True)
 
@@ -296,7 +292,7 @@ chk_eventuais = tk.Checkbutton(
     variable=var_eventuais
 )
 
-chk_eventuais.grid(row=1, column=1, padx=5)
+chk_eventuais.pack(in_=frame_checkboxes, side="left")
 
 tk.Label(frame_dados, text="Aluguel (R$):").grid(row=1, column=2, padx=5)
 

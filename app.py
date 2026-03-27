@@ -14,7 +14,7 @@ import sys
 # ------------------------------------------- #
 # VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 # ------------------------------------------- #
-APP_VERSION = "0.9.8.0"
+APP_VERSION = "0.9.8.1"
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -154,6 +154,7 @@ sinapi.columns = sinapi.columns.str.strip().str.lower()
 janela = tk.Tk()
 janela.title("Orçamento de Reparos Construtivos - ORC")
 janela.geometry("990x610+200+40")
+janela.iconbitmap("icone.ico")
 
 # ---------------------------- #
 # RODAPÉ (VERSÕES / SINAPI)    #

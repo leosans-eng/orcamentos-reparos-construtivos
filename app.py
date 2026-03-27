@@ -9,13 +9,18 @@ from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 import os
 import unicodedata
 from datetime import datetime
+import sys
 
 # ------------------------------------------- #
 # VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 # ------------------------------------------- #
-APP_VERSION = "0.9.7.2"
+APP_VERSION = "0.9.8.0"
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 PASTA_SINAPI_PROCESSADO = os.path.join(BASE_DIR, "sinapi", "sinapi_processado")
 CAMINHO_FALLBACK_SINAPI = os.path.join(BASE_DIR, "sinapi_precos.csv")
 

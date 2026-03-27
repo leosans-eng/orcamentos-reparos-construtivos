@@ -8,3 +8,5 @@ prototipos/
 *sinapi_precos.csv
 sinapi/sinapi_processado/
 sinapi/sinapi_referencia/
+build/
+dist/

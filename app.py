@@ -14,7 +14,7 @@ import sys
 # ------------------------------------------- #
 # VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 # ------------------------------------------- #
-APP_VERSION = "0.9.8.2"
+APP_VERSION = "0.9.8.3"
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)

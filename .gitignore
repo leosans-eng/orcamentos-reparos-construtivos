@@ -11,4 +11,6 @@ sinapi/sinapi_processado/
 sinapi/sinapi_referencia/
 build/
 dist/
-__pycache__
+setup/output/
+setup/icone.ico
+__pycache__/

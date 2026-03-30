@@ -427,6 +427,14 @@
         },
 
         {
+          "codigo_sinapi": "88485",
+          "unidade": "m²",
+          "tipo_calculo": "area_rev_arg",
+          "coeficiente": 1.0,
+          "grupo_planilha": "repintura"
+        },
+
+        {
           "codigo_sinapi": "104642",
           "unidade": "m²",
           "tipo_calculo": "area_rev_arg",

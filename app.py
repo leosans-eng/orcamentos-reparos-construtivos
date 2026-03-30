@@ -14,7 +14,7 @@ import sys
 # ------------------------------------------- #
 # VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 # ------------------------------------------- #
-APP_VERSION = "0.9.8.1"
+APP_VERSION = "0.9.8.2"
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -852,41 +852,24 @@ def gerar_orcamento():
 
     linhas = []
 
-    # controle para evitar duplicação de reparos
-    reparos_executados = set()
+    # controle para evitar duplicação de repintura por cômodo/código
+    repintura_executada = set() # (comodo, codigo_sinapi)
 
     # Para ANOMALIAS selecionadas
 
     for item in lista_anomalias:
-
         if not isinstance(item, dict):
             print("Item inválido na lista:", item)
             continue
 
         nome_anomalia = item["vicio"]
         comodos_afetados = item["comodos"]
-
-        print("Anomalia selecionada:", nome_anomalia)
-        print("Chaves disponíveis no JSON:", dados_json["anomalias"].keys())
-
         dados_anomalia = dados_json["anomalias"][nome_anomalia]
-
         grupo_reparo = dados_anomalia.get("grupo_reparo", nome_anomalia)
-        print("GRUPO DE REPARO:", grupo_reparo)
-
         etapas = dados_anomalia["etapas"]
 
         for comodo in comodos_afetados:
-            
-            chave_reparo = (grupo_reparo, comodo)
-            
-            if chave_reparo in reparos_executados:
-                continue
-
-            reparos_executados.add(chave_reparo)
-
             try:
-
                 piso = ler_float(comodos[comodo]["piso"])
                 arg = ler_float(comodos[comodo]["rev_arg"])
 
@@ -896,9 +879,7 @@ def gerar_orcamento():
                     cer = 0
 
             except Exception as e:
-
                 print("ERRO:", e)
-
                 mostrar_feedback(
                     f"Erro ao ler medidas do cômodo {comodo}",
                     "red"
@@ -917,6 +898,13 @@ def gerar_orcamento():
                 quantidade = calcular_quantidade(etapa, medidas)
 
                 codigo = str(etapa["codigo_sinapi"])
+                grupo_planilha = etapa.get("grupo_planilha", "")
+                # Se for repintura, só adiciona se não foi feita para este cômodo/código
+                if grupo_planilha == "repintura":
+                    chave_repintura = (comodo, codigo)
+                    if chave_repintura in repintura_executada:
+                        continue
+                    repintura_executada.add(chave_repintura)
 
                 estado = obter_estado()
 
@@ -939,7 +927,7 @@ def gerar_orcamento():
 
                 linhas.append({
                     "Anomalia": grupo_reparo,
-                    "Grupo Planilha": etapa.get("grupo_planilha", ""),
+                    "Grupo Planilha": grupo_planilha,
                     "Ordem": ordem,
                     "Código SINAPI": codigo,
                     "Descrição do item": descricao,
@@ -1020,8 +1008,11 @@ def gerar_orcamento():
     df["Ordem_Execucao"] = df["Anomalia"].apply(definir_ordem)
     df["Ordem_Grupo"]    = df["Grupo Planilha"].apply(ordem_grupo_planilha)
 
-    total_geral = df["Total s/ BDI"].sum()
+    total_sem_repintura = df[df["Grupo Planilha"] != "repintura"]["Total s/ BDI"].sum()
+    total_repintura     = df[df["Grupo Planilha"] == "repintura"]["Total s/ BDI"].sum()
 
+    total_geral = total_sem_repintura + total_repintura
+    
     df = df.sort_values(["Ordem_Execucao", "Ordem_Grupo"])
 
     linhas_final = []
@@ -1042,7 +1033,10 @@ def gerar_orcamento():
                 subtotal_secao = df[df["Grupo Planilha"] == "repintura"]["Total s/ BDI"].sum()
             else:
                 titulo_secao   = nomes_grupos_reparo.get(anomalia, anomalia).upper()
-                subtotal_secao = df[df["Anomalia"] == anomalia]["Total s/ BDI"].sum()
+                subtotal_secao = df[
+                    (df["Anomalia"] == anomalia) &
+                    (df["Grupo Planilha"] != "repintura")
+                ]["Total s/ BDI"].sum()
 
             linhas_final.append({
                 "_secao":            secao_atual,

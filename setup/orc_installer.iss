@@ -6,6 +6,13 @@
 [Setup]
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+
+AppPublisher=Léo Santos
+VersionInfoCompany=Léo Santos
+VersionInfoDescription=Instalador do ORC
+VersionInfoProductName=ORC
+VersionInfoProductVersion={#MyAppVersion}
+
 DefaultDirName=C:\ORC
 DefaultGroupName=ORC
 OutputDir=output
@@ -14,6 +21,9 @@ Compression=lzma
 SolidCompression=yes
 SetupIconFile=icone.ico
 PrivilegesRequired=admin
+
+[Languages]
+Name: "portuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Files]
 Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs

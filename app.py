@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
+from tkinter import messagebox
+import webbrowser
 import pandas as pd
 import json
 import math
@@ -9,12 +11,52 @@ from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 import os
 import unicodedata
 from datetime import datetime
+import requests
 import sys
 
 # ------------------------------------------- #
 # VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
 # ------------------------------------------- #
-APP_VERSION = "0.9.8.4"
+APP_VERSION = "0.9.8.5"
+
+URL_VERSAO = "https://raw.githubusercontent.com/leosans-eng/orcamento-reparos-construtivos/main/version.json"
+
+def verificar_atualizacao():
+    global status_atualizacao
+    try:
+        r = requests.get(URL_VERSAO, timeout=5)
+        data = r.json()
+
+        versao_online = data["versao"]
+        link_download = data["download"]
+
+        if versao_online != APP_VERSION:
+            status_atualizacao.set(f"Nova versão disponível: {versao_online}")
+        else:
+            status_atualizacao.set("Sistema atualizado")
+
+        atualizar_rodape()
+
+        if versao_online != APP_VERSION:
+            resposta = messagebox.askyesno(
+                "Atualização disponível",
+                f"Nova versão disponível: {versao_online}\n\nDeseja atualizar agora?"
+            )
+
+            if resposta:
+                webbrowser.open(link_download)
+
+                messagebox.showinfo(
+                    "Atualização",
+                    "Baixe e instale a nova versão.\n\nO sistema será fechado."
+                )
+
+                janela.destroy()
+
+    except Exception as e:
+        status_atualizacao.set("Erro ao procurar atualizações")
+        atualizar_rodape()
+        print("Erro ao verificar atualização:", e)
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -64,12 +106,20 @@ def informacoes_versao():
     return {
         "app": APP_VERSION,
         "sinapi": sinapi_referencia_rotulo,
-        "arquivo_sinapi": os.path.basename(caminho_sinapi_carregado),
     }
 
 def texto_rodape_interface():
     info = informacoes_versao()
-    return f"Sistema ORC v{info['app']} · SINAPI referência {info['sinapi']}"
+
+    base = f"Sistema ORC v{info['app']} · SINAPI referência {info['sinapi']}"
+
+    if status_atualizacao.get():
+        return f"{base} · {status_atualizacao.get()}"
+    
+    return base
+
+def atualizar_rodape():
+    label_rodape.config(text=texto_rodape_interface())
 
 # Atraso antes do nome do CSV sair deslizando à direita (ms)
 RODAPE_CSV_SUMIR_APOS_MS = 3000
@@ -77,7 +127,7 @@ RODAPE_CSV_SUMIR_APOS_MS = 3000
 RODAPE_CSV_DESLIZE_INTERVALO_MS = 35
 RODAPE_CSV_DESLIZE_PASSO_PX = 4
 
-def _agendar_sumico_nome_csv_deslize_direita(label_csv, frame_rodape):
+def agendar_sumico_nome_csv_deslize_direita(label_csv, frame_rodape):
 
     def executar():
         if not label_csv.winfo_exists():
@@ -97,6 +147,7 @@ def _agendar_sumico_nome_csv_deslize_direita(label_csv, frame_rodape):
             if label_csv.winfo_x() - frame_rodape.winfo_x() > limite + 8:
                 label_csv.destroy()
                 return
+
             info = label_csv.place_info()
             cur_x = int(float(info.get("x", 0)))
             label_csv.place(
@@ -157,6 +208,9 @@ janela = tk.Tk()
 janela.title("Orçamento de Reparos Construtivos - ORC")
 janela.geometry("990x610+200+40")
 janela.iconbitmap("icone.ico")
+janela.after(2000, verificar_atualizacao)
+
+status_atualizacao = tk.StringVar(value="Verificando atualizações...")
 
 # ---------------------------- #
 # RODAPÉ (VERSÕES / SINAPI)    #
@@ -164,13 +218,14 @@ janela.iconbitmap("icone.ico")
 frame_rodape = tk.Frame(janela)
 frame_rodape.pack(side="bottom", fill="x", padx=10, pady=(0, 6))
 
-tk.Label(
+label_rodape = tk.Label(
     frame_rodape,
     text=texto_rodape_interface(),
     font=("Arial", 8),
     fg="#555555",
     anchor="w",
-).pack(side="left", anchor="w")
+)
+label_rodape.pack(side="left", anchor="w")
 
 label_nome_csv_rodape = tk.Label(
     frame_rodape,
@@ -181,7 +236,7 @@ label_nome_csv_rodape = tk.Label(
 )
 label_nome_csv_rodape.pack(side="right", anchor="e")
 
-_agendar_sumico_nome_csv_deslize_direita(label_nome_csv_rodape, frame_rodape)
+agendar_sumico_nome_csv_deslize_direita(label_nome_csv_rodape, frame_rodape)
 
 # ---------------------------- #
 # SCROLL DA JANELA             #

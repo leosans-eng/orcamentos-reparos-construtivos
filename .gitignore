@@ -15,3 +15,5 @@ setup/output/
 setup/icone.ico
 __pycache__/
 sinapi/teste.py
+sinapi/status.json
+*status.json

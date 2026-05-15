@@ -1,10 +1,12 @@
 from pathlib import Path
+from datetime import datetime
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import sys
 import requests
 import zipfile
 import io
 import re
-from datetime import datetime
 import json
 
 # ==========================================
@@ -23,6 +25,34 @@ STATUS_FILE = BASE_DIR / "status.json"
 
 PASTA_REFERENCIA.mkdir(parents=True, exist_ok=True)
 PASTA_PROCESSADO.mkdir(parents=True, exist_ok=True)
+
+# ==========================================
+# SESSION HTTP COM RETRIES
+# ==========================================
+
+session = requests.Session()
+
+retry = Retry(
+    total=5,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET", "HEAD"]
+)
+
+adapter = HTTPAdapter(max_retries=retry)
+
+session.mount("https://", adapter)
+session.mount("http://", adapter)
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 "
+        "(Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 "
+        "(KHTML, like Gecko) "
+        "Chrome/124.0 Safari/537.36"
+    )
+}
 
 # ==========================================
 # PADRÕES
@@ -44,7 +74,7 @@ def salvar_status(dados):
 # DESCOBRE ÚLTIMA VERSÃO LOCAL
 # ==========================================
 
-def descobrir_ultima_versao_local():
+def obter_ultima_versao_local():
     versoes = []
 
     for arquivo in PASTA_PROCESSADO.glob("*.csv"):
@@ -98,13 +128,42 @@ def sinapi_existe(ano, mes):
 
     url = gerar_url(ano, mes)
 
-    try:
-        response = requests.head(url, timeout=10)
+    for tentativa in range(3):
 
-        return response.status_code == 200
+        try:
 
-    except requests.RequestException:
-        return False
+            response = session.get(
+                url,
+                headers=HEADERS,
+                timeout=20,
+                stream=True,
+                allow_redirects=True
+            )
+
+            if response.status_code == 200:
+
+                content_type = response.headers.get(
+                    "Content-Type",
+                    ""
+                ).lower()
+
+                if (
+                    "zip" in content_type
+                    or "octet-stream" in content_type
+                ):
+                    return True
+
+            return False
+
+        except requests.RequestException as e:
+
+            print(
+                f"Erro verificando "
+                f"{ano}_{mes:02d} "
+                f"(tentativa {tentativa + 1}): {e}"
+            )
+
+    return False
 
 # ==========================================
 # BAIXA E EXTRAI XLSX
@@ -118,21 +177,33 @@ def baixar_e_extrair(ano, mes):
 
     nome_xlsx = f"SINAPI_Referência_{ano}_{mes_str}.xlsx"
 
-    response = requests.get(url, timeout=60)
+    print(f"Baixando {nome_xlsx}...")
+
+    response = session.get(
+        url,
+        headers=HEADERS,
+        timeout=120
+    )
 
     response.raise_for_status()
 
-    zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+    zip_file = zipfile.ZipFile(
+        io.BytesIO(response.content)
+    )
 
     arquivo_encontrado = None
 
     for nome in zip_file.namelist():
 
-        if nome_xlsx in nome:
+        nome_limpo = Path(nome).name
+
+        if nome_limpo.lower() == nome_xlsx.lower():
+
             arquivo_encontrado = nome
             break
 
     if not arquivo_encontrado:
+
         raise FileNotFoundError(
             f"{nome_xlsx} não encontrado no ZIP."
         )
@@ -140,8 +211,12 @@ def baixar_e_extrair(ano, mes):
     caminho_saida = PASTA_REFERENCIA / nome_xlsx
 
     with zip_file.open(arquivo_encontrado) as origem:
+
         with open(caminho_saida, "wb") as destino:
+
             destino.write(origem.read())
+
+    print(f"Extraído: {nome_xlsx}")
 
     return caminho_saida
 
@@ -151,7 +226,7 @@ def baixar_e_extrair(ano, mes):
 
 def buscar_atualizacoes():
 
-    ultima = descobrir_ultima_versao_local()
+    ultima = obter_ultima_versao_local()
 
     if ultima is None:
         return []
@@ -160,21 +235,29 @@ def buscar_atualizacoes():
 
     atualizacoes = []
 
+    agora = datetime.now()
+
+    ano_atual = agora.year
+    mes_atual = agora.month
+
     while True:
 
         ano, mes = avancar_mes(ano, mes)
 
-        agora = datetime.now()
-
-        if (ano, mes) > (agora.year, agora.month):
+        if (ano, mes) > (ano_atual, mes_atual):
             break
 
+        print(f"Verificando {ano}_{mes:02d}...")
+
         if sinapi_existe(ano, mes):
+
+            print(f"Encontrada {ano}_{mes:02d}")
 
             atualizacoes.append((ano, mes))
 
         else:
-            break
+
+            print(f"Não encontrada {ano}_{mes:02d}")
 
     salvar_status({
         "ultima_verificacao": datetime.now().isoformat(),
@@ -185,3 +268,35 @@ def buscar_atualizacoes():
     })
 
     return atualizacoes
+    
+if __name__ == "__main__":
+
+    print("ARQUIVOS ENCONTRADOS:")
+
+    for arq in PASTA_PROCESSADO.glob("*.csv"):
+        print(arq.name)
+
+    print(
+        "ÚLTIMA REFERÊNCIA:",
+        obter_ultima_versao_local()
+    )
+
+    atualizacoes = buscar_atualizacoes()
+
+    print("\nAtualizações encontradas:")
+    print(atualizacoes)
+
+    for ano, mes in atualizacoes:
+
+        try:
+
+            caminho = baixar_e_extrair(ano, mes)
+
+            print(f"OK: {caminho}")
+
+        except Exception as e:
+
+            print(
+                f"Erro ao baixar "
+                f"{ano}_{mes:02d}: {e}"
+            )

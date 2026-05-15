@@ -1,50 +1,45 @@
 from openpyxl import load_workbook
-import os
+from pathlib import Path
 import csv
+import sys
+import os
 
 # ---------------------------- #
 # PASTAS                       #
 # ---------------------------- #
 
-pasta_script = os.path.dirname(__file__)
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).parent
+else:
+    BASE_DIR = Path(__file__).parent
 
-pasta_excel = os.path.join(
-    pasta_script,
-    "sinapi_referencia"
-)
+PASTA_REFERENCIA = BASE_DIR / "sinapi_referencia"
+PASTA_PROCESSADO = BASE_DIR / "sinapi_processado"
 
-pasta_saida = os.path.join(
-    pasta_script,
-    "sinapi_processado"
-)
-
-os.makedirs(pasta_saida, exist_ok=True)
+PASTA_PROCESSADO.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------- #
-# LISTAR EXCELS                #
+# PROCESSAR UM ARQUIVO         #
 # ---------------------------- #
 
-arquivos_excel = [
-    f for f in os.listdir(pasta_excel)
-    if f.lower().endswith(".xlsx") and not f.startswith("~$")
-]
+def processar_arquivo(caminho_excel, callback=None):
 
-print("Arquivos encontrados:")
-for a in arquivos_excel:
-    print("-", a)
+    caminho_excel = Path(caminho_excel)
 
-# ---------------------------- #
-# PROCESSAR CADA EXCEL         #
-# ---------------------------- #
+    arquivo = caminho_excel.name
 
-for arquivo in arquivos_excel:
+    nome_csv = caminho_excel.stem + ".csv"
 
-    caminho_excel = os.path.join(pasta_excel, arquivo)
-    nome_csv = os.path.splitext(arquivo)[0] + ".csv"
-    caminho_csv = os.path.join(pasta_saida, nome_csv)
+    caminho_csv = PASTA_PROCESSADO / nome_csv
 
-    print("\n=================================")
-    print("Processando:", arquivo)
+    def log(msg):
+        print(msg)
+
+        if callback:
+            callback(msg)
+
+    log("\n=================================")
+    log(f"Processando: {arquivo}")
 
     wb = load_workbook(
         caminho_excel,
@@ -78,13 +73,13 @@ for arquivo in arquivos_excel:
         if col > 200:
             break
 
-    print(f"Estados detectados ({len(estados)}): {estados}")
+    log(f"Estados detectados ({len(estados)}): {estados}")
 
     # ---------------------------- #
     # LER CÓDIGOS DA ABA ANALÍTICO #
     # ---------------------------- #
 
-    print("Lendo códigos da aba Analítico...")
+    log("Lendo códigos da aba Analítico...")
 
     ws_analitico = wb["Analítico"]
 
@@ -106,7 +101,7 @@ for arquivo in arquivos_excel:
             chave = (descricao.strip(), unidade.strip())
             mapa_codigos[chave] = int(codigo)
 
-    print("Códigos carregados:", len(mapa_codigos), "| Extraindo composições da aba CSD...")
+    log(f"Códigos carregados: {len(mapa_codigos)} | Extraindo composições da aba CSD...")
 
     contador = 0
     linhas_gravadas = 0
@@ -169,18 +164,18 @@ for arquivo in arquivos_excel:
 
             if contador % 1000 == 0:
 
-                print(
+                log(
                     f"CSD: {contador} linhas analisadas | "
                     f"{linhas_gravadas} registros gravados"
                 )
 
-        print("==========Extração das composições finalizada.==========")
+        log("==========Extração das composições finalizada.==========")
 
         # ========================================================== #
         # EXTRAÇÃO DOS INSUMOS (ISD)                                 #
         # ========================================================== #
 
-        print("\nExtraindo insumos da aba ISD...")
+        log("\nExtraindo insumos da aba ISD...")
 
         ws_isd = wb["ISD"]
 
@@ -199,7 +194,7 @@ for arquivo in arquivos_excel:
         if not linha_cabecalho:
             raise Exception("Cabeçalho da ISD não encontrado")
 
-        print("Cabeçalho ISD encontrado na linha:", linha_cabecalho)
+        log(f"Cabeçalho ISD encontrado na linha: {linha_cabecalho}")
 
         estados_isd = []
         colunas_custo_isd = []
@@ -221,7 +216,7 @@ for arquivo in arquivos_excel:
             if col > 200:
                 break
 
-        print(f"Estados detectados ({len(estados_isd)}): {estados_isd}")
+        log(f"Estados detectados ({len(estados_isd)}): {estados_isd}")
 
         linhas_isd = 0
 
@@ -261,14 +256,32 @@ for arquivo in arquivos_excel:
 
             if linhas_isd % 2000 == 0:
 
-                print(
+                log(
                     f"ISD: {linhas_isd} linhas analisadas | "
                     f"{linhas_gravadas} registros gravados"
                 )
 
-    print("Arquivo CSV criado:", nome_csv)
-    print("Linhas CSD analisadas:", contador)
-    print("Linhas ISD analisadas:", linhas_isd)
-    print("Registros totais:", linhas_gravadas)
+    log(f"Arquivo CSV criado: {nome_csv}")
+    log(f"Linhas CSD analisadas: {contador}")
+    log(f"Linhas ISD analisadas: {linhas_isd}")
+    log(f"Registros totais: {linhas_gravadas}")
 
-print("\n==========Extração finalizada.==========")
+    log("\n==========Extração finalizada.==========")
+
+    return caminho_csv
+
+if __name__ == "__main__":
+
+    arquivos_excel = [
+        f for f in PASTA_REFERENCIA.iterdir()
+        if f.suffix.lower() == ".xlsx"
+        and not f.name.startswith("~$")
+    ]
+
+    print("Arquivos encontrados:")
+
+    for arquivo in arquivos_excel:
+        print(f"- {arquivo.name}")
+
+    for arquivo in arquivos_excel:
+        processar_arquivo(arquivo)

@@ -14,3 +14,4 @@ dist/
 setup/output/
 setup/icone.ico
 __pycache__/
+sinapi/teste.py

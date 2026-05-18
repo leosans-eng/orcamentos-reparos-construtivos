@@ -13,6 +13,10 @@ import unicodedata
 from datetime import datetime
 import requests
 import sys
+import threading
+
+from sinapi.atualizador_sinapi import buscar_atualizacoes, baixar_e_extrair, limpar_versoes_antigas
+from sinapi.extrair_sinapi import processar_arquivo
 
 # ------------------------------------------- #
 # VERSÃO DO SISTEMA (INTERFACE E EXPORTAÇÕES) #
@@ -57,6 +61,77 @@ def verificar_atualizacao():
         status_atualizacao.set("Erro ao procurar atualizações")
         atualizar_rodape()
         print("Erro ao verificar atualização:", e)
+
+def verificar_atualizacao_sinapi():
+
+    try:
+
+        status_sinapi.set("SINAPI: verificando...")
+        atualizar_rodape()
+
+        atualizacoes = buscar_atualizacoes()
+
+        if not atualizacoes:
+
+            status_sinapi.set("SINAPI atualizada")
+            atualizar_rodape()
+            return
+
+        for ano, mes in atualizacoes:
+
+            status_sinapi.set(
+                f"SINAPI: baixando {mes:02d}/{ano}"
+            )
+            atualizar_rodape()
+
+            caminho = baixar_e_extrair(ano, mes)
+
+            status_sinapi.set(
+                f"SINAPI: processando {mes:02d}/{ano}"
+            )
+            atualizar_rodape()
+
+            processar_arquivo(caminho)
+
+        limpar_versoes_antigas()
+
+        recarregar_sinapi()
+
+        status_sinapi.set(
+            f"SINAPI atualizada ({sinapi_referencia_rotulo})"
+        )
+
+        atualizar_rodape()
+
+        janela.after(
+            100,
+            lambda: messagebox.showinfo(
+                "SINAPI Atualizada",
+                (
+                    "A base SINAPI foi atualizada com sucesso.\n\n"
+                    f"Nova referência: {sinapi_referencia_rotulo}"
+                )
+            )
+        )
+
+    except Exception as e:
+
+        print("Erro atualização SINAPI:", e)
+
+        status_sinapi.set(
+            "Erro atualização SINAPI"
+        )
+
+        atualizar_rodape()
+
+def iniciar_verificacao_sinapi():
+
+    thread = threading.Thread(
+        target=verificar_atualizacao_sinapi,
+        daemon=True
+    )
+
+    thread.start()
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -113,9 +188,17 @@ def texto_rodape_interface():
 
     base = f"Sistema ORC v{info['app']} · SINAPI referência {info['sinapi']}"
 
-    if status_atualizacao.get():
-        return f"{base} · {status_atualizacao.get()}"
+    extras = []
     
+    if status_atualizacao.get():
+        extras.append(status_atualizacao.get())
+    
+    if status_sinapi.get():
+        extras.append(status_sinapi.get())
+
+    if extras:
+        return f"{base} · {' · '.join(extras)}"
+
     return base
 
 def atualizar_rodape():
@@ -199,6 +282,31 @@ if caminho_sinapi_carregado is None:
 
 sinapi = pd.read_csv(caminho_sinapi_carregado, dtype={"codigo": str})
 
+def recarregar_sinapi():
+
+    global sinapi
+    global caminho_sinapi_carregado
+    global sinapi_referencia_rotulo
+
+    caminho_sinapi_carregado, sinapi_referencia_rotulo = (
+        obter_csv_sinapi_mais_recente(
+            PASTA_SINAPI_PROCESSADO
+        )
+    )
+
+    sinapi = pd.read_csv(
+        caminho_sinapi_carregado,
+        dtype={"codigo": str}
+    )
+
+    sinapi.columns = (
+        sinapi.columns
+        .str.strip()
+        .str.lower()
+    )
+
+    atualizar_rodape()
+
 sinapi.columns = sinapi.columns.str.strip().str.lower()
 
 # ---------------------------- #
@@ -209,8 +317,10 @@ janela.title("Orçamento de Reparos Construtivos - ORC")
 janela.geometry("990x610+200+40")
 janela.iconbitmap("icone.ico")
 janela.after(2000, verificar_atualizacao)
+janela.after(4000, iniciar_verificacao_sinapi)
 
 status_atualizacao = tk.StringVar(value="Verificando atualizações...")
+status_sinapi = tk.StringVar(value="SINAPI: verificando...")
 
 # ---------------------------- #
 # RODAPÉ (VERSÕES / SINAPI)    #

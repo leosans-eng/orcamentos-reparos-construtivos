@@ -8,28 +8,32 @@ import zipfile
 import io
 import re
 import json
-from extrair_sinapi import processar_arquivo
 
-# ==========================================
-# PASTAS
-# ==========================================
+try:
+    from .extrair_sinapi import processar_arquivo
+except ImportError:
+    from extrair_sinapi import processar_arquivo
+
+# ====== #
+# PASTAS #
+# ====== #
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = Path(sys.executable).parent
 else:
-    BASE_DIR = Path(__file__).parent
+    BASE_DIR = Path(__file__).resolve().parent.parent
 
-PASTA_REFERENCIA = BASE_DIR / "sinapi_referencia"
-PASTA_PROCESSADO = BASE_DIR / "sinapi_processado"
+PASTA_REFERENCIA = BASE_DIR / "sinapi/sinapi_referencia"
+PASTA_PROCESSADO = BASE_DIR / "sinapi/sinapi_processado"
 
 STATUS_FILE = BASE_DIR / "status.json"
 
 PASTA_REFERENCIA.mkdir(parents=True, exist_ok=True)
 PASTA_PROCESSADO.mkdir(parents=True, exist_ok=True)
 
-# ==========================================
-# SESSION HTTP COM RETRIES
-# ==========================================
+# ======================== #
+# SESSION HTTP COM RETRIES #
+# ======================== #
 
 session = requests.Session()
 
@@ -55,9 +59,9 @@ HEADERS = {
     )
 }
 
-# ==========================================
-# PADRÕES
-# ==========================================
+# ======= #
+# PADRÕES #
+# ======= #
 
 PADRAO_CSV = re.compile(
     r"(?i)SINAPI_Refer[eê]ncia_(\d{4})_(\d{2})\.csv$"
@@ -67,17 +71,17 @@ PADRAO_XLSX = re.compile(
     r"(?i)SINAPI_Refer[eê]ncia_(\d{4})_(\d{2})\.xlsx$"
 )
 
-# ==========================================
+# ====== #
 # STATUS
-# ==========================================
+# ====== #
 
 def salvar_status(dados):
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
-# ==========================================
-# DESCOBRE ÚLTIMA VERSÃO LOCAL
-# ==========================================
+# ============================ #
+# DESCOBRE ÚLTIMA VERSÃO LOCAL #
+# ============================ #
 
 def obter_ultima_versao_local():
     versoes = []
@@ -97,9 +101,9 @@ def obter_ultima_versao_local():
 
     return max(versoes)
 
-# ==========================================
-# AVANÇA MÊS
-# ==========================================
+# ========== #
+# AVANÇA MÊS #
+# ========== #
 
 def avancar_mes(ano, mes):
 
@@ -111,9 +115,9 @@ def avancar_mes(ano, mes):
 
     return ano, mes
 
-# ==========================================
-# GERA URL
-# ==========================================
+# ========= #
+# GERAR URL #
+# ========= #
 
 def gerar_url(ano, mes):
 
@@ -125,9 +129,9 @@ def gerar_url(ano, mes):
         f"SINAPI-{ano}-{mes_str}-formato-xlsx.zip"
     )
 
-# ==========================================
-# TESTA EXISTÊNCIA
-# ==========================================
+# ================ #
+# TESTA EXISTÊNCIA #
+# ================ #
 
 def sinapi_existe(ano, mes):
 
@@ -169,9 +173,9 @@ def sinapi_existe(ano, mes):
             )
 
     return False
-# ==========================================
-# ENCONTRA A SINAPI MAIS RECENTE DISPONÍVEL
-# ==========================================
+# ========================================= #
+# ENCONTRA A SINAPI MAIS RECENTE DISPONÍVEL #
+# ========================================= #
 
 def encontrar_ultima_sinapi_disponivel():
 
@@ -203,9 +207,9 @@ def encontrar_ultima_sinapi_disponivel():
 
     return None
 
-# ==========================================
-# BAIXA E EXTRAI XLSX
-# ==========================================
+# =================== #
+# BAIXA E EXTRAI XLSX #
+# =================== #
 
 def baixar_e_extrair(ano, mes):
 
@@ -258,9 +262,9 @@ def baixar_e_extrair(ano, mes):
 
     return caminho_saida
 
-# ==========================================
-# BUSCA NOVAS VERSÕES
-# ==========================================
+# =================== #
+# BUSCA NOVAS VERSÕES #
+# =================== #
 
 def buscar_atualizacoes():
 
@@ -320,9 +324,9 @@ def buscar_atualizacoes():
 
     return [ultima_disponivel]
 
-# ==========================================
-# REMOVE VERSÕES ANTIGAS
-# ==========================================
+# ====================== #
+# REMOVE VERSÕES ANTIGAS #
+# ====================== #
 
 def limpar_versoes_antigas():
 

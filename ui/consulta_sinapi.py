@@ -29,8 +29,6 @@ class ConsultaSinapiFrame(tk.Frame):
             centro,
             text=(
                 "Módulo em desenvolvimento.\n"
-                "Em breve você poderá pesquisar\n"
-                "composições e preços da base SINAPI."
             ),
             font=("Arial", 10),
             fg="#666666",

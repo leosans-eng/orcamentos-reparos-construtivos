@@ -7,6 +7,9 @@ from ui.widgets import (
     aplicar_hover_cartao,
 )
 
+LARGURA_CARTAO = 240
+ALTURA_CARTAO = 148
+
 
 class HubFrame(tk.Frame):
     def __init__(self, parent, on_selecionar_modulo):
@@ -36,6 +39,8 @@ class HubFrame(tk.Frame):
 
         cartoes = tk.Frame(container, bg="#ececec")
         cartoes.pack()
+        for col in range(3):
+            cartoes.columnconfigure(col, weight=1, uniform="cartao_hub")
 
         self._criar_cartao(
             cartoes,
@@ -48,7 +53,7 @@ class HubFrame(tk.Frame):
         self._criar_cartao(
             cartoes,
             titulo="Área Comum",
-            descricao="Orçamento de reparos em áreas comuns do edifício",
+            descricao="Orçamento de reparos em áreas comuns, com a opção de composições próprias",
             modulo="area_comum",
             habilitado=False,
             coluna=1,
@@ -73,8 +78,8 @@ class HubFrame(tk.Frame):
         coluna,
         aviso=None,
     ):
-        largura = 220
-        altura = 130
+        largura = LARGURA_CARTAO
+        altura = ALTURA_CARTAO
         cor_fundo = COR_FUNDO_CARTAO if habilitado else "#f0f0f0"
         cor_borda = COR_BORDA_PADRAO if habilitado else "#cccccc"
         cor_titulo = COR_TITULO_PADRAO if habilitado else "#999999"
@@ -89,8 +94,10 @@ class HubFrame(tk.Frame):
             highlightthickness=2,
             cursor="hand2" if habilitado else "arrow",
         )
-        cartao.grid(row=0, column=coluna, padx=12, pady=4)
+        cartao.grid(row=0, column=coluna, padx=12, pady=4, sticky="n")
         cartao.grid_propagate(False)
+        cartao.rowconfigure(1, weight=1)
+        cartao.columnconfigure(0, weight=1)
 
         filhos = []
 
@@ -101,7 +108,7 @@ class HubFrame(tk.Frame):
             fg=cor_titulo,
             bg=cor_fundo,
         )
-        lbl_titulo.pack(pady=(18, 6))
+        lbl_titulo.grid(row=0, column=0, pady=(16, 4), sticky="n")
         filhos.append(lbl_titulo)
 
         lbl_desc = tk.Label(
@@ -110,22 +117,23 @@ class HubFrame(tk.Frame):
             font=("Arial", 9),
             fg=cor_texto,
             bg=cor_fundo,
-            wraplength=largura - 24,
+            wraplength=largura - 28,
             justify="center",
         )
-        lbl_desc.pack(padx=12)
+        lbl_desc.grid(row=1, column=0, padx=14, sticky="n")
         filhos.append(lbl_desc)
 
-        if aviso:
-            lbl_aviso = tk.Label(
-                cartao,
-                text=aviso,
-                font=("Arial", 8, "italic"),
-                fg="#999999",
-                bg=cor_fundo,
-            )
-            lbl_aviso.pack(pady=(8, 0))
-            filhos.append(lbl_aviso)
+        texto_aviso = aviso if aviso else ""
+        lbl_aviso = tk.Label(
+            cartao,
+            text=texto_aviso,
+            font=("Arial", 8, "italic"),
+            fg="#999999" if aviso else cor_fundo,
+            bg=cor_fundo,
+            height=1,
+        )
+        lbl_aviso.grid(row=2, column=0, pady=(4, 12), sticky="s")
+        filhos.append(lbl_aviso)
 
         if habilitado:
             def ao_clicar(_event=None, mod=modulo):

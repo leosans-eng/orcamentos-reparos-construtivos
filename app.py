@@ -69,7 +69,29 @@ def verificar_atualizacao_sinapi():
         status_sinapi.set("SINAPI: verificando...")
         atualizar_rodape()
 
-        atualizacoes = buscar_atualizacoes()
+        atualizacoes, aviso = buscar_atualizacoes()
+
+        if aviso == "nao_encontrada":
+
+            status_sinapi.set(
+                "SINAPI indisponível (servidor e pasta local)"
+            )
+            atualizar_rodape()
+            return
+
+        if aviso == "servidor_indisponivel":
+
+            if sinapi_referencia_rotulo != "BASE AUSENTE":
+                status_sinapi.set(
+                    f"SINAPI local ({sinapi_referencia_rotulo})"
+                )
+            else:
+                status_sinapi.set(
+                    "SINAPI: servidor da Caixa indisponível"
+                )
+
+            atualizar_rodape()
+            return
 
         if not atualizacoes:
 
@@ -97,22 +119,9 @@ def verificar_atualizacao_sinapi():
 
         recarregar_sinapi()
 
-        status_sinapi.set(
-            f"SINAPI atualizada para ({sinapi_referencia_rotulo})"
-        )
+        janela.after(0, concluir_atualizacao_sinapi)
 
-        atualizar_rodape()
-
-        janela.after(
-            100,
-            lambda: messagebox.showinfo(
-                "SINAPI Atualizada",
-                (
-                    "A base SINAPI foi atualizada com sucesso.\n\n"
-                    f"Nova referência: {sinapi_referencia_rotulo}"
-                )
-            )
-        )
+        return
 
     except Exception as e:
 
@@ -310,43 +319,44 @@ def recarregar_sinapi():
     global caminho_sinapi_carregado
     global sinapi_referencia_rotulo
 
-    caminho_sinapi_carregado, sinapi_referencia_rotulo = (
-        obter_csv_sinapi_mais_recente(
-            PASTA_SINAPI_PROCESSADO
-        )
+    caminho, rotulo = obter_csv_sinapi_mais_recente(
+        PASTA_SINAPI_PROCESSADO
     )
 
-    if caminho_sinapi_carregado is None:
+    if caminho is None and os.path.isfile(CAMINHO_FALLBACK_SINAPI):
+        caminho = CAMINHO_FALLBACK_SINAPI
+        rotulo = "arquivo local (sinapi_precos.csv na raiz do projeto)"
 
+    if caminho is None:
+        caminho_sinapi_carregado = None
+        sinapi_referencia_rotulo = "BASE AUSENTE"
         sinapi = pd.DataFrame(
             columns=["codigo", "descricao", "unidade", "estado", "custo"]
         )
-
-        sinapi_referencia_rotulo = "BASE AUSENTE"
-
     else:
+        carregar_sinapi_por_caminho(caminho, rotulo)
 
-        sinapi = pd.read_csv(
-            caminho_sinapi_carregado,
-            dtype={"codigo": str}
-        )
 
-        sinapi.columns = (
-            sinapi.columns
-            .str.strip()
-            .str.lower()
-        )
+def obter_estados_da_sinapi():
 
-    atualizar_rodape()
+    if sinapi.empty or "estado" not in sinapi.columns:
+        return []
+
+    return sorted(sinapi["estado"].dropna().unique().tolist())
 
 sinapi.columns = sinapi.columns.str.strip().str.lower()
 
 # ---------------------------- #
 # JANELA PRINCIPAL             #
 # ---------------------------- #
+LARGURA_JANELA_PADRAO = 990
+ALTURA_JANELA_PADRAO = 610
+ALTURA_TREE_MIN = 11
+
 janela = tk.Tk()
 janela.title("Orçamento de Reparos Construtivos - ORC")
-janela.geometry("990x610+200+40")
+janela.geometry(f"{LARGURA_JANELA_PADRAO}x{ALTURA_JANELA_PADRAO}+200+40")
+janela.minsize(860, 520)
 janela.iconbitmap("icone.ico")
 janela.after(2000, verificar_atualizacao)
 janela.after(4000, iniciar_verificacao_sinapi)
@@ -392,28 +402,34 @@ agendar_sumico_nome_csv_deslize_direita(label_nome_csv_rodape, frame_rodape)
 container = tk.Frame(janela)
 container.pack(fill="both", expand=True)
 
-canvas = tk.Canvas(container)
+canvas = tk.Canvas(container, highlightthickness=0, bg="#ececec")
 scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
 
-frame_principal = tk.Frame(canvas)
+frame_principal = tk.Frame(canvas, bg=canvas["bg"])
 
-frame_principal.bind(
-    "<Configure>",
-    lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-)
+def _atualizar_scrollregion(_event=None):
+    canvas.configure(scrollregion=canvas.bbox("all"))
+
+frame_principal.bind("<Configure>", _atualizar_scrollregion)
 
 canvas_window = canvas.create_window((0, 0), window=frame_principal, anchor="nw")
 
 canvas.configure(yscrollcommand=scrollbar.set)
 
-def atualizar_scroll(event):
-    canvas.configure(scrollregion=canvas.bbox("all"))
+def _conteudo_cabe_no_canvas():
+    bbox = canvas.bbox("all")
+    if not bbox:
+        return True
+    return (bbox[3] - bbox[1]) <= canvas.winfo_height()
 
 def _on_mousewheel(event):
 
     widget = janela.winfo_containing(event.x_root, event.y_root)
 
     if isinstance(widget, ttk.Combobox):
+        return
+
+    if _conteudo_cabe_no_canvas():
         return
 
     pos = canvas.yview()
@@ -423,17 +439,42 @@ def _on_mousewheel(event):
 
     canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
-def ajustar_largura(event):
-    canvas.itemconfig(canvas_window, width=event.width)
+def ajustar_layout_canvas(event):
+    largura_canvas = event.width
+    altura_canvas = event.height
+    largura_conteudo = min(largura_canvas, LARGURA_JANELA_PADRAO)
+    offset_x = max(0, (largura_canvas - largura_conteudo) // 2)
 
-canvas.bind("<Configure>", ajustar_largura)
+    canvas.itemconfig(canvas_window, width=largura_conteudo)
+    canvas.coords(canvas_window, offset_x, 0)
+
+    if not getattr(ajustar_layout_canvas, "_pronto", False):
+        _atualizar_scrollregion()
+        return
+
+    frame_conteudo.pack_propagate(True)
+    frame_conteudo.configure(height=0)
+    frame_principal.update_idletasks()
+    altura_natural = frame_principal.winfo_reqheight()
+
+    if altura_canvas > altura_natural + 8:
+        margem = 28
+        altura_fixa = (
+            frame_dados.winfo_reqheight()
+            + frame_feedback.winfo_reqheight()
+            + botao_gerar.winfo_reqheight()
+            + margem
+        )
+        altura_conteudo = max(300, altura_canvas - altura_fixa)
+        frame_conteudo.pack_propagate(False)
+        frame_conteudo.configure(height=altura_conteudo)
+
+    if _conteudo_cabe_no_canvas():
+        canvas.yview_moveto(0)
+
+    _atualizar_scrollregion()
 
 canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
-def ajustar_canvas(event):
-    canvas.itemconfig(canvas_window, width=event.width)
-
-canvas.bind("<Configure>", ajustar_canvas)
 
 canvas.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
@@ -465,7 +506,7 @@ frame_dados.columnconfigure(1, weight=1)
 
 tk.Label(frame_dados, text="Estado:").grid(row=0, column=4, padx=5)
 
-estados = sorted(sinapi["estado"].dropna().unique())
+estados = obter_estados_da_sinapi()
 
 combo_estado = ttk.Combobox(frame_dados, values=estados, width=6, state="readonly")
 combo_estado.grid(row=0, column=5, padx=5)
@@ -528,6 +569,8 @@ frame_conteudo.pack(fill="both", expand=True)
 
 frame_conteudo.columnconfigure(0, weight=0)
 frame_conteudo.columnconfigure(1, weight=1)
+frame_conteudo.rowconfigure(0, weight=1)
+frame_conteudo.rowconfigure(1, weight=1)
 
 frame_metragem = tk.LabelFrame(frame_conteudo, text="2. Metragem dos Cômodos")
 frame_metragem.grid(row=0, column=0, sticky="nw", padx=10, pady=5)
@@ -705,25 +748,37 @@ def mostrar_feedback(mensagem, cor="red", temporario=True):
 # LISTA DE ANOMALIAS           #
 # ---------------------------- #
 frame_lista = tk.LabelFrame(frame_conteudo, text="4. Anomalias adicionadas")
-frame_lista.grid(row=0, column=1, rowspan=2, sticky="n", padx=10, pady=5)
+frame_lista.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=10, pady=5)
+frame_lista.rowconfigure(0, weight=1)
+frame_lista.columnconfigure(0, weight=1)
 
 lista_anomalias = []
 
 frame_listbox = tk.Frame(frame_lista)
-frame_listbox.pack(fill="both", expand=True)
+frame_listbox.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
 
 tree_anomalias = ttk.Treeview(
     frame_listbox,
     columns=("subtotal"),
     show="tree headings",
-    height=11
+    height=ALTURA_TREE_MIN
 )
 
 tree_anomalias.heading("#0", text="Anomalia")
 tree_anomalias.heading("subtotal", text="Subtotal")
 
-tree_anomalias.column("#0", width=350)
-tree_anomalias.column("subtotal", width=100, anchor="e")
+tree_anomalias.column("#0", width=350, minwidth=200, stretch=True)
+tree_anomalias.column("subtotal", width=100, minwidth=90, stretch=False, anchor="e")
+
+def ajustar_altura_treeview(event=None):
+    frame_listbox.update_idletasks()
+    altura = frame_listbox.winfo_height()
+    if altura < 40:
+        return
+    linhas = max(ALTURA_TREE_MIN, (altura - 28) // 20)
+    tree_anomalias.configure(height=linhas)
+
+frame_listbox.bind("<Configure>", ajustar_altura_treeview)
 
 tree_anomalias.pack(side="left", fill="both", expand=True)
 
@@ -831,6 +886,96 @@ def atualizar_tree():
                 text=comodo,
                 values=("",)
             )
+
+
+def atualizar_label_csv_rodape():
+
+    global label_nome_csv_rodape
+
+    if caminho_sinapi_carregado:
+        texto = (
+            f"{os.path.basename(caminho_sinapi_carregado)} "
+            f"⭠ Arquivo de base"
+        )
+    else:
+        texto = "Nenhum arquivo SINAPI carregado"
+
+    if (
+        "label_nome_csv_rodape" not in globals()
+        or not label_nome_csv_rodape.winfo_exists()
+    ):
+        label_nome_csv_rodape = tk.Label(
+            frame_rodape,
+            text=texto,
+            font=("Arial", 8, "bold"),
+            fg="#C62828",
+            anchor="e",
+        )
+        label_nome_csv_rodape.pack(side="right", anchor="e")
+        agendar_sumico_nome_csv_deslize_direita(
+            label_nome_csv_rodape,
+            frame_rodape,
+        )
+    else:
+        label_nome_csv_rodape.config(text=texto)
+
+
+def aplicar_sinapi_na_interface():
+
+    estados_disponiveis = obter_estados_da_sinapi()
+
+    combo_estado["values"] = estados_disponiveis
+
+    if estados_disponiveis:
+        estado_atual = combo_estado.get().strip()
+
+        if estado_atual not in estados_disponiveis:
+            combo_estado.set(
+                "SP"
+                if "SP" in estados_disponiveis
+                else estados_disponiveis[0]
+            )
+    else:
+        combo_estado.set("")
+
+    atualizar_label_csv_rodape()
+    atualizar_rodape()
+
+    if lista_anomalias:
+        atualizar_tree()
+
+
+def concluir_atualizacao_sinapi():
+
+    aplicar_sinapi_na_interface()
+
+    if sinapi_referencia_rotulo == "BASE AUSENTE" or not obter_estados_da_sinapi():
+        status_sinapi.set("Erro ao carregar base SINAPI")
+        atualizar_rodape()
+        messagebox.showerror(
+            "SINAPI",
+            (
+                "O download foi concluído, mas a base não pôde ser "
+                "carregada na interface.\n\n"
+                "Verifique o arquivo em sinapi/sinapi_processado."
+            ),
+        )
+        return
+
+    status_sinapi.set(
+        f"SINAPI atualizada para {sinapi_referencia_rotulo}"
+    )
+    atualizar_rodape()
+
+    messagebox.showinfo(
+        "SINAPI Atualizada",
+        (
+            "A base SINAPI foi atualizada com sucesso.\n\n"
+            f"Nova referência: {sinapi_referencia_rotulo}\n\n"
+            "O sistema já está pronto para uso."
+        ),
+    )
+
 # ---------------------------- #
 # FUNÇÃO REMOVER ANOMALIA      #
 # ---------------------------- #
@@ -892,14 +1037,14 @@ tk.Button(
     frame_lista,
     text="Remover Anomalia Selecionada",
     command=remover_anomalia
-).pack(pady=5)
+).grid(row=1, column=0, pady=5)
 
 tk.Button(
     frame_lista,
     text="Remover Todas as Anomalias",
     underline=8,
     command=remover_todas_anomalias
-).pack(pady=5)
+).grid(row=2, column=0, pady=5)
 
 # ---------------------------- #
 # ÁREA DE FEEDBACK             #
@@ -1662,5 +1807,15 @@ botao_gerar = tk.Button(
 botao_gerar.pack(pady=(5,10))
 
 entrada_proprietario.focus()
+
+ajustar_layout_canvas._pronto = True
+canvas.bind("<Configure>", ajustar_layout_canvas)
+janela.update_idletasks()
+ajustar_layout_canvas(
+    type("Evt", (), {
+        "width": canvas.winfo_width(),
+        "height": canvas.winfo_height(),
+    })()
+)
 
 janela.mainloop()

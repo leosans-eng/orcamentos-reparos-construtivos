@@ -3,15 +3,11 @@ import re
 
 import pandas as pd
 
-import sys
+from app_paths import app_dir
 
-if getattr(sys, "frozen", False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-PASTA_SINAPI_PROCESSADO = os.path.join(BASE_DIR, "sinapi", "sinapi_processado")
-CAMINHO_FALLBACK_SINAPI = os.path.join(BASE_DIR, "sinapi_precos.csv")
+APP_DIR = app_dir()
+PASTA_SINAPI_PROCESSADO = os.path.join(APP_DIR, "sinapi", "sinapi_processado")
+CAMINHO_FALLBACK_SINAPI = os.path.join(APP_DIR, "sinapi_precos.csv")
 
 
 def _parse_referencia_do_nome_csv(nome_arquivo):

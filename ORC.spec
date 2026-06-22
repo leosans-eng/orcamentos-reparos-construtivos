@@ -1,7 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files
 
-datas = collect_data_files('certifi')
+datas = [
+    ('vicios_construtivos.json', '.'),
+    ('icone.ico', '.'),
+]
+datas += collect_data_files('certifi')
 
 
 a = Analysis(
@@ -9,7 +13,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=['atualizacao', 'certifi'],
+    hiddenimports=['atualizacao', 'app_paths', 'certifi'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

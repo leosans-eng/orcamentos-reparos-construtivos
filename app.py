@@ -1,13 +1,13 @@
 import os
 import tkinter as tk
 
+from app_paths import icon_path
 from core.app_state import (
     ALTURA_JANELA_PADRAO,
     APP_VERSION,
     LARGURA_JANELA_PADRAO,
     AppContext,
 )
-from core.sinapi_loader import BASE_DIR
 from ui.area_privativa import criar_area_privativa
 from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.hub import HubFrame
@@ -34,8 +34,8 @@ class OrcApp:
         )
         self.janela.minsize(860, 520)
 
-        icone = os.path.join(BASE_DIR, "icone.ico")
-        if os.path.isfile(icone):
+        icone = icon_path()
+        if icone is not None:
             self.janela.iconbitmap(icone)
 
         self.ctx.status_sinapi = tk.StringVar(value="SINAPI: verificando...")

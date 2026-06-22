@@ -1,20 +1,17 @@
 from openpyxl import load_workbook
 from pathlib import Path
 import csv
-import sys
 import os
+
+from app_paths import app_dir
 
 # ---------------------------- #
 # PASTAS                       #
 # ---------------------------- #
 
-if getattr(sys, 'frozen', False):
-    BASE_DIR = Path(sys.executable).parent
-else:
-    BASE_DIR = Path(__file__).resolve().parent.parent
-
-PASTA_REFERENCIA = BASE_DIR / "sinapi/sinapi_referencia"
-PASTA_PROCESSADO = BASE_DIR / "sinapi/sinapi_processado"
+APP_DIR = app_dir()
+PASTA_REFERENCIA = APP_DIR / "sinapi" / "sinapi_referencia"
+PASTA_PROCESSADO = APP_DIR / "sinapi" / "sinapi_processado"
 
 PASTA_PROCESSADO.mkdir(parents=True, exist_ok=True)
 

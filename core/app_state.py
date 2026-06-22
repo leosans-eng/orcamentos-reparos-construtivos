@@ -10,8 +10,9 @@ from sinapi.atualizador_sinapi import (
 )
 from sinapi.extrair_sinapi import processar_arquivo
 
+from app_paths import vicios_construtivos_path
+
 from core.sinapi_loader import (
-    BASE_DIR,
     carregar_sinapi_inicial,
     obter_estados_da_sinapi,
     recarregar_sinapi,
@@ -53,8 +54,7 @@ class AppContext:
         self.status_sinapi = None
 
     def _carregar_dados_json(self):
-        caminho = os.path.join(BASE_DIR, "vicios_construtivos.json")
-        with open(caminho, "r", encoding="utf-8") as f:
+        with open(vicios_construtivos_path(), "r", encoding="utf-8") as f:
             dados = json.load(f)
         if isinstance(dados, list):
             dados = dados[0]

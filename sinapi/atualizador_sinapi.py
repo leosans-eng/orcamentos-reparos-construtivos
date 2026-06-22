@@ -2,7 +2,6 @@ from pathlib import Path
 from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import sys
 import time
 import requests
 import zipfile
@@ -15,19 +14,17 @@ try:
 except ImportError:
     from extrair_sinapi import processar_arquivo
 
+from app_paths import app_dir
+
 # ====== #
 # PASTAS #
 # ====== #
 
-if getattr(sys, 'frozen', False):
-    BASE_DIR = Path(sys.executable).parent
-else:
-    BASE_DIR = Path(__file__).resolve().parent.parent
+APP_DIR = app_dir()
+PASTA_REFERENCIA = APP_DIR / "sinapi" / "sinapi_referencia"
+PASTA_PROCESSADO = APP_DIR / "sinapi" / "sinapi_processado"
 
-PASTA_REFERENCIA = BASE_DIR / "sinapi/sinapi_referencia"
-PASTA_PROCESSADO = BASE_DIR / "sinapi/sinapi_processado"
-
-STATUS_FILE = BASE_DIR / "sinapi/status.json"
+STATUS_FILE = APP_DIR / "sinapi" / "status.json"
 
 PASTA_REFERENCIA.mkdir(parents=True, exist_ok=True)
 PASTA_PROCESSADO.mkdir(parents=True, exist_ok=True)

@@ -22,6 +22,7 @@ OutputBaseFilename=ORC_Instalador_{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 SetupIconFile=icone.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 PrivilegesRequired=admin
 
 [Languages]

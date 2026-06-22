@@ -441,7 +441,7 @@ scrollbar.pack(side="right", fill="y")
 # ---------------------------- #
 # FRAME DADOS DO ORÇAMENTO     #
 # ---------------------------- #
-frame_dados = tk.LabelFrame(frame_principal, text="Dados do Orçamento")
+frame_dados = tk.LabelFrame(frame_principal, text="1. Dados do Orçamento")
 frame_dados.pack(fill="x", padx=10, pady=10)
 
 frame_checkboxes = tk.Frame(frame_dados)
@@ -529,7 +529,7 @@ frame_conteudo.pack(fill="both", expand=True)
 frame_conteudo.columnconfigure(0, weight=0)
 frame_conteudo.columnconfigure(1, weight=1)
 
-frame_metragem = tk.LabelFrame(frame_conteudo, text="Metragem dos Cômodos")
+frame_metragem = tk.LabelFrame(frame_conteudo, text="2. Metragem dos Cômodos")
 frame_metragem.grid(row=0, column=0, sticky="nw", padx=10, pady=5)
 
 frame_tabela = tk.Frame(frame_metragem)
@@ -600,7 +600,7 @@ for i, c in enumerate(lista_comodos, start=1):
 # ---------------------------- #
 # FRAME SELEÇÃO DE ANOMALIA    #
 # ---------------------------- #
-frame_anomalia = tk.LabelFrame(frame_conteudo, text="Selecionar Anomalia")
+frame_anomalia = tk.LabelFrame(frame_conteudo, text="3. Selecionar Anomalia")
 frame_anomalia.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
 
 vicios = [
@@ -704,7 +704,7 @@ def mostrar_feedback(mensagem, cor="red", temporario=True):
 # ---------------------------- #
 # LISTA DE ANOMALIAS           #
 # ---------------------------- #
-frame_lista = tk.LabelFrame(frame_conteudo, text="Anomalias adicionadas")
+frame_lista = tk.LabelFrame(frame_conteudo, text="4. Anomalias adicionadas")
 frame_lista.grid(row=0, column=1, rowspan=2, sticky="n", padx=10, pady=5)
 
 lista_anomalias = []

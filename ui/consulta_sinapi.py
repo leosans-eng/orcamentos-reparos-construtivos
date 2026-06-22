@@ -104,7 +104,7 @@ class ConsultaSinapiFrame(tk.Frame):
             font=("Arial", 8),
             fg="#666666",
             bg="#ececec",
-            wraplength=1000,
+            wraplength=1200,
             justify="left",
         ).pack(anchor="w", padx=4, pady=(4, 0))
 

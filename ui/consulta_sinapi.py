@@ -1,5 +1,7 @@
 import tkinter as tk
 
+from ui.widgets import criar_botao_voltar
+
 
 class ConsultaSinapiFrame(tk.Frame):
     def __init__(self, parent, on_voltar):
@@ -10,14 +12,7 @@ class ConsultaSinapiFrame(tk.Frame):
     def _montar(self):
         barra = tk.Frame(self, bg="#ececec")
         barra.pack(fill="x", padx=10, pady=(8, 0))
-
-        tk.Button(
-            barra,
-            text="← Voltar ao início",
-            command=self.on_voltar,
-            relief="flat",
-            cursor="hand2",
-        ).pack(side="left")
+        criar_botao_voltar(barra, self.on_voltar, bg_parent="#ececec").pack(side="left")
 
         centro = tk.Frame(self, bg="#ececec")
         centro.place(relx=0.5, rely=0.5, anchor="center")

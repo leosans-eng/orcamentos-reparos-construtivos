@@ -1,5 +1,12 @@
 import tkinter as tk
 
+from ui.widgets import (
+    COR_BORDA_PADRAO,
+    COR_FUNDO_CARTAO,
+    COR_TITULO_PADRAO,
+    aplicar_hover_cartao,
+)
+
 
 class HubFrame(tk.Frame):
     def __init__(self, parent, on_selecionar_modulo):
@@ -68,9 +75,9 @@ class HubFrame(tk.Frame):
     ):
         largura = 220
         altura = 130
-        cor_fundo = "#ffffff" if habilitado else "#f0f0f0"
-        cor_borda = "#006699" if habilitado else "#cccccc"
-        cor_titulo = "#006699" if habilitado else "#999999"
+        cor_fundo = COR_FUNDO_CARTAO if habilitado else "#f0f0f0"
+        cor_borda = COR_BORDA_PADRAO if habilitado else "#cccccc"
+        cor_titulo = COR_TITULO_PADRAO if habilitado else "#999999"
         cor_texto = "#555555" if habilitado else "#aaaaaa"
 
         cartao = tk.Frame(
@@ -85,15 +92,19 @@ class HubFrame(tk.Frame):
         cartao.grid(row=0, column=coluna, padx=12, pady=4)
         cartao.grid_propagate(False)
 
-        tk.Label(
+        filhos = []
+
+        lbl_titulo = tk.Label(
             cartao,
             text=titulo,
             font=("Arial", 12, "bold"),
             fg=cor_titulo,
             bg=cor_fundo,
-        ).pack(pady=(18, 6))
+        )
+        lbl_titulo.pack(pady=(18, 6))
+        filhos.append(lbl_titulo)
 
-        tk.Label(
+        lbl_desc = tk.Label(
             cartao,
             text=descricao,
             font=("Arial", 9),
@@ -101,30 +112,27 @@ class HubFrame(tk.Frame):
             bg=cor_fundo,
             wraplength=largura - 24,
             justify="center",
-        ).pack(padx=12)
+        )
+        lbl_desc.pack(padx=12)
+        filhos.append(lbl_desc)
 
         if aviso:
-            tk.Label(
+            lbl_aviso = tk.Label(
                 cartao,
                 text=aviso,
                 font=("Arial", 8, "italic"),
                 fg="#999999",
                 bg=cor_fundo,
-            ).pack(pady=(8, 0))
+            )
+            lbl_aviso.pack(pady=(8, 0))
+            filhos.append(lbl_aviso)
 
         if habilitado:
             def ao_clicar(_event=None, mod=modulo):
                 self.on_selecionar_modulo(mod)
 
             cartao.bind("<Button-1>", ao_clicar)
-            for filho in cartao.winfo_children():
+            for filho in filhos:
                 filho.bind("<Button-1>", ao_clicar)
 
-            def ao_entrar(_event, c=cartao):
-                c.configure(highlightbackground="#004466")
-
-            def ao_sair(_event, c=cartao):
-                c.configure(highlightbackground="#006699")
-
-            cartao.bind("<Enter>", ao_entrar)
-            cartao.bind("<Leave>", ao_sair)
+            aplicar_hover_cartao(cartao, filhos)

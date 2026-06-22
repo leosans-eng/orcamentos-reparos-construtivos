@@ -1,12 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_data_files
+
+datas = [
+    ('vicios_construtivos.json', '.'),
+    ('icone.ico', '.'),
+]
+datas += collect_data_files('certifi')
 
 
 a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=datas,
+    hiddenimports=['atualizacao', 'app_paths', 'certifi'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -1,5 +1,11 @@
+; Inno Setup — versão lida de core/app_state.py via /DMyAppVersion=...
+; Compile com: setup\orc_installer.bat
+
+#ifndef MyAppVersion
+  #define MyAppVersion "Erro na versão, contatar suporte"
+#endif
+
 #define MyAppName "ORC"
-#define MyAppVersion "0.9.8.6"
 #define MyAppPublisher "Léo Santos"
 #define MyAppExeName "ORC.exe"
 #define MySourceDir "..\dist\ORC"

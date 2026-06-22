@@ -1,12 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_data_files
+
+datas = collect_data_files('certifi')
 
 
 a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=datas,
+    hiddenimports=['atualizacao', 'certifi'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

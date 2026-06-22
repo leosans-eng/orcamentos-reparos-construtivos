@@ -17,11 +17,7 @@ from core.sinapi_loader import (
     recarregar_sinapi,
 )
 
-APP_VERSION = "0.9.8.6"
-URL_VERSAO = (
-    "https://raw.githubusercontent.com/leosans-eng/"
-    "orcamento-reparos-construtivos/main/version.json"
-)
+APP_VERSION = "0.9.9"
 
 LARGURA_JANELA_PADRAO = 990
 ALTURA_JANELA_PADRAO = 660
@@ -54,7 +50,6 @@ class AppContext:
         self.frame_rodape = None
         self.label_rodape = None
         self.label_nome_csv_rodape = None
-        self.status_atualizacao = None
         self.status_sinapi = None
 
     def _carregar_dados_json(self):
@@ -83,8 +78,6 @@ class AppContext:
         info = self.informacoes_versao()
         base = f"Sistema ORC v{info['app']} · SINAPI referência {info['sinapi']}"
         extras = []
-        if self.status_atualizacao and self.status_atualizacao.get():
-            extras.append(self.status_atualizacao.get())
         if self.status_sinapi and self.status_sinapi.get():
             extras.append(self.status_sinapi.get())
         if extras:

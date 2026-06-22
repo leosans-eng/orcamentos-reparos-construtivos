@@ -1,15 +1,10 @@
 import os
 import tkinter as tk
-from tkinter import messagebox
-
-import requests
-import webbrowser
 
 from core.app_state import (
     ALTURA_JANELA_PADRAO,
     APP_VERSION,
     LARGURA_JANELA_PADRAO,
-    URL_VERSAO,
     AppContext,
 )
 from core.sinapi_loader import BASE_DIR
@@ -43,9 +38,6 @@ class OrcApp:
         if os.path.isfile(icone):
             self.janela.iconbitmap(icone)
 
-        self.ctx.status_atualizacao = tk.StringVar(
-            value="Verificando atualizações..."
-        )
         self.ctx.status_sinapi = tk.StringVar(value="SINAPI: verificando...")
 
         self._montar_rodape()
@@ -56,8 +48,16 @@ class OrcApp:
         self._criar_hub()
         self.mostrar_modulo("hub")
 
-        self.janela.after(2000, self._verificar_atualizacao_app)
+        self._schedule_update_check()
         self.janela.after(500, self.ctx.iniciar_verificacao_sinapi)
+
+    def _schedule_update_check(self):
+        try:
+            from atualizacao import iniciar_verificacao_atualizacao
+
+            iniciar_verificacao_atualizacao(self.janela, APP_VERSION)
+        except ImportError:
+            pass
 
     def _montar_rodape(self):
         self.ctx.frame_rodape = tk.Frame(self.janela)
@@ -136,42 +136,6 @@ class OrcApp:
         if nome == "area_privativa":
             self._frames[nome].ativar_scroll()
             self._frames[nome].focar()
-
-    def _verificar_atualizacao_app(self):
-        try:
-            resposta = requests.get(URL_VERSAO, timeout=5)
-            dados = resposta.json()
-            versao_online = dados["versao"]
-            link_download = dados["download"]
-
-            if versao_online != APP_VERSION:
-                self.ctx.status_atualizacao.set(
-                    f"Nova versão disponível: {versao_online}"
-                )
-            else:
-                self.ctx.status_atualizacao.set("Sistema atualizado")
-
-            self.ctx.atualizar_rodape()
-
-            if versao_online != APP_VERSION:
-                if messagebox.askyesno(
-                    "Atualização disponível",
-                    (
-                        f"Nova versão disponível: {versao_online}\n\n"
-                        "Deseja atualizar agora?"
-                    ),
-                ):
-                    webbrowser.open(link_download)
-                    messagebox.showinfo(
-                        "Atualização",
-                        "Baixe e instale a nova versão.\n\nO sistema será fechado.",
-                    )
-                    self.janela.destroy()
-
-        except Exception as erro:
-            self.ctx.status_atualizacao.set("Erro ao procurar atualizações")
-            self.ctx.atualizar_rodape()
-            print("Erro ao verificar atualização:", erro)
 
     def executar(self):
         self.janela.mainloop()

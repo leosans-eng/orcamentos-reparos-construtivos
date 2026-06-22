@@ -102,7 +102,27 @@ def _pontuar_linha(codigo, descricao, grupos, consulta_norm):
     return score
 
 
-def buscar_sinapi(sinapi, estado, consulta, limite=250, modo_parcial=False):
+def obter_unidades_sinapi(sinapi, estado=None):
+    """Unidades distintas na base, opcionalmente restritas a um estado."""
+    if sinapi.empty or "unidade" not in sinapi.columns:
+        return []
+    df = _filtrar_por_estado(sinapi, estado) if estado else sinapi
+    if df.empty:
+        return []
+    unidades = df["unidade"].dropna().astype(str).str.strip().unique()
+    return sorted(u for u in unidades if u)
+
+
+def _filtrar_por_unidade(df, unidade):
+    if df.empty or not unidade or unidade == "Todas":
+        return df
+    if "unidade" not in df.columns:
+        return df
+    alvo = str(unidade).strip().upper()
+    return df[df["unidade"].astype(str).str.strip().str.upper() == alvo].copy()
+
+
+def buscar_sinapi(sinapi, estado, consulta, limite=250, modo_parcial=False, unidade=None):
     """
     Busca insumos ou composições SINAPI no DataFrame carregado.
 
@@ -127,9 +147,10 @@ def buscar_sinapi(sinapi, estado, consulta, limite=250, modo_parcial=False):
         mask = df["codigo"].astype(str).str.replace(".", "", regex=False).str.contains(
             codigo_busca, regex=False, na=False
         )
-        resultados = df[mask].copy()
+        resultados = _filtrar_por_unidade(df[mask].copy(), unidade)
         if resultados.empty:
-            return vazio, f"Nenhum insumo ou composição com código contendo “{texto}”."
+            sufixo_un = f" na unidade {unidade}" if unidade and unidade != "Todas" else ""
+            return vazio, f"Nenhum insumo ou composição com código contendo “{texto}”{sufixo_un}."
         return resultados.head(limite), f"{len(resultados.head(limite))} insumo(s) ou composição(ões) encontrado(s)."
 
     tokens = tokenizar_consulta(texto)
@@ -162,6 +183,11 @@ def buscar_sinapi(sinapi, estado, consulta, limite=250, modo_parcial=False):
         for _, row in resultados.iterrows()
     ]
     resultados = resultados.sort_values("_score", ascending=False).drop(columns=["_score"])
+    resultados = _filtrar_por_unidade(resultados, unidade)
+    if resultados.empty:
+        sufixo_un = f" na unidade {unidade}" if unidade and unidade != "Todas" else ""
+        return vazio, f"Nenhum insumo ou composição encontrada{sufixo_un}. Tente sinônimos ou menos palavras."
+
     total = len(resultados)
     exibidos = resultados.head(limite)
 

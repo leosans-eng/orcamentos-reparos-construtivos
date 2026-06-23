@@ -12,6 +12,8 @@ TIPO_GRUPO = "grupo"
 TIPO_SINAPI = "sinapi"
 TIPO_COMPOSICAO_PROPRIA = "composicao_propria"
 
+BDI_PADRAO = 30.62
+
 
 def _novo_id():
     return str(uuid.uuid4())
@@ -56,7 +58,15 @@ def _criar_composicao_propria(nome, unidade, quantidade=1.0):
     }
 
 
-def subtotal_item(item):
+def aplicar_bdi(valor, bdi_percent):
+    return float(valor) * (1 + float(bdi_percent) / 100)
+
+
+def custo_unitario_com_bdi(custo_unitario, bdi_percent):
+    return aplicar_bdi(custo_unitario, bdi_percent)
+
+
+def subtotal_item_sem_bdi(item):
     if item["tipo"] == TIPO_SINAPI:
         return item["custo_unitario"] * item["quantidade"]
     if item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
@@ -65,12 +75,19 @@ def subtotal_item(item):
     return 0.0
 
 
-def subtotal_grupo(grupo):
-    return sum(subtotal_item(i) for i in grupo.get("itens", []))
+def subtotal_item(item, bdi_percent=0):
+    base = subtotal_item_sem_bdi(item)
+    if item["tipo"] == TIPO_SINAPI and bdi_percent:
+        return aplicar_bdi(base, bdi_percent)
+    return base
 
 
-def total_orcamento(grupos):
-    return sum(subtotal_grupo(g) for g in grupos)
+def subtotal_grupo(grupo, bdi_percent=0):
+    return sum(subtotal_item(i, bdi_percent) for i in grupo.get("itens", []))
+
+
+def total_orcamento(grupos, bdi_percent=0):
+    return sum(subtotal_grupo(g, bdi_percent) for g in grupos)
 
 
 def rotulo_item(item):
@@ -82,12 +99,16 @@ def rotulo_item(item):
 
 
 class OrcamentoCustomizado:
-    def __init__(self, nome=""):
+    def __init__(self, nome="", bdi_percent=BDI_PADRAO):
         self.nome = nome.strip()
+        self.bdi_percent = float(bdi_percent)
         self.grupos = []
 
     def definir_nome(self, nome):
         self.nome = nome.strip()
+
+    def definir_bdi(self, bdi_percent):
+        self.bdi_percent = float(bdi_percent)
 
     def adicionar_grupo(self, nome):
         if not nome or not nome.strip():
@@ -160,17 +181,19 @@ class OrcamentoCustomizado:
                 return True
         return False
 
-    def total(self):
-        return total_orcamento(self.grupos)
+    def total(self, com_bdi=True):
+        bdi = self.bdi_percent if com_bdi else 0
+        return total_orcamento(self.grupos, bdi)
 
     def exportar_dict(self):
         return {
             "nome": self.nome,
+            "bdi_percent": self.bdi_percent,
             "grupos": deepcopy(self.grupos),
         }
 
     @classmethod
     def importar_dict(cls, dados):
-        orc = cls(dados.get("nome", ""))
+        orc = cls(dados.get("nome", ""), dados.get("bdi_percent", BDI_PADRAO))
         orc.grupos = deepcopy(dados.get("grupos", []))
         return orc

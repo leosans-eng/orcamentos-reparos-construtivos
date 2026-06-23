@@ -130,7 +130,7 @@ def confirmar_exclusao_com_espera(
 
     resultado = {"confirmed": False}
     restante = segundos
-    timer_id = [None]
+    timer_id: list[str | None] = [None]
 
     frame = ttk.Frame(dialog, padding=16)
     frame.pack(fill="both", expand=True)

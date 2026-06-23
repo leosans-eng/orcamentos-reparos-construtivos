@@ -64,17 +64,19 @@ class OrcApp:
             pass
 
     def _montar_rodape(self):
-        self.ctx.frame_rodape = tk.Frame(self.janela)
-        self.ctx.frame_rodape.pack(side="bottom", fill="x", padx=10, pady=(0, 6))
+        frame_rodape = tk.Frame(self.janela)
+        self.ctx.frame_rodape = frame_rodape
+        frame_rodape.pack(side="bottom", fill="x", padx=10, pady=(0, 6))
 
-        self.ctx.label_rodape = tk.Label(
-            self.ctx.frame_rodape,
+        label_rodape = tk.Label(
+            frame_rodape,
             text=self.ctx.texto_rodape_interface(),
             font=("Arial", 8),
             fg="#555555",
             anchor="w",
         )
-        self.ctx.label_rodape.pack(side="left", anchor="w")
+        self.ctx.label_rodape = label_rodape
+        label_rodape.pack(side="left", anchor="w")
 
         if self.ctx.caminho_sinapi_carregado:
             nome_csv = (
@@ -85,7 +87,7 @@ class OrcApp:
             nome_csv = "Nenhum arquivo SINAPI carregado"
 
         self.ctx.label_nome_csv_rodape = tk.Label(
-            self.ctx.frame_rodape,
+            frame_rodape,
             text=nome_csv,
             font=("Arial", 8, "bold"),
             fg="#C62828",

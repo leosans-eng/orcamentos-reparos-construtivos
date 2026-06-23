@@ -2,6 +2,7 @@ import json
 import os
 import threading
 import tkinter as tk
+from typing import Any, Callable
 
 from sinapi.atualizador_sinapi import (
     baixar_e_extrair,
@@ -45,13 +46,13 @@ class AppContext:
             carregar_sinapi_inicial()
         )
         self.dados_json = self._carregar_dados_json()
-        self._sinapi_callbacks = []
+        self._sinapi_callbacks: list[Callable[[], Any]] = []
 
-        self.janela = None
-        self.frame_rodape = None
-        self.label_rodape = None
-        self.label_nome_csv_rodape = None
-        self.status_sinapi = None
+        self.janela: tk.Tk | None = None
+        self.frame_rodape: tk.Frame | None = None
+        self.label_rodape: tk.Label | None = None
+        self.label_nome_csv_rodape: tk.Label | None = None
+        self.status_sinapi: tk.StringVar | None = None
 
     def _carregar_dados_json(self):
         with open(vicios_construtivos_path(), "r", encoding="utf-8") as f:
@@ -90,6 +91,8 @@ class AppContext:
 
     def agendar_sumico_nome_csv_deslize_direita(self, label_csv):
         frame_rodape = self.frame_rodape
+        if frame_rodape is None:
+            return
 
         def executar():
             if not label_csv.winfo_exists():
@@ -126,6 +129,10 @@ class AppContext:
         frame_rodape.after(RODAPE_CSV_SUMIR_APOS_MS, executar)
 
     def atualizar_label_csv_rodape(self):
+        frame_rodape = self.frame_rodape
+        if frame_rodape is None:
+            return
+
         if self.caminho_sinapi_carregado:
             texto = (
                 f"{os.path.basename(self.caminho_sinapi_carregado)} "
@@ -139,7 +146,7 @@ class AppContext:
             or not self.label_nome_csv_rodape.winfo_exists()
         ):
             self.label_nome_csv_rodape = tk.Label(
-                self.frame_rodape,
+                frame_rodape,
                 text=texto,
                 font=("Arial", 8, "bold"),
                 fg="#C62828",
@@ -168,63 +175,72 @@ class AppContext:
         thread.start()
 
     def _verificar_atualizacao_sinapi(self):
+        janela = self.janela
+        status = self.status_sinapi
+        if janela is None or status is None:
+            return
+
         try:
-            self.status_sinapi.set("SINAPI: verificando...")
-            self.janela.after(0, self.atualizar_rodape)
+            status.set("SINAPI: verificando...")
+            janela.after(0, self.atualizar_rodape)
 
             atualizacoes, aviso = buscar_atualizacoes()
 
             if aviso == "nao_encontrada":
-                self.status_sinapi.set(
+                status.set(
                     "SINAPI indisponível (servidor e pasta local)"
                 )
-                self.janela.after(0, self.atualizar_rodape)
+                janela.after(0, self.atualizar_rodape)
                 return
 
             if aviso == "servidor_indisponivel":
                 if self.sinapi_referencia_rotulo != "BASE AUSENTE":
-                    self.status_sinapi.set(
+                    status.set(
                         f"SINAPI local ({self.sinapi_referencia_rotulo})"
                     )
                 else:
-                    self.status_sinapi.set(
+                    status.set(
                         "SINAPI: servidor da Caixa indisponível"
                     )
-                self.janela.after(0, self.atualizar_rodape)
+                janela.after(0, self.atualizar_rodape)
                 return
 
             if not atualizacoes:
-                self.status_sinapi.set("SINAPI atualizada")
-                self.janela.after(0, self.atualizar_rodape)
+                status.set("SINAPI atualizada")
+                janela.after(0, self.atualizar_rodape)
                 return
 
             for ano, mes in atualizacoes:
-                self.status_sinapi.set(f"SINAPI: baixando {mes:02d}/{ano}")
-                self.janela.after(0, self.atualizar_rodape)
+                status.set(f"SINAPI: baixando {mes:02d}/{ano}")
+                janela.after(0, self.atualizar_rodape)
 
                 caminho = baixar_e_extrair(ano, mes)
 
-                self.status_sinapi.set(f"SINAPI: processando {mes:02d}/{ano}")
-                self.janela.after(0, self.atualizar_rodape)
+                status.set(f"SINAPI: processando {mes:02d}/{ano}")
+                janela.after(0, self.atualizar_rodape)
 
                 processar_arquivo(caminho)
 
             limpar_versoes_antigas()
             self.recarregar_sinapi_em_memoria()
-            self.janela.after(0, self._concluir_atualizacao_sinapi)
+            janela.after(0, self._concluir_atualizacao_sinapi)
 
         except Exception as e:
             print("Erro atualização SINAPI:", e)
-            self.status_sinapi.set("Erro atualização SINAPI")
-            self.janela.after(0, self.atualizar_rodape)
+            status.set("Erro atualização SINAPI")
+            janela.after(0, self.atualizar_rodape)
 
     def _concluir_atualizacao_sinapi(self):
         from tkinter import messagebox
 
+        status = self.status_sinapi
+        if status is None:
+            return
+
         self.notificar_sinapi_atualizada()
 
         if self.sinapi_referencia_rotulo == "BASE AUSENTE" or not self.obter_estados():
-            self.status_sinapi.set("Erro ao carregar base SINAPI")
+            status.set("Erro ao carregar base SINAPI")
             self.atualizar_rodape()
             messagebox.showerror(
                 "SINAPI",
@@ -236,7 +252,7 @@ class AppContext:
             )
             return
 
-        self.status_sinapi.set(
+        status.set(
             f"SINAPI atualizada para {self.sinapi_referencia_rotulo}"
         )
         self.atualizar_rodape()

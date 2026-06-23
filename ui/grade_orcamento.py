@@ -1,9 +1,13 @@
 import tkinter as tk
 from tkinter import ttk
+from typing import Literal
 
 from core.orcamento_customizado import TIPO_GRUPO
 
-COLUNAS = (
+TkAnchor = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
+Coluna = tuple[str, str, int, TkAnchor, int]
+
+COLUNAS: tuple[Coluna, ...] = (
     ("item", "Item", 52, "center", 0),
     ("codigo", "Código", 72, "center", 0),
     ("descricao", "Descrição", 180, "w", 1),

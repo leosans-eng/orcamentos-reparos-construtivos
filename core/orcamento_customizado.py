@@ -75,18 +75,18 @@ def subtotal_item_sem_bdi(item):
     return 0.0
 
 
-def subtotal_item(item, bdi_percent=0):
+def subtotal_item(item, bdi_percent: float = 0.0):
     base = subtotal_item_sem_bdi(item)
     if item["tipo"] == TIPO_SINAPI and bdi_percent:
         return aplicar_bdi(base, bdi_percent)
     return base
 
 
-def subtotal_grupo(grupo, bdi_percent=0):
+def subtotal_grupo(grupo, bdi_percent: float = 0.0):
     return sum(subtotal_item(i, bdi_percent) for i in grupo.get("itens", []))
 
 
-def total_orcamento(grupos, bdi_percent=0):
+def total_orcamento(grupos, bdi_percent: float = 0.0):
     return sum(subtotal_grupo(g, bdi_percent) for g in grupos)
 
 

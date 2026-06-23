@@ -737,7 +737,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.combo_estado["values"] = valores_combo_estado(estados)
         if self.combo_estado.get() not in self.combo_estado["values"]:
             self.combo_estado.set(PLACEHOLDER_ESTADO)
-        self.label_referencia.config(text=self._texto_referencia())
+        if self.label_referencia is not None:
+            self.label_referencia.config(text=self._texto_referencia())
         self._atualizar_grade()
 
     def _grupo_id_selecionado(self):

@@ -225,7 +225,8 @@ class ConsultaSinapiFrame(tk.Frame):
         if self.combo_estado.get() not in self.combo_estado["values"]:
             self.combo_estado.set(PLACEHOLDER_ESTADO)
         self._atualizar_unidades()
-        self.label_referencia.config(text=self._texto_referencia())
+        if self.label_referencia is not None:
+            self.label_referencia.config(text=self._texto_referencia())
         if self.var_busca.get().strip():
             self._executar_busca()
 

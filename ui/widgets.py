@@ -412,7 +412,15 @@ def criar_botao_voltar(parent, command, bg_parent="#ececec"):
     return btn
 
 
-def criar_barra_modulo(parent, titulo, on_voltar, *, texto_referencia=None, bg="#ececec"):
+def criar_barra_modulo(
+    parent,
+    titulo,
+    on_voltar,
+    *,
+    texto_referencia=None,
+    montar_acoes_antes_referencia=None,
+    bg="#ececec",
+):
     """Barra superior: Voltar ao início, título da página e referência opcional na mesma linha."""
     barra = tk.Frame(parent, bg=bg)
     barra.pack(fill="x", padx=10, pady=(8, 8))
@@ -428,14 +436,21 @@ def criar_barra_modulo(parent, titulo, on_voltar, *, texto_referencia=None, bg="
     ).pack(side="left", padx=(12, 8))
 
     label_referencia = None
-    if texto_referencia is not None:
-        label_referencia = tk.Label(
-            barra,
-            text=texto_referencia,
-            font=("Arial", 9),
-            fg="#666666",
-            bg=bg,
-        )
-        label_referencia.pack(side="right")
+    if texto_referencia is not None or montar_acoes_antes_referencia is not None:
+        lado_direito = tk.Frame(barra, bg=bg)
+        lado_direito.pack(side="right")
+
+        if texto_referencia is not None:
+            label_referencia = tk.Label(
+                lado_direito,
+                text=texto_referencia,
+                font=("Arial", 9),
+                fg="#666666",
+                bg=bg,
+            )
+            label_referencia.pack(side="right")
+
+        if montar_acoes_antes_referencia is not None:
+            montar_acoes_antes_referencia(lado_direito)
 
     return label_referencia

@@ -546,7 +546,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         ttk.Entry(linha_salvo, textvariable=self.var_bdi, width=7).pack(side="left", padx=(4, 0))
 
         linha_botoes = tk.Frame(conteudo, bg="#ececec")
-        linha_botoes.pack(fill="x", padx=4, pady=(0, 8))
+        linha_botoes.pack(fill="x", padx=4, pady=(0, 4))
 
         ttk.Button(
             linha_botoes, text="Nova etapa", command=self._novo_grupo, style="Compact.TButton"
@@ -571,31 +571,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         ).pack(side="left", padx=(0, 12))
         ttk.Button(
             linha_botoes,
-            text="Remover etapa/item",
-            command=self._remover_selecionado,
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_botoes,
-            text="Editar item",
-            command=self._editar_item_sinapi,
-            style="Accent.Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_botoes,
-            text="Item ↑",
-            command=lambda: self._mover_item(-1),
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_botoes,
-            text="Item ↓",
-            command=lambda: self._mover_item(1),
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 12))
-
-        ttk.Button(
-            linha_botoes,
             text="Inserir item SINAPI",
             command=self._abrir_busca_sinapi,
             style="Compact.TButton",
@@ -605,18 +580,53 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             text="Inserir composição PRÓPRIA",
             command=self._adicionar_composicao_propria,
             style="Compact.TButton",
+        ).pack(side="left")
+
+        linha_botoes_2 = tk.Frame(conteudo, bg="#ececec")
+        linha_botoes_2.pack(fill="x", padx=4, pady=(0, 8))
+
+        moldura_remover = tk.Frame(
+            linha_botoes_2,
+            bg="#ececec",
+            highlightbackground="#c62828",
+            highlightthickness=2,
+        )
+        moldura_remover.pack(side="left", padx=(0, 4))
+        ttk.Button(
+            moldura_remover,
+            text="Remover etapa/item",
+            command=self._remover_selecionado,
+            style="Delete.Compact.TButton",
+        ).pack(padx=1, pady=1)
+        ttk.Button(
+            linha_botoes_2,
+            text="Editar item",
+            command=self._editar_item_sinapi,
+            style="Accent.Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_botoes_2,
+            text="Item ↑",
+            command=lambda: self._mover_item(-1),
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_botoes_2,
+            text="Item ↓",
+            command=lambda: self._mover_item(1),
+            style="Compact.TButton",
         ).pack(side="left", padx=(0, 12))
 
-        tk.Label(linha_botoes, text="Inserir rápido — Cód.:", bg="#ececec").pack(side="left")
+        tk.Label(linha_botoes_2, text="Inserir rápido — Cód.:", bg="#ececec").pack(side="left")
         self.var_codigo_rapido = tk.StringVar()
-        entrada_cod = ttk.Entry(linha_botoes, textvariable=self.var_codigo_rapido, width=10)
+        entrada_cod = ttk.Entry(linha_botoes_2, textvariable=self.var_codigo_rapido, width=10)
         entrada_cod.pack(side="left", padx=(4, 8))
-        tk.Label(linha_botoes, text="Qtd.:", bg="#ececec").pack(side="left")
+        tk.Label(linha_botoes_2, text="Qtd.:", bg="#ececec").pack(side="left")
         self.var_qtd_rapido = tk.StringVar(value="1")
-        entrada_qtd = ttk.Entry(linha_botoes, textvariable=self.var_qtd_rapido, width=8)
+        entrada_qtd = ttk.Entry(linha_botoes_2, textvariable=self.var_qtd_rapido, width=8)
         entrada_qtd.pack(side="left", padx=(4, 8))
         ttk.Button(
-            linha_botoes, text="Inserir", command=self._inserir_rapido, style="Compact.TButton"
+            linha_botoes_2, text="Inserir", command=self._inserir_rapido, style="Compact.TButton"
         ).pack(side="left")
         entrada_cod.bind("<Return>", lambda _e: self._inserir_rapido())
         entrada_qtd.bind("<Return>", lambda _e: self._inserir_rapido())

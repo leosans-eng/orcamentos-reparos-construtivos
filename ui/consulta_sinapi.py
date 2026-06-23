@@ -30,11 +30,13 @@ class ConsultaSinapiFrame(tk.Frame):
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
     def _montar(self):
+        self._icone_excel = None
         self.label_referencia = criar_barra_modulo(
             self,
             "Consulta SINAPI",
             self.on_voltar,
             texto_referencia=self._texto_referencia(),
+            montar_acoes_antes_referencia=self._montar_botao_sinapi_cabecalho,
         )
 
         painel_busca = tk.LabelFrame(
@@ -112,27 +114,6 @@ class ConsultaSinapiFrame(tk.Frame):
         )
         self.label_status.pack(fill="x", padx=18, pady=(0, 4))
 
-        linha_acoes = tk.Frame(self, bg="#ececec")
-        linha_acoes.pack(fill="x", padx=16, pady=(0, 6))
-
-        self._icone_excel = None
-        caminho_icone = asset_path("icons", "excel.png")
-        kwargs_botao = {
-            "text": "Abrir SINAPI Completa",
-            "command": self._abrir_sinapi_real,
-            "bg": "#ececec",
-            "activebackground": "#dfe8ec",
-            "relief": "groove",
-            "padx": 8,
-            "pady": 2,
-            "cursor": "hand2",
-        }
-        if caminho_icone is not None:
-            self._icone_excel = tk.PhotoImage(file=str(caminho_icone))
-            kwargs_botao["image"] = self._icone_excel
-            kwargs_botao["compound"] = "left"
-        tk.Button(linha_acoes, **kwargs_botao).pack(side="left")
-
         painel_resultados = tk.LabelFrame(
             self,
             text="Resultados",
@@ -198,6 +179,27 @@ class ConsultaSinapiFrame(tk.Frame):
         if ref == "BASE AUSENTE":
             return "Base não carregada"
         return f"Referência SINAPI: {ref}"
+
+    def _montar_botao_sinapi_cabecalho(self, parent):
+        caminho_icone = asset_path("icons", "excel24.png")
+        kwargs_botao = {
+            "text": "Abrir SINAPI Completa",
+            "command": self._abrir_sinapi_real,
+            "bg": "#ececec",
+            "activebackground": "#dfe8ec",
+            "relief": "flat",
+            "bd": 0,
+            "padx": 4,
+            "pady": 0,
+            "cursor": "hand2",
+            "font": ("Arial", 9),
+            "fg": "#444444",
+        }
+        if caminho_icone is not None:
+            self._icone_excel = tk.PhotoImage(file=str(caminho_icone))
+            kwargs_botao["image"] = self._icone_excel
+            kwargs_botao["compound"] = "left"
+        tk.Button(parent, **kwargs_botao).pack(side="right", padx=(0, 10))
 
     def _abrir_sinapi_real(self):
         caminho = obter_xlsx_sinapi_referencia_mais_recente()

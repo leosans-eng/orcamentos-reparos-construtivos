@@ -549,7 +549,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         linha_botoes.pack(fill="x", padx=4, pady=(0, 4))
 
         ttk.Button(
-            linha_botoes, text="Nova etapa", command=self._novo_grupo, style="Compact.TButton"
+            linha_botoes, text="Nova etapa", command=self._novo_grupo, style="Add.Compact.TButton"
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_botoes,
@@ -585,19 +585,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         linha_botoes_2 = tk.Frame(conteudo, bg="#ececec")
         linha_botoes_2.pack(fill="x", padx=4, pady=(0, 8))
 
-        moldura_remover = tk.Frame(
-            linha_botoes_2,
-            bg="#ececec",
-            highlightbackground="#c62828",
-            highlightthickness=2,
-        )
-        moldura_remover.pack(side="left", padx=(0, 4))
         ttk.Button(
-            moldura_remover,
+            linha_botoes_2,
             text="Remover etapa/item",
             command=self._remover_selecionado,
             style="Delete.Compact.TButton",
-        ).pack(padx=1, pady=1)
+        ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_botoes_2,
             text="Editar item",

@@ -1,4 +1,3 @@
-import textwrap
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
@@ -14,6 +13,7 @@ from core.orcamento_customizado import (
     subtotal_item,
 )
 from core.sinapi_busca import obter_item_sinapi, obter_unidades_sinapi, pesquisar_sinapi
+from ui.grade_orcamento import GradeOrcamento
 from ui.widgets import (
     COR_TITULO_PADRAO,
     PLACEHOLDER_ESTADO,
@@ -25,8 +25,6 @@ from ui.widgets import (
 
 DEBOUNCE_BUSCA_MS = 250
 UNIDADE_TODAS = "Todas"
-ESTILO_TREE_ORC = "OrcTreeview.Treeview"
-ALTURA_LINHA_BASE = 22
 
 
 def _formatar_moeda(valor):
@@ -53,14 +51,6 @@ def _formatar_bdi(valor):
         return texto
     except (TypeError, ValueError):
         return str(valor)
-
-
-def _linhas_descricao(texto, largura_px):
-    if not texto:
-        return [""]
-    chars = max(24, largura_px // 7)
-    linhas = textwrap.wrap(str(texto), width=chars, break_long_words=False)
-    return linhas if linhas else [str(texto)]
 
 
 def _criar_botao_acao(parent, texto, comando, cor_fundo, cor_texto="#ffffff"):
@@ -396,25 +386,11 @@ class DialogoBuscaSinapi(tk.Toplevel):
 
 
 class OrcamentoCustomizadoFrame(tk.Frame):
-    COLUNAS_TREE = (
-        "codigo",
-        "descricao",
-        "quantidade",
-        "unidade",
-        "custo_unit",
-        "custo_bdi",
-        "total",
-    )
-
     def __init__(self, parent, ctx, on_voltar):
         super().__init__(parent, bg="#ececec")
         self.ctx = ctx
         self.on_voltar = on_voltar
         self.orcamento = OrcamentoCustomizado(bdi_percent=BDI_PADRAO)
-        self._mapa_tree = {}
-        self._atualizando_tree = False
-        self._job_redimensionar = None
-        ttk.Style(self).configure(ESTILO_TREE_ORC, rowheight=ALTURA_LINHA_BASE)
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -503,49 +479,20 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         entrada_cod.bind("<Return>", lambda _e: self._inserir_rapido())
         entrada_qtd.bind("<Return>", lambda _e: self._inserir_rapido())
 
-        painel_tree = tk.LabelFrame(
+        painel_grade = tk.LabelFrame(
             conteudo,
             text="Estrutura do orçamento",
             bg="#ececec",
             padx=6,
             pady=6,
         )
-        painel_tree.pack(fill="both", expand=True, padx=4, pady=(0, 6))
+        painel_grade.pack(fill="both", expand=True, padx=4, pady=(0, 6))
 
-        self.tree_orcamento = ttk.Treeview(
-            painel_tree,
-            columns=self.COLUNAS_TREE,
-            show="tree headings",
-            height=18,
-            selectmode="browse",
-            style=ESTILO_TREE_ORC,
+        self.grade = GradeOrcamento(
+            painel_grade,
+            on_duplo_clique_qtd=self._dialogo_editar_quantidade,
         )
-        self.tree_orcamento.heading("#0", text="Item")
-        self.tree_orcamento.heading("codigo", text="Código")
-        self.tree_orcamento.heading("descricao", text="Descrição")
-        self.tree_orcamento.heading("quantidade", text="Qtd.")
-        self.tree_orcamento.heading("unidade", text="Unid.")
-        self.tree_orcamento.heading("custo_unit", text="Custo unit.")
-        self.tree_orcamento.heading("custo_bdi", text="Custo c/ BDI")
-        self.tree_orcamento.heading("total", text="Total")
-
-        self.tree_orcamento.column("#0", width=60, minwidth=44, stretch=False, anchor="center")
-        self.tree_orcamento.column("codigo", width=72, minwidth=60, stretch=False, anchor="center")
-        self.tree_orcamento.column("descricao", width=340, minwidth=180, stretch=True)
-        self.tree_orcamento.column("quantidade", width=64, minwidth=50, stretch=False, anchor="e")
-        self.tree_orcamento.column("unidade", width=48, minwidth=40, stretch=False, anchor="center")
-        self.tree_orcamento.column("custo_unit", width=92, minwidth=78, stretch=False, anchor="e")
-        self.tree_orcamento.column("custo_bdi", width=92, minwidth=78, stretch=False, anchor="e")
-        self.tree_orcamento.column("total", width=96, minwidth=80, stretch=False, anchor="e")
-
-        scroll_orc = ttk.Scrollbar(painel_tree, orient="vertical", command=self.tree_orcamento.yview)
-        self.tree_orcamento.configure(yscrollcommand=scroll_orc.set)
-        self.tree_orcamento.pack(side="left", fill="both", expand=True)
-        scroll_orc.pack(side="right", fill="y")
-
-        self.tree_orcamento.tag_configure("grupo", font=("Arial", 9, "bold"))
-        self.tree_orcamento.tag_configure("composicao", foreground="#7b5e00")
-        self.tree_orcamento.tag_configure("continuacao", foreground="#555555")
+        self.grade.pack(fill="both", expand=True)
 
         rodape_orc = tk.Frame(
             conteudo, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
@@ -564,23 +511,22 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         self.label_total.pack(fill="x")
 
-        self.label_dica = tk.Label(
-            conteudo,
-            text=(
-                "Crie uma nova etapa para adicionar itens. "
-                "Duplo clique na coluna Qtd. para editar a quantidade."
-            ),
-            font=("Arial", 8),
-            fg="#666666",
-            bg="#ececec",
-            justify="left",
-        )
-        self.label_dica.pack(fill="x", padx=6, pady=(6, 0))
+        # Linha de dicas logo abaixo do rodapé do orçamento
+        #
+        # self.label_dica = tk.Label(
+        #     conteudo,
+        #     text=(
+        #         "Crie uma nova etapa para adicionar itens. "
+        #         "Duplo clique na coluna Qtd. para editar a quantidade."
+        #     ),
+        #     font=("Arial", 8),
+        #     fg="#666666",
+        #     bg="#ececec",
+        #     justify="left",
+        # )
+        # self.label_dica.pack(fill="x", padx=6, pady=(6, 0))
 
-        self.tree_orcamento.bind("<Double-1>", self._ao_duplo_clique_orcamento)
-        self.tree_orcamento.bind("<Configure>", self._ao_redimensionar_tree)
-
-        self._atualizar_tree_orcamento()
+        self._atualizar_grade()
 
     def _texto_referencia(self):
         ref = self.ctx.sinapi_referencia_rotulo
@@ -609,10 +555,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError:
             return
         self.orcamento.definir_bdi(bdi)
-        self._atualizar_tree_orcamento()
+        self._atualizar_grade()
 
     def _ao_mudar_estado(self, _event=None):
-        self._atualizar_tree_orcamento()
+        self._atualizar_grade()
 
     def _estado_selecionado(self):
         return estado_do_combo(self.combo_estado.get())
@@ -623,39 +569,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if self.combo_estado.get() not in self.combo_estado["values"]:
             self.combo_estado.set(PLACEHOLDER_ESTADO)
         self.label_referencia.config(text=self._texto_referencia())
-        self._atualizar_tree_orcamento()
-
-    def _ao_redimensionar_tree(self, _event=None):
-        if self._atualizando_tree:
-            return
-        if self._job_redimensionar is not None:
-            self.after_cancel(self._job_redimensionar)
-        self._job_redimensionar = self.after(150, self._reempacotar_descricoes)
-
-    def _reempacotar_descricoes(self):
-        self._job_redimensionar = None
-        if self._atualizando_tree:
-            return
-        self._atualizar_tree_orcamento()
-
-    def _meta_principal(self, iid):
-        meta = self._mapa_tree.get(iid)
-        if not meta:
-            return None
-        if meta.get("continuacao"):
-            return self._mapa_tree.get(meta.get("principal_iid"))
-        return meta
+        self._atualizar_grade()
 
     def _grupo_id_selecionado(self):
-        selecionado = self.tree_orcamento.selection()
-        if not selecionado:
-            return None
-        meta = self._meta_principal(selecionado[0])
-        if not meta:
-            return None
-        if meta["tipo"] == TIPO_GRUPO:
-            return meta["id"]
-        return meta.get("grupo_id")
+        return self.grade.obter_grupo_id_selecionado()
 
     def _parse_quantidade(self, texto):
         return float(str(texto).strip().replace(",", "."))
@@ -670,8 +587,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Adicionar item", str(exc), parent=self.winfo_toplevel())
             return None
-        self._atualizar_tree_orcamento()
-        self._selecionar_item_na_tree(item_id)
+        self._atualizar_grade()
+        self.grade.selecionar_item(item_id)
         return item_id
 
     def _abrir_busca_sinapi(self):
@@ -777,28 +694,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Grupo", str(exc), parent=self.winfo_toplevel())
             return
-        self._atualizar_tree_orcamento()
-        self._selecionar_grupo_na_tree(grupo_id)
-
-    def _selecionar_grupo_na_tree(self, grupo_id):
-        for iid, meta in self._mapa_tree.items():
-            if meta.get("continuacao"):
-                continue
-            if meta.get("tipo") == TIPO_GRUPO and meta.get("id") == grupo_id:
-                self.tree_orcamento.selection_set(iid)
-                self.tree_orcamento.focus(iid)
-                self.tree_orcamento.see(iid)
-                break
-
-    def _selecionar_item_na_tree(self, item_id):
-        for iid, meta in self._mapa_tree.items():
-            if meta.get("continuacao"):
-                continue
-            if meta.get("tipo") in (TIPO_SINAPI, TIPO_COMPOSICAO_PROPRIA) and meta.get("id") == item_id:
-                self.tree_orcamento.selection_set(iid)
-                self.tree_orcamento.focus(iid)
-                self.tree_orcamento.see(iid)
-                break
+        self._atualizar_grade()
+        self.grade.selecionar_por_id(TIPO_GRUPO, grupo_id)
 
     def _adicionar_composicao_propria(self):
         grupo_id = self._grupo_id_selecionado()
@@ -846,21 +743,14 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ),
             parent=self.winfo_toplevel(),
         )
-        self._atualizar_tree_orcamento()
-        self._selecionar_item_na_tree(item_id)
+        self._atualizar_grade()
+        self.grade.selecionar_item(item_id)
 
     def _meta_selecionada(self):
-        selecionado = self.tree_orcamento.selection()
-        if not selecionado:
-            return None, None
-        iid = selecionado[0]
-        meta = self._meta_principal(iid)
-        if meta and meta.get("continuacao"):
-            iid = meta.get("principal_iid", iid)
-        return iid, meta
+        return self.grade.obter_meta_selecionada()
 
     def _remover_selecionado(self):
-        _iid, meta = self._meta_selecionada()
+        meta = self._meta_selecionada()
         if not meta:
             messagebox.showinfo(
                 "Remover",
@@ -880,17 +770,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         else:
             self.orcamento.remover_item(meta["id"])
 
-        self._atualizar_tree_orcamento()
-
-    def _ao_duplo_clique_orcamento(self, event):
-        iid = self.tree_orcamento.identify_row(event.y)
-        coluna = self.tree_orcamento.identify_column(event.x)
-        if not iid or coluna != "#3":
-            return
-        meta = self._meta_principal(iid)
-        if not meta or meta["tipo"] == TIPO_GRUPO:
-            return
-        self._dialogo_editar_quantidade(meta["id"])
+        self._atualizar_grade()
 
     def _dialogo_editar_quantidade(self, item_id):
         _grupo, item = self.orcamento.obter_item(item_id)
@@ -905,8 +785,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "Quantidade", str(exc), parent=self.winfo_toplevel()
                 )
                 return
-            self._atualizar_tree_orcamento()
-            self._selecionar_item_na_tree(item_id)
+            self._atualizar_grade()
+            self.grade.selecionar_item(item_id)
 
         DialogoEditarQuantidade(
             self.winfo_toplevel(),
@@ -915,68 +795,31 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ao_confirmar,
         )
 
-    def _inserir_linhas_tree(self, parent_iid, num_text, valores_base, linhas_desc, tags, meta):
-        principal_iid = None
-        for indice, linha_desc in enumerate(linhas_desc):
-            if indice == 0:
-                valores = list(valores_base)
-                valores[1] = linha_desc
-                iid = self.tree_orcamento.insert(
-                    parent_iid,
-                    "end",
-                    text=num_text,
-                    values=tuple(valores),
-                    tags=tags,
-                    open=True,
-                )
-                principal_iid = iid
-                self._mapa_tree[iid] = {
-                    **meta,
-                    "continuacao": False,
-                    "principal_iid": iid,
-                }
-            else:
-                iid = self.tree_orcamento.insert(
-                    principal_iid,
-                    "end",
-                    text="",
-                    values=("", f"  {linha_desc}", "", "", "", "", ""),
-                    tags=("continuacao",),
-                )
-                self._mapa_tree[iid] = {
-                    **meta,
-                    "continuacao": True,
-                    "principal_iid": principal_iid,
-                }
-        return principal_iid
+    def _atualizar_grade(self):
+        self._preencher_grade()
 
-    def _atualizar_tree_orcamento(self):
-        self._atualizando_tree = True
-        try:
-            self._preencher_tree_orcamento()
-        finally:
-            self._atualizando_tree = False
-
-    def _preencher_tree_orcamento(self):
-        self.tree_orcamento.delete(*self.tree_orcamento.get_children())
-        self._mapa_tree.clear()
+    def _preencher_grade(self):
+        selecao = self.grade.obter_meta_selecionada()
+        self.grade.limpar()
 
         estado_atual = self._estado_selecionado()
         bdi = self._obter_bdi()
-        largura_desc = self.tree_orcamento.column("descricao", option="width") or 340
 
         for idx_grupo, grupo in enumerate(self.orcamento.grupos, start=1):
-            num_grupo = str(idx_grupo)
             sub_grupo = subtotal_grupo(grupo, bdi)
-            linhas_grupo = _linhas_descricao(grupo["nome"], largura_desc)
-            valores_grupo = ("", "", "", "", "", "", _formatar_moeda(sub_grupo))
-            iid_grupo = self._inserir_linhas_tree(
-                "",
-                num_grupo,
-                valores_grupo,
-                linhas_grupo,
-                ("grupo",),
-                {"tipo": TIPO_GRUPO, "id": grupo["id"]},
+            self.grade.adicionar_linha(
+                meta={"tipo": TIPO_GRUPO, "id": grupo["id"]},
+                valores={
+                    "item": str(idx_grupo),
+                    "codigo": "",
+                    "descricao": grupo["nome"],
+                    "quantidade": "",
+                    "unidade": "",
+                    "custo_unit": "",
+                    "custo_bdi": "",
+                    "total": _formatar_moeda(sub_grupo),
+                },
+                estilo="grupo",
             )
 
             for idx_item, item in enumerate(grupo["itens"], start=1):
@@ -998,61 +841,50 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
                     custo_bdi = custo_unitario_com_bdi(custo, bdi)
                     total = subtotal_item(item, bdi)
-                    linhas_desc = _linhas_descricao(item["descricao"], largura_desc)
-                    valores_item = (
-                        item["codigo"],
-                        "",
-                        _formatar_quantidade(item["quantidade"]),
-                        item["unidade"],
-                        _formatar_moeda(custo),
-                        _formatar_moeda(custo_bdi),
-                        _formatar_moeda(total),
-                    )
-                    self._inserir_linhas_tree(
-                        iid_grupo,
-                        num_item,
-                        valores_item,
-                        linhas_desc,
-                        (),
-                        {
+                    self.grade.adicionar_linha(
+                        meta={
                             "tipo": TIPO_SINAPI,
                             "id": item["id"],
                             "grupo_id": grupo["id"],
                         },
+                        valores={
+                            "item": num_item,
+                            "codigo": item["codigo"],
+                            "descricao": item["descricao"],
+                            "quantidade": _formatar_quantidade(item["quantidade"]),
+                            "unidade": item["unidade"],
+                            "custo_unit": _formatar_moeda(custo),
+                            "custo_bdi": _formatar_moeda(custo_bdi),
+                            "total": _formatar_moeda(total),
+                        },
+                        estilo="item",
                     )
                 else:
-                    linhas_desc = _linhas_descricao(item["nome"], largura_desc)
-                    valores_item = (
-                        "",
-                        "",
-                        _formatar_quantidade(item["quantidade"]),
-                        item["unidade"],
-                        "—",
-                        "—",
-                        _formatar_moeda(0),
-                    )
-                    self._inserir_linhas_tree(
-                        iid_grupo,
-                        num_item,
-                        valores_item,
-                        linhas_desc,
-                        ("composicao",),
-                        {
+                    self.grade.adicionar_linha(
+                        meta={
                             "tipo": TIPO_COMPOSICAO_PROPRIA,
                             "id": item["id"],
                             "grupo_id": grupo["id"],
                         },
+                        valores={
+                            "item": num_item,
+                            "codigo": "",
+                            "descricao": f"[Composição própria] {item['nome']}",
+                            "quantidade": _formatar_quantidade(item["quantidade"]),
+                            "unidade": item["unidade"],
+                            "custo_unit": "—",
+                            "custo_bdi": "—",
+                            "total": _formatar_moeda(0),
+                        },
+                        estilo="composicao",
                     )
-
-            sub_atualizado = subtotal_grupo(grupo, bdi)
-            valores_grupo_atual = list(self.tree_orcamento.item(iid_grupo, "values"))
-            valores_grupo_atual[-1] = _formatar_moeda(sub_atualizado)
-            self.tree_orcamento.item(iid_grupo, values=tuple(valores_grupo_atual))
 
         bdi_txt = _formatar_bdi(bdi)
         self.label_total.config(
             text=f"Total geral (c/ BDI {bdi_txt}%): {_formatar_moeda(self.orcamento.total())}"
         )
+        if selecao:
+            self.grade.selecionar_meta(selecao)
 
     def focar(self):
         pass

@@ -61,7 +61,7 @@ class HubFrame(tk.Frame):
         )
         self._criar_cartao(
             cartoes,
-            titulo="Consulta SINAPI",
+            titulo="Consulta SINAPI 🔍",
             descricao="Pesquisar composições e preços da base",
             modulo="consulta_sinapi",
             habilitado=True,

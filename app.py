@@ -11,11 +11,13 @@ from core.app_state import (
 from ui.area_privativa import criar_area_privativa
 from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.hub import HubFrame
+from ui.orcamento_customizado import OrcamentoCustomizadoFrame
 
 TITULOS_JANELA = {
     "hub": "ORC — Orçamentos de Reparos Construtivos",
     "area_privativa": "ORC — Área Privativa",
     "consulta_sinapi": "ORC — Consulta SINAPI",
+    "orcamento_customizado": "ORC — Orçamento Customizado",
 }
 
 
@@ -111,6 +113,12 @@ class OrcApp:
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),
             )
+        elif nome == "orcamento_customizado":
+            self._frames[nome] = OrcamentoCustomizadoFrame(
+                self.area_conteudo,
+                self.ctx,
+                on_voltar=lambda: self.mostrar_modulo("hub"),
+            )
 
     def _ao_selecionar_modulo_hub(self, modulo):
         if modulo == "area_comum":
@@ -124,10 +132,12 @@ class OrcApp:
         ):
             self._frames["area_privativa"].desativar_scroll()
 
-        saindo_consulta = (
-            self._modulo_atual == "consulta_sinapi" and nome != "consulta_sinapi"
+        modulos_expandidos = ("consulta_sinapi", "orcamento_customizado")
+        saindo_modulo_expandido = (
+            self._modulo_atual in modulos_expandidos
+            and nome not in modulos_expandidos
         )
-        entrando_consulta = nome == "consulta_sinapi"
+        entrando_modulo_expandido = nome in modulos_expandidos
 
         for frame in self._frames.values():
             frame.pack_forget()
@@ -139,12 +149,12 @@ class OrcApp:
         self._modulo_atual = nome
         self.janela.title(TITULOS_JANELA.get(nome, TITULOS_JANELA["hub"]))
 
-        if entrando_consulta:
+        if entrando_modulo_expandido:
             try:
                 self.janela.state("zoomed")
             except tk.TclError:
                 self.janela.attributes("-zoomed", True)
-        elif saindo_consulta:
+        elif saindo_modulo_expandido:
             try:
                 self.janela.state("normal")
             except tk.TclError:
@@ -156,7 +166,7 @@ class OrcApp:
         if nome == "area_privativa":
             self._frames[nome].ativar_scroll()
             self._frames[nome].focar()
-        elif nome == "consulta_sinapi":
+        elif nome in ("consulta_sinapi", "orcamento_customizado"):
             self._frames[nome].focar()
 
     def executar(self):

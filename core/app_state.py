@@ -76,7 +76,7 @@ class AppContext:
 
     def texto_rodape_interface(self):
         info = self.informacoes_versao()
-        base = f"Sistema ORC v{info['app']} · SINAPI referência {info['sinapi']}"
+        base = f"Sistema ORC v{info['app']} · Referência SINAPI: {info['sinapi']}"
         extras = []
         if self.status_sinapi and self.status_sinapi.get():
             extras.append(self.status_sinapi.get())

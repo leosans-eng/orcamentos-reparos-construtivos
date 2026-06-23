@@ -49,6 +49,7 @@ class HubFrame(tk.Frame):
             modulo="area_privativa",
             habilitado=True,
             coluna=0,
+            linha=0,
         )
         self._criar_cartao(
             cartoes,
@@ -57,6 +58,7 @@ class HubFrame(tk.Frame):
             modulo="area_comum",
             habilitado=False,
             coluna=1,
+            linha=0,
             aviso="Em breve",
         )
         self._criar_cartao(
@@ -66,6 +68,17 @@ class HubFrame(tk.Frame):
             modulo="consulta_sinapi",
             habilitado=True,
             coluna=2,
+            linha=0,
+        )
+        self._criar_cartao(
+            cartoes,
+            titulo="Orçamento Customizado",
+            descricao="Monte seu orçamento com grupos e itens escolhidos por você",
+            modulo="orcamento_customizado",
+            habilitado=True,
+            coluna=0,
+            linha=1,
+            aviso="Tentativa de substituir o i9",
         )
 
     def _criar_cartao(
@@ -76,6 +89,7 @@ class HubFrame(tk.Frame):
         modulo,
         habilitado,
         coluna,
+        linha=0,
         aviso=None,
     ):
         largura = LARGURA_CARTAO
@@ -94,7 +108,7 @@ class HubFrame(tk.Frame):
             highlightthickness=2,
             cursor="hand2" if habilitado else "arrow",
         )
-        cartao.grid(row=0, column=coluna, padx=12, pady=4, sticky="n")
+        cartao.grid(row=linha, column=coluna, padx=12, pady=4, sticky="n")
         cartao.grid_propagate(False)
         cartao.rowconfigure(1, weight=1)
         cartao.columnconfigure(0, weight=1)

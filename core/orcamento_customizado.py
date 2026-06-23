@@ -99,9 +99,11 @@ def rotulo_item(item):
 
 
 class OrcamentoCustomizado:
-    def __init__(self, nome="", bdi_percent=BDI_PADRAO):
+    def __init__(self, nome="", bdi_percent=BDI_PADRAO, orcamento_id=None):
+        self.id = orcamento_id or _novo_id()
         self.nome = nome.strip()
         self.bdi_percent = float(bdi_percent)
+        self.estado_referencia = ""
         self.grupos = []
 
     def definir_nome(self, nome):
@@ -109,6 +111,9 @@ class OrcamentoCustomizado:
 
     def definir_bdi(self, bdi_percent):
         self.bdi_percent = float(bdi_percent)
+
+    def definir_estado_referencia(self, estado):
+        self.estado_referencia = (estado or "").strip()
 
     def adicionar_grupo(self, nome):
         if not nome or not nome.strip():
@@ -173,6 +178,21 @@ class OrcamentoCustomizado:
             raise ValueError("A quantidade deve ser maior que zero.")
         item["quantidade"] = float(quantidade)
 
+    def substituir_item_sinapi(
+        self, item_id, codigo, descricao, unidade, custo_unitario, estado
+    ):
+        _grupo, item = self.obter_item(item_id)
+        if item is None:
+            raise ValueError("Item não encontrado.")
+        if item["tipo"] != TIPO_SINAPI:
+            raise ValueError("Só é possível substituir itens SINAPI.")
+        item["codigo"] = str(codigo).strip()
+        item["descricao"] = str(descricao).strip()
+        item["unidade"] = str(unidade).strip()
+        item["custo_unitario"] = float(custo_unitario)
+        item["estado"] = str(estado).strip()
+        return item_id
+
     def remover_item(self, item_id):
         for grupo in self.grupos:
             antes = len(grupo["itens"])
@@ -187,13 +207,20 @@ class OrcamentoCustomizado:
 
     def exportar_dict(self):
         return {
+            "id": self.id,
             "nome": self.nome,
             "bdi_percent": self.bdi_percent,
+            "estado_referencia": self.estado_referencia,
             "grupos": deepcopy(self.grupos),
         }
 
     @classmethod
     def importar_dict(cls, dados):
-        orc = cls(dados.get("nome", ""), dados.get("bdi_percent", BDI_PADRAO))
+        orc = cls(
+            dados.get("nome", ""),
+            dados.get("bdi_percent", BDI_PADRAO),
+            dados.get("id"),
+        )
+        orc.estado_referencia = dados.get("estado_referencia", "")
         orc.grupos = deepcopy(dados.get("grupos", []))
         return orc

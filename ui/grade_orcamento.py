@@ -66,22 +66,28 @@ class GradeOrcamento(tk.Frame):
         self.scrollbar.pack(side="right", fill="y")
 
         self.canvas.bind("<Configure>", self._ao_redimensionar_canvas)
-        self._vincular_mousewheel(self.canvas)
-        self._vincular_mousewheel(self.frame_linhas)
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.frame_linhas.bind("<MouseWheel>", self._on_mousewheel)
 
-    def _vincular_mousewheel(self, widget):
-        widget.bind("<Enter>", lambda _e: self._ativar_mousewheel(True))
-        widget.bind("<Leave>", lambda _e: self._ativar_mousewheel(False))
 
-    def _ativar_mousewheel(self, ativo):
-        if ativo:
-            self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-        else:
-            self.canvas.unbind_all("<MouseWheel>")
+    def _conteudo_cabe_no_canvas(self):
+        self.update_idletasks()
+        bbox = self.canvas.bbox("all")
+        if not bbox:
+            return True
+        return (bbox[3] - bbox[1]) <= self.canvas.winfo_height()
 
     def _on_mousewheel(self, event):
-        if event.delta:
-            self.canvas.yview_scroll(int(-event.delta / 120), "units")
+        if not event.delta:
+            return
+        if self._conteudo_cabe_no_canvas():
+            return
+        pos = self.canvas.yview()
+        if event.delta > 0 and pos[0] <= 0:
+            return
+        if event.delta < 0 and pos[1] >= 1:
+            return
+        self.canvas.yview_scroll(int(-event.delta / 120), "units")
 
     def _atualizar_scrollregion(self, _event=None):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -103,6 +109,13 @@ class GradeOrcamento(tk.Frame):
         self._linhas.clear()
         self._selecao_meta = None
 
+    def posicao_scroll(self):
+        return self.canvas.yview()[0]
+
+    def restaurar_scroll(self, fracao):
+        if fracao is not None:
+            self.canvas.yview_moveto(fracao)
+
     def adicionar_linha(self, meta, valores, estilo="item"):
         idx = len(self._linhas)
         cor_fundo = COR_GRUPO if estilo == "grupo" else COR_FUNDO
@@ -116,6 +129,7 @@ class GradeOrcamento(tk.Frame):
             highlightthickness=0,
         )
         frame.pack(fill="x", pady=(0, 1))
+        frame.bind("<MouseWheel>", self._on_mousewheel)
 
         fonte = ("Arial", 9, "bold") if estilo == "grupo" else ("Arial", 9)
         cor_texto = COR_COMPOSICAO if estilo == "composicao" else COR_TEXTO
@@ -195,6 +209,7 @@ class GradeOrcamento(tk.Frame):
         self._vincular_selecao(frame, meta)
         for filho in frame.winfo_children():
             self._vincular_selecao(filho, meta)
+            filho.bind("<MouseWheel>", self._on_mousewheel)
 
         self.after_idle(self._atualizar_scrollregion)
 
@@ -234,10 +249,11 @@ class GradeOrcamento(tk.Frame):
     def _rolar_para_linha(self, frame):
         self.update_idletasks()
         y = frame.winfo_y()
+        altura_visivel = self.canvas.winfo_height()
         altura_total = self.frame_linhas.winfo_height()
-        if altura_total <= 0:
+        if altura_total <= altura_visivel:
             return
-        fracao = max(0.0, min(1.0, y / altura_total))
+        fracao = max(0.0, min(1.0, (y - altura_visivel * 0.2) / (altura_total - altura_visivel)))
         self.canvas.yview_moveto(fracao)
 
     def _aplicar_destaque(self, linha):

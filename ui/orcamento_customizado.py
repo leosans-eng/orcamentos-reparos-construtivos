@@ -12,6 +12,17 @@ from core.orcamento_customizado import (
     subtotal_grupo,
     subtotal_item,
 )
+from core.orcamento_storage import (
+    atualizar_orcamento_na_lista,
+    carregar_arquivo,
+    criar_orcamento,
+    dict_para_orcamento,
+    excluir_orcamento,
+    listar_nomes,
+    obter_orcamento_dict,
+    renomear_orcamento,
+    salvar_arquivo,
+)
 from core.sinapi_busca import obter_item_sinapi, obter_unidades_sinapi, pesquisar_sinapi
 from ui.grade_orcamento import GradeOrcamento
 from ui.widgets import (
@@ -133,14 +144,29 @@ class DialogoEditarQuantidade(tk.Toplevel):
 
 
 class DialogoBuscaSinapi(tk.Toplevel):
-    def __init__(self, parent, ctx, estado_inicial, on_confirmar):
+    def __init__(
+        self,
+        parent,
+        ctx,
+        estado_inicial,
+        on_confirmar,
+        *,
+        titulo="Buscar na SINAPI",
+        mostrar_quantidade=True,
+        texto_confirmar="Inserir no grupo",
+        texto_confirmar_fechar="Inserir e fechar",
+        fechar_unico=False,
+    ):
         super().__init__(parent)
         self.ctx = ctx
         self.on_confirmar = on_confirmar
         self._job_busca = None
-        self._parent = parent
+        self.mostrar_quantidade = mostrar_quantidade
+        self.texto_confirmar = texto_confirmar
+        self.texto_confirmar_fechar = texto_confirmar_fechar
+        self.fechar_unico = fechar_unico
 
-        self.title("Buscar na SINAPI")
+        self.title(titulo)
         self.geometry("820x520")
         self.minsize(640, 400)
         self.configure(bg="#ececec")
@@ -193,13 +219,16 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.entrada_busca = ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36)
         self.entrada_busca.grid(row=1, column=1, padx=4, pady=3, sticky="ew")
 
-        tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(
-            row=1, column=2, padx=(14, 4), pady=3, sticky="w"
-        )
-        self.var_quantidade = tk.StringVar(value="1")
-        ttk.Entry(linha_filtros, textvariable=self.var_quantidade, width=10).grid(
-            row=1, column=3, padx=4, pady=3, sticky="w"
-        )
+        if self.mostrar_quantidade:
+            tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(
+                row=1, column=2, padx=(14, 4), pady=3, sticky="w"
+            )
+            self.var_quantidade = tk.StringVar(value="1")
+            ttk.Entry(linha_filtros, textvariable=self.var_quantidade, width=10).grid(
+                row=1, column=3, padx=4, pady=3, sticky="w"
+            )
+        else:
+            self.var_quantidade = tk.StringVar(value="1")
         linha_filtros.columnconfigure(1, weight=1)
 
         self._atualizar_unidades()
@@ -245,23 +274,34 @@ class DialogoBuscaSinapi(tk.Toplevel):
 
         frame_dir = tk.Frame(rodape, bg="#ececec")
         frame_dir.grid(row=0, column=2, sticky="e")
-        _criar_botao_acao(
-            frame_dir,
-            "Inserir no grupo",
-            lambda: self._confirmar(fechar=False),
-            "#2E7D32",
-        ).pack(side="left", padx=(0, 8))
-        _criar_botao_acao(
-            frame_dir,
-            "Inserir e fechar",
-            lambda: self._confirmar(fechar=True),
-            "#388E3C",
-        ).pack(side="left")
+        if self.fechar_unico:
+            _criar_botao_acao(
+                frame_dir,
+                self.texto_confirmar,
+                lambda: self._confirmar(fechar=True),
+                "#2E7D32",
+            ).pack(side="left")
+        else:
+            _criar_botao_acao(
+                frame_dir,
+                self.texto_confirmar,
+                lambda: self._confirmar(fechar=False),
+                "#2E7D32",
+            ).pack(side="left", padx=(0, 8))
+            _criar_botao_acao(
+                frame_dir,
+                self.texto_confirmar_fechar,
+                lambda: self._confirmar(fechar=True),
+                "#388E3C",
+            ).pack(side="left")
 
         self.var_busca.trace_add("write", self._ao_digitar)
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
         self.combo_unidade.bind("<<ComboboxSelected>>", lambda _e: self._executar_busca())
-        self.tree.bind("<Double-1>", lambda _e: self._confirmar(fechar=False))
+        self.tree.bind(
+            "<Double-1>",
+            lambda _e: self._confirmar(fechar=self.fechar_unico),
+        )
 
         if self.ctx.sinapi.empty:
             self.label_status.config(text="Base SINAPI indisponível.", fg="#C62828")
@@ -367,12 +407,14 @@ class DialogoBuscaSinapi(tk.Toplevel):
             if quantidade <= 0:
                 raise ValueError
         except ValueError:
-            messagebox.showwarning(
-                "Quantidade",
-                "Informe um valor numérico maior que zero.",
-                parent=self,
-            )
-            return
+            if self.mostrar_quantidade:
+                messagebox.showwarning(
+                    "Quantidade",
+                    "Informe um valor numérico maior que zero.",
+                    parent=self,
+                )
+                return
+            quantidade = 1.0
 
         custo_str = custo_fmt.replace("R$", "").strip().replace(".", "").replace(",", ".")
         try:
@@ -390,7 +432,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         super().__init__(parent, bg="#ececec")
         self.ctx = ctx
         self.on_voltar = on_voltar
-        self.orcamento = OrcamentoCustomizado(bdi_percent=BDI_PADRAO)
+        self._dados_arquivo = carregar_arquivo()
+        self._mapa_combo_ids = {}
+        self._trocando_orcamento = False
+        self.orcamento = self._carregar_orcamento_ativo()
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -422,29 +467,62 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         conteudo = tk.Frame(self, bg="#ececec")
         conteudo.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
-        linha_nome = tk.Frame(conteudo, bg="#ececec")
-        linha_nome.pack(fill="x", padx=4, pady=(0, 6))
-
-        tk.Label(linha_nome, text="Nome do orçamento:", bg="#ececec").pack(side="left")
-        self.var_nome_orcamento = tk.StringVar()
-        self.var_nome_orcamento.trace_add("write", self._ao_alterar_nome)
-        ttk.Entry(linha_nome, textvariable=self.var_nome_orcamento, width=34).pack(
-            side="left", padx=(6, 16)
+        linha_orc = tk.LabelFrame(
+            conteudo,
+            text="Orçamento salvo",
+            bg="#ececec",
+            padx=8,
+            pady=6,
         )
+        linha_orc.pack(fill="x", padx=4, pady=(0, 8))
 
-        tk.Label(linha_nome, text="Estado:", bg="#ececec").pack(side="left")
+        linha_sel = tk.Frame(linha_orc, bg="#ececec")
+        linha_sel.pack(fill="x", pady=(0, 6))
+
+        tk.Label(linha_sel, text="Selecionar:", bg="#ececec").pack(side="left")
+        self.combo_orcamento = ttk.Combobox(
+            linha_sel, width=36, state="readonly"
+        )
+        self.combo_orcamento.pack(side="left", padx=(6, 12))
+        self.combo_orcamento.bind("<<ComboboxSelected>>", self._ao_trocar_orcamento)
+
+        linha_acoes_orc = tk.Frame(linha_orc, bg="#ececec")
+        linha_acoes_orc.pack(fill="x")
+
+        _criar_botao_acao(
+            linha_acoes_orc,
+            "Adicionar orçamento",
+            self._adicionar_orcamento,
+            "#2E7D32",
+        ).pack(side="left", padx=(0, 8))
+        _criar_botao_acao(
+            linha_acoes_orc,
+            "Editar nome do orçamento",
+            self._renomear_orcamento,
+            "#1565C0",
+        ).pack(side="left", padx=(0, 8))
+        _criar_botao_acao(
+            linha_acoes_orc,
+            "Excluir orçamento",
+            self._excluir_orcamento,
+            "#C62828",
+        ).pack(side="left")
+
+        linha_param = tk.Frame(conteudo, bg="#ececec")
+        linha_param.pack(fill="x", padx=4, pady=(0, 6))
+
+        tk.Label(linha_param, text="Estado:", bg="#ececec").pack(side="left")
         estados = self.ctx.obter_estados()
         self.combo_estado = ttk.Combobox(
-            linha_nome, values=valores_combo_estado(estados), width=14, state="readonly"
+            linha_param, values=valores_combo_estado(estados), width=14, state="readonly"
         )
         self.combo_estado.pack(side="left", padx=(6, 16))
-        self.combo_estado.set(PLACEHOLDER_ESTADO)
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
 
-        tk.Label(linha_nome, text="BDI (%):", bg="#ececec").pack(side="left")
+        tk.Label(linha_param, text="BDI (%):", bg="#ececec").pack(side="left")
         self.var_bdi = tk.StringVar(value=_formatar_bdi(BDI_PADRAO))
         self.var_bdi.trace_add("write", self._ao_alterar_bdi)
-        ttk.Entry(linha_nome, textvariable=self.var_bdi, width=8).pack(side="left", padx=(6, 0))
+        ttk.Entry(linha_param, textvariable=self.var_bdi, width=8).pack(side="left", padx=(6, 0))
 
         linha_botoes = tk.Frame(conteudo, bg="#ececec")
         linha_botoes.pack(fill="x", padx=4, pady=(0, 8))
@@ -454,6 +532,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         ttk.Button(
             linha_botoes, text="Remover selecionado", command=self._remover_selecionado
+        ).pack(side="left", padx=(0, 6))
+        _criar_botao_acao(
+            linha_botoes,
+            "Editar item",
+            self._editar_item_sinapi,
+            "#E65100",
         ).pack(side="left", padx=(0, 16))
 
         ttk.Button(
@@ -511,22 +595,133 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         self.label_total.pack(fill="x")
 
-        # Linha de dicas logo abaixo do rodapé do orçamento
-        #
-        # self.label_dica = tk.Label(
-        #     conteudo,
-        #     text=(
-        #         "Crie uma nova etapa para adicionar itens. "
-        #         "Duplo clique na coluna Qtd. para editar a quantidade."
-        #     ),
-        #     font=("Arial", 8),
-        #     fg="#666666",
-        #     bg="#ececec",
-        #     justify="left",
-        # )
-        # self.label_dica.pack(fill="x", padx=6, pady=(6, 0))
-
+        self._atualizar_combo_orcamentos()
+        self._aplicar_orcamento_na_interface()
         self._atualizar_grade()
+
+    def _carregar_orcamento_ativo(self):
+        orc_id = self._dados_arquivo.get("orcamento_ativo_id")
+        dados = obter_orcamento_dict(self._dados_arquivo, orc_id)
+        if dados is None:
+            dados = self._dados_arquivo["orcamentos"][0]
+        return dict_para_orcamento(dados)
+
+    def _atualizar_combo_orcamentos(self):
+        nomes = listar_nomes(self._dados_arquivo)
+        self._mapa_combo_ids = {}
+        valores = []
+        contagem = {}
+        for _oid, nome in nomes:
+            contagem[nome] = contagem.get(nome, 0) + 1
+        for oid, nome in nomes:
+            rotulo = nome if contagem[nome] == 1 else f"{nome} ({oid[:8]})"
+            self._mapa_combo_ids[rotulo] = oid
+            valores.append(rotulo)
+        self.combo_orcamento["values"] = valores
+        rotulo_atual = self._rotulo_orcamento(self.orcamento.id, self.orcamento.nome)
+        if rotulo_atual in valores:
+            self.combo_orcamento.set(rotulo_atual)
+        elif valores:
+            self.combo_orcamento.set(valores[0])
+
+    def _rotulo_orcamento(self, orcamento_id, nome):
+        nomes = listar_nomes(self._dados_arquivo)
+        contagem = {}
+        for _oid, n in nomes:
+            contagem[n] = contagem.get(n, 0) + 1
+        if contagem.get(nome, 0) == 1:
+            return nome
+        return f"{nome} ({orcamento_id[:8]})"
+
+    def _aplicar_orcamento_na_interface(self):
+        self._trocando_orcamento = True
+        try:
+            estado = self.orcamento.estado_referencia
+            if estado and estado in self.ctx.obter_estados():
+                self.combo_estado.set(estado)
+            else:
+                self.combo_estado.set(PLACEHOLDER_ESTADO)
+            self.var_bdi.set(_formatar_bdi(self.orcamento.bdi_percent))
+        finally:
+            self._trocando_orcamento = False
+
+    def _persistir_orcamento_atual(self):
+        estado = self._estado_selecionado()
+        self.orcamento.definir_estado_referencia(estado)
+        try:
+            self.orcamento.definir_bdi(self._parse_bdi(self.var_bdi.get()))
+        except ValueError:
+            pass
+        self._dados_arquivo = atualizar_orcamento_na_lista(self._dados_arquivo, self.orcamento)
+        salvar_arquivo(self._dados_arquivo)
+        self._atualizar_combo_orcamentos()
+
+    def _ao_trocar_orcamento(self, _event=None):
+        if self._trocando_orcamento:
+            return
+        nome = self.combo_orcamento.get().strip()
+        novo_id = self._mapa_combo_ids.get(nome)
+        if not novo_id or novo_id == self.orcamento.id:
+            return
+        self._persistir_orcamento_atual()
+        self._dados_arquivo["orcamento_ativo_id"] = novo_id
+        self.orcamento = self._carregar_orcamento_ativo()
+        self._aplicar_orcamento_na_interface()
+        self._atualizar_grade()
+
+    def _adicionar_orcamento(self):
+        nome = simpledialog.askstring(
+            "Adicionar orçamento",
+            "Nome do novo orçamento:",
+            parent=self.winfo_toplevel(),
+        )
+        if not nome or not nome.strip():
+            return
+        self._persistir_orcamento_atual()
+        novo_id = criar_orcamento(self._dados_arquivo, nome)
+        self._dados_arquivo = carregar_arquivo()
+        self._dados_arquivo["orcamento_ativo_id"] = novo_id
+        salvar_arquivo(self._dados_arquivo)
+        self.orcamento = self._carregar_orcamento_ativo()
+        self._atualizar_combo_orcamentos()
+        self._aplicar_orcamento_na_interface()
+        self._atualizar_grade()
+
+    def _renomear_orcamento(self):
+        nome = simpledialog.askstring(
+            "Editar nome",
+            "Novo nome do orçamento:",
+            initialvalue=self.orcamento.nome,
+            parent=self.winfo_toplevel(),
+        )
+        if not nome or not nome.strip():
+            return
+        try:
+            renomear_orcamento(self._dados_arquivo, self.orcamento.id, nome)
+            self.orcamento.definir_nome(nome)
+            self._dados_arquivo = carregar_arquivo()
+            self._atualizar_combo_orcamentos()
+            self.combo_orcamento.set(self._rotulo_orcamento(self.orcamento.id, nome.strip()))
+        except ValueError as exc:
+            messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
+
+    def _excluir_orcamento(self):
+        if not messagebox.askyesno(
+            "Excluir orçamento",
+            f"Excluir o orçamento \"{self.orcamento.nome}\"?\nEsta ação não pode ser desfeita.",
+            parent=self.winfo_toplevel(),
+        ):
+            return
+        try:
+            novo_id = excluir_orcamento(self._dados_arquivo, self.orcamento.id)
+            self._dados_arquivo = carregar_arquivo()
+            self._dados_arquivo["orcamento_ativo_id"] = novo_id
+            self.orcamento = self._carregar_orcamento_ativo()
+            self._atualizar_combo_orcamentos()
+            self._aplicar_orcamento_na_interface()
+            self._atualizar_grade()
+        except ValueError as exc:
+            messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
 
     def _texto_referencia(self):
         ref = self.ctx.sinapi_referencia_rotulo
@@ -546,10 +741,9 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             raise ValueError("O BDI não pode ser negativo.")
         return valor
 
-    def _ao_alterar_nome(self, *_args):
-        self.orcamento.definir_nome(self.var_nome_orcamento.get())
-
     def _ao_alterar_bdi(self, *_args):
+        if self._trocando_orcamento:
+            return
         try:
             bdi = self._parse_bdi(self.var_bdi.get())
         except ValueError:
@@ -558,6 +752,9 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._atualizar_grade()
 
     def _ao_mudar_estado(self, _event=None):
+        if self._trocando_orcamento:
+            return
+        self.orcamento.definir_estado_referencia(self._estado_selecionado())
         self._atualizar_grade()
 
     def _estado_selecionado(self):
@@ -795,10 +992,47 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ao_confirmar,
         )
 
+    def _editar_item_sinapi(self):
+        meta = self._meta_selecionada()
+        if not meta or meta["tipo"] != TIPO_SINAPI:
+            messagebox.showinfo(
+                "Editar item",
+                "Selecione um item SINAPI para substituir por outro da base.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        item_id = meta["id"]
+
+        def ao_substituir(codigo, descricao, unidade, custo, _quantidade, estado):
+            if estado and estado in self.ctx.obter_estados():
+                self.combo_estado.set(estado)
+            try:
+                self.orcamento.substituir_item_sinapi(
+                    item_id, codigo, descricao, unidade, custo, estado
+                )
+            except ValueError as exc:
+                messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
+                return
+            self._atualizar_grade()
+            self.grade.selecionar_item(item_id)
+
+        DialogoBuscaSinapi(
+            self.winfo_toplevel(),
+            self.ctx,
+            self._estado_selecionado(),
+            ao_substituir,
+            titulo="Substituir item SINAPI",
+            mostrar_quantidade=False,
+            texto_confirmar="Substituir item",
+            fechar_unico=True,
+        )
+
     def _atualizar_grade(self):
         self._preencher_grade()
 
     def _preencher_grade(self):
+        scroll = self.grade.posicao_scroll()
         selecao = self.grade.obter_meta_selecionada()
         self.grade.limpar()
 
@@ -885,6 +1119,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         if selecao:
             self.grade.selecionar_meta(selecao)
+        self.grade.restaurar_scroll(scroll)
+        self._persistir_orcamento_atual()
 
     def focar(self):
         pass

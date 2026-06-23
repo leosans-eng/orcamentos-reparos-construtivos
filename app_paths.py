@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -45,3 +46,21 @@ def vicios_construtivos_path() -> Path:
         "vicios_construtivos.json não encontrado. "
         f"Procurado em {bundle_dir()} e {app_dir()}."
     )
+
+
+def dados_usuario_dir() -> Path:
+    """
+    Pasta de dados graváveis pelo usuário, fora do pacote de instalação.
+    No executável usa %LOCALAPPDATA%\\ORC; em desenvolvimento usa dados_usuario/.
+    """
+    if is_frozen():
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        pasta = base / "ORC"
+    else:
+        pasta = app_dir() / "dados_usuario"
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta
+
+
+def orcamentos_customizados_path() -> Path:
+    return dados_usuario_dir() / "orcamentos_customizados.json"

@@ -1,5 +1,8 @@
 import tkinter as tk
 from tkinter import ttk
+import time
+
+from app_paths import icon_path
 
 COR_BORDA_PADRAO = "#006699"
 COR_BORDA_HOVER = "#004466"
@@ -20,6 +23,134 @@ def estado_do_combo(valor):
     if not texto or texto == PLACEHOLDER_ESTADO:
         return ""
     return texto
+
+
+def aplicar_icone_janela(janela):
+    """Aplica o ícone do ORC em janelas pop-up (Toplevel)."""
+    icone = icon_path()
+    if icone is None:
+        return
+    try:
+        janela.iconbitmap(icone)
+    except tk.TclError:
+        pass
+
+
+def vincular_busca_tecla_estado(combo, on_selecionado=None):
+    """No combo de estado, tecla inicial seleciona UF (repetir cicla entre as opções)."""
+    estado_busca = {"prefixo": "", "indice": -1, "ultimo_tempo": 0.0}
+
+    def selecionar_por_letra(letra):
+        valores = list(combo["values"])
+        candidatos = [
+            v
+            for v in valores
+            if v != PLACEHOLDER_ESTADO and str(v).upper().startswith(letra)
+        ]
+        if not candidatos:
+            return False
+
+        agora = time.time()
+        if letra == estado_busca["prefixo"] and agora - estado_busca["ultimo_tempo"] < 1.0:
+            estado_busca["indice"] = (estado_busca["indice"] + 1) % len(candidatos)
+        else:
+            estado_busca["prefixo"] = letra
+            estado_busca["indice"] = 0
+        estado_busca["ultimo_tempo"] = agora
+
+        combo.set(candidatos[estado_busca["indice"]])
+        if on_selecionado is not None:
+            on_selecionado()
+        return True
+
+    def ao_tecla(event):
+        if event.keysym in (
+            "Up",
+            "Down",
+            "Return",
+            "Escape",
+            "Tab",
+            "Shift_L",
+            "Shift_R",
+            "Control_L",
+            "Control_R",
+            "Alt_L",
+            "Alt_R",
+        ):
+            return
+        char = event.char
+        if char and len(char) == 1 and char.isprintable():
+            if char.isalpha():
+                selecionar_por_letra(char.upper())
+            return "break"
+        return "break"
+
+    def garantir_foco(_event=None):
+        combo.after_idle(combo.focus_set)
+
+    combo.configure(state="normal", takefocus=True)
+    combo.bind("<KeyPress>", ao_tecla, add="+")
+    combo.bind("<Button-1>", garantir_foco, add="+")
+    combo.bind("<FocusIn>", garantir_foco, add="+")
+
+
+def perguntar_texto(
+    parent,
+    titulo,
+    mensagem,
+    valor_inicial="",
+    texto_ok="OK",
+):
+    """Diálogo de entrada de texto com ícone do ORC (substitui simpledialog.askstring)."""
+    resultado: list[str | None] = [None]
+    dialog = tk.Toplevel(parent)
+    dialog.title(titulo)
+    aplicar_icone_janela(dialog)
+    dialog.transient(parent)
+    dialog.grab_set()
+    dialog.resizable(False, False)
+    dialog.configure(bg="#ececec")
+
+    painel = tk.Frame(dialog, bg="#ececec", padx=16, pady=14)
+    painel.pack(fill="both", expand=True)
+
+    tk.Label(
+        painel,
+        text=mensagem,
+        bg="#ececec",
+        justify="left",
+        anchor="w",
+    ).pack(fill="x", pady=(0, 8))
+
+    var_texto = tk.StringVar(value=valor_inicial)
+    entrada = ttk.Entry(painel, textvariable=var_texto, width=44)
+    entrada.pack(fill="x", pady=(0, 12))
+    entrada.focus_set()
+    entrada.select_range(0, "end")
+
+    botoes = ttk.Frame(painel)
+    botoes.pack(fill="x")
+
+    def cancelar():
+        dialog.destroy()
+
+    def confirmar():
+        resultado[0] = var_texto.get()
+        dialog.destroy()
+
+    ttk.Button(botoes, text="Cancelar", command=cancelar, style="Delete.TButton").pack(
+        side="right", padx=(6, 0)
+    )
+    ttk.Button(botoes, text=texto_ok, command=confirmar, style="Add.TButton").pack(
+        side="right"
+    )
+
+    entrada.bind("<Return>", lambda _e: confirmar())
+    entrada.bind("<Escape>", lambda _e: cancelar())
+    dialog.protocol("WM_DELETE_WINDOW", cancelar)
+    centralizar_janela(dialog, parent)
+    parent.wait_window(dialog)
+    return resultado[0]
 
 
 def centralizar_janela(janela, parent=None):
@@ -124,6 +255,7 @@ def confirmar_exclusao_com_espera(
     """Diálogo de exclusão com contagem regressiva antes de habilitar a confirmação."""
     dialog = tk.Toplevel(parent)
     dialog.title(titulo)
+    aplicar_icone_janela(dialog)
     dialog.transient(parent)
     dialog.grab_set()
     dialog.resizable(False, False)

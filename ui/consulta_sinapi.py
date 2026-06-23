@@ -1,13 +1,17 @@
+import os
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 from core.sinapi_busca import pesquisar_sinapi, obter_unidades_sinapi
+from core.sinapi_loader import obter_xlsx_sinapi_referencia_mais_recente
+from app_paths import asset_path
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
     centralizar_janela,
     criar_barra_modulo,
     estado_do_combo,
     valores_combo_estado,
+    vincular_busca_tecla_estado,
 )
 
 # Debounce proposital (ms): evita rebuscar a cada tecla enquanto o usuário digita.
@@ -58,6 +62,7 @@ class ConsultaSinapiFrame(tk.Frame):
         )
         self.combo_estado.grid(row=0, column=1, padx=4, pady=4, sticky="w")
         self.combo_estado.set(PLACEHOLDER_ESTADO)
+        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._ao_mudar_estado)
 
         tk.Label(linha_filtros, text="Unidade:", bg="#ececec").grid(
             row=0, column=2, padx=(16, 6), pady=4, sticky="w"
@@ -106,6 +111,27 @@ class ConsultaSinapiFrame(tk.Frame):
             anchor="w",
         )
         self.label_status.pack(fill="x", padx=18, pady=(0, 4))
+
+        linha_acoes = tk.Frame(self, bg="#ececec")
+        linha_acoes.pack(fill="x", padx=16, pady=(0, 6))
+
+        self._icone_excel = None
+        caminho_icone = asset_path("icons", "excel.png")
+        kwargs_botao = {
+            "text": "Abrir SINAPI Completa",
+            "command": self._abrir_sinapi_real,
+            "bg": "#ececec",
+            "activebackground": "#dfe8ec",
+            "relief": "groove",
+            "padx": 8,
+            "pady": 2,
+            "cursor": "hand2",
+        }
+        if caminho_icone is not None:
+            self._icone_excel = tk.PhotoImage(file=str(caminho_icone))
+            kwargs_botao["image"] = self._icone_excel
+            kwargs_botao["compound"] = "left"
+        tk.Button(linha_acoes, **kwargs_botao).pack(side="left")
 
         painel_resultados = tk.LabelFrame(
             self,
@@ -172,6 +198,28 @@ class ConsultaSinapiFrame(tk.Frame):
         if ref == "BASE AUSENTE":
             return "Base não carregada"
         return f"Referência SINAPI: {ref}"
+
+    def _abrir_sinapi_real(self):
+        caminho = obter_xlsx_sinapi_referencia_mais_recente()
+        if caminho is None or not caminho.is_file():
+            messagebox.showwarning(
+                "SINAPI Real",
+                (
+                    "Nenhum arquivo Excel da SINAPI foi encontrado em "
+                    "sinapi/sinapi_referencia.\n\n"
+                    "Aguarde a atualização automática ou verifique a pasta."
+                ),
+                parent=self.winfo_toplevel(),
+            )
+            return
+        try:
+            os.startfile(str(caminho))
+        except OSError as exc:
+            messagebox.showerror(
+                "SINAPI Real",
+                f"Não foi possível abrir o arquivo:\n{caminho}\n\n{exc}",
+                parent=self.winfo_toplevel(),
+            )
 
     def _ao_redimensionar(self, event=None):
         if event is not None and event.widget is not self:

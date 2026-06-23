@@ -18,6 +18,8 @@ from tkinter import messagebox, ttk
 import certifi
 import tkinter as tk
 
+from ui.widgets import aplicar_icone_janela
+
 VERSION_JSON_URL = (
     "https://raw.githubusercontent.com/leosans-eng/"
     "orcamento-reparos-construtivos/main/version.json"
@@ -174,6 +176,7 @@ class UpdateDialog(tk.Toplevel):
 
         remote_version = info["version"]
         self.title("Atualização disponível")
+        aplicar_icone_janela(self)
         self.resizable(False, False)
         self.transient(root)
         self.grab_set()

@@ -136,6 +136,40 @@ class OrcamentoCustomizado:
     def remover_grupo(self, grupo_id):
         self.grupos = [g for g in self.grupos if g["id"] != grupo_id]
 
+    def renomear_grupo(self, grupo_id, nome):
+        grupo = self.obter_grupo(grupo_id)
+        if grupo is None:
+            raise ValueError("Grupo não encontrado.")
+        if not nome or not nome.strip():
+            raise ValueError("Informe o nome do grupo.")
+        grupo["nome"] = nome.strip()
+
+    def mover_grupo(self, grupo_id, delta):
+        indices = [i for i, grupo in enumerate(self.grupos) if grupo["id"] == grupo_id]
+        if not indices:
+            raise ValueError("Grupo não encontrado.")
+        indice = indices[0]
+        novo_indice = indice + delta
+        if novo_indice < 0 or novo_indice >= len(self.grupos):
+            return False
+        self.grupos[indice], self.grupos[novo_indice] = (
+            self.grupos[novo_indice],
+            self.grupos[indice],
+        )
+        return True
+
+    def mover_item(self, item_id, delta):
+        grupo, item = self.obter_item(item_id)
+        if item is None or grupo is None:
+            raise ValueError("Item não encontrado.")
+        itens = grupo["itens"]
+        indice = next(i for i, candidato in enumerate(itens) if candidato["id"] == item_id)
+        novo_indice = indice + delta
+        if novo_indice < 0 or novo_indice >= len(itens):
+            return False
+        itens[indice], itens[novo_indice] = itens[novo_indice], itens[indice]
+        return True
+
     def adicionar_item_sinapi(
         self, grupo_id, codigo, descricao, unidade, custo_unitario, quantidade, estado
     ):

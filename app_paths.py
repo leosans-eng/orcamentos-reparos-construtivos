@@ -35,6 +35,20 @@ def icon_path() -> Path | None:
     return None
 
 
+def asset_path(*parts: str) -> Path | None:
+    for base in (bundle_dir(), app_dir()):
+        candidate = base.joinpath("assets", *parts)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def sinapi_referencia_dir() -> Path:
+    pasta = app_dir() / "sinapi" / "sinapi_referencia"
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta
+
+
 def vicios_construtivos_path() -> Path:
     for candidate in (
         bundle_dir() / "vicios_construtivos.json",

@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 
 from core.orcamento_customizado import (
     BDI_PADRAO,
@@ -27,11 +27,14 @@ from core.sinapi_busca import obter_item_sinapi, obter_unidades_sinapi, pesquisa
 from ui.grade_orcamento import GradeOrcamento
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
+    aplicar_icone_janela,
     centralizar_janela,
     confirmar_exclusao_com_espera,
     criar_barra_modulo,
     estado_do_combo,
+    perguntar_texto,
     valores_combo_estado,
+    vincular_busca_tecla_estado,
 )
 
 DEBOUNCE_BUSCA_MS = 250
@@ -69,6 +72,7 @@ class DialogoEditarQuantidade(tk.Toplevel):
         super().__init__(parent)
         self.on_confirmar = on_confirmar
         self.title("Editar quantidade")
+        aplicar_icone_janela(self)
         self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
@@ -115,7 +119,7 @@ class DialogoEditarQuantidade(tk.Toplevel):
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
         ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="left"
+            side="right", padx=(6, 0)
         )
         ttk.Button(botoes, text="Confirmar", command=self._confirmar, style="Add.TButton").pack(
             side="right"
@@ -152,10 +156,12 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.texto_confirmar = texto_confirmar
         self.texto_confirmar_fechar = texto_confirmar_fechar
         self.fechar_unico = fechar_unico
+        self._ultima_largura_wrap = 0
 
         self.title(titulo)
-        self.geometry("820x520")
-        self.minsize(640, 400)
+        self.geometry("1100x700")
+        self.minsize(700, 480)
+        aplicar_icone_janela(self)
         self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
@@ -189,6 +195,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
             self.combo_estado.set(estado_valido)
         else:
             self.combo_estado.set(PLACEHOLDER_ESTADO)
+        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._ao_mudar_estado)
 
         tk.Label(linha_filtros, text="Unidade:", bg="#ececec").grid(
             row=0, column=2, padx=(14, 4), pady=3, sticky="w"
@@ -236,7 +243,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         painel_resultados.pack(fill="both", expand=True, pady=(0, 8))
 
         colunas = ("codigo", "descricao", "unidade", "custo")
-        self.tree = ttk.Treeview(painel_resultados, columns=colunas, show="headings", height=14)
+        self.tree = ttk.Treeview(painel_resultados, columns=colunas, show="headings", height=12)
         self.tree.heading("codigo", text="Código")
         self.tree.heading("descricao", text="Descrição")
         self.tree.heading("unidade", text="Unid.")
@@ -251,49 +258,97 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
+        painel_detalhe = tk.Frame(
+            painel, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
+        )
+        painel_detalhe.pack(fill="x", pady=(0, 8))
+
+        self.label_detalhe = tk.Label(
+            painel_detalhe,
+            text="Selecione um item na lista para ver os detalhes.",
+            font=("Arial", 9),
+            fg="#444444",
+            bg="#f5fafc",
+            justify="left",
+            anchor="w",
+            padx=10,
+            pady=8,
+        )
+        self.label_detalhe.pack(fill="x")
+
         rodape = tk.Frame(painel, bg="#ececec")
         rodape.pack(fill="x")
-        rodape.columnconfigure(1, weight=1)
 
-        ttk.Button(rodape, text="Cancelar", command=self.destroy, style="Delete.TButton").grid(
-            row=0, column=0, sticky="w"
-        )
-
-        frame_dir = tk.Frame(rodape, bg="#ececec")
-        frame_dir.grid(row=0, column=2, sticky="e")
+        botoes_acao = tk.Frame(rodape, bg="#ececec")
+        botoes_acao.pack(side="right")
+        ttk.Button(
+            botoes_acao, text="Cancelar", command=self.destroy, style="Delete.TButton"
+        ).pack(side="right")
         if self.fechar_unico:
             ttk.Button(
-                frame_dir,
+                botoes_acao,
                 text=self.texto_confirmar,
                 command=lambda: self._confirmar(fechar=True),
                 style="Add.TButton",
-            ).pack(side="left")
+            ).pack(side="right", padx=(0, 8))
         else:
             ttk.Button(
-                frame_dir,
-                text=self.texto_confirmar,
-                command=lambda: self._confirmar(fechar=False),
-                style="Add.TButton",
-            ).pack(side="left", padx=(0, 8))
-            ttk.Button(
-                frame_dir,
+                botoes_acao,
                 text=self.texto_confirmar_fechar,
                 command=lambda: self._confirmar(fechar=True),
                 style="Save.TButton",
-            ).pack(side="left")
+            ).pack(side="right", padx=(0, 8))
+            ttk.Button(
+                botoes_acao,
+                text=self.texto_confirmar,
+                command=lambda: self._confirmar(fechar=False),
+                style="Add.TButton",
+            ).pack(side="right", padx=(0, 8))
 
         self.var_busca.trace_add("write", self._ao_digitar)
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
         self.combo_unidade.bind("<<ComboboxSelected>>", lambda _e: self._executar_busca())
+        self.tree.bind("<<TreeviewSelect>>", self._ao_selecionar_item)
         self.tree.bind(
             "<Double-1>",
             lambda _e: self._confirmar(fechar=self.fechar_unico),
         )
+        self.bind("<Configure>", self._ao_redimensionar)
 
         if self.ctx.sinapi.empty:
             self.label_status.config(text="Base SINAPI indisponível.", fg="#C62828")
 
         self.entrada_busca.focus_set()
+        self.after_idle(self._ajustar_layout_detalhe)
+
+    def _ao_redimensionar(self, event=None):
+        if event is not None and event.widget is not self:
+            return
+        self._ajustar_layout_detalhe()
+
+    def _ajustar_layout_detalhe(self):
+        self.update_idletasks()
+        largura = self.winfo_width()
+        if largura < 200 or largura == self._ultima_largura_wrap:
+            return
+        self._ultima_largura_wrap = largura
+        self.label_detalhe.config(wraplength=max(280, largura - 48))
+
+    def _ao_selecionar_item(self, _event=None):
+        selecionado = self.tree.selection()
+        if not selecionado:
+            return
+        valores = self.tree.item(selecionado[0], "values")
+        if len(valores) < 4:
+            return
+        codigo, descricao, unidade, custo = valores
+        estado = self._estado_selecionado()
+        self.label_detalhe.config(
+            text=(
+                f"Código: {codigo}  ·  Estado: {estado}  ·  Unidade: {unidade}  ·  "
+                f"Custo: {custo}\n{descricao}"
+            ),
+        )
 
     def _estado_selecionado(self):
         return estado_do_combo(self.combo_estado.get())
@@ -357,6 +412,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
                     _formatar_moeda(linha.get("custo", 0)),
                 ),
             )
+        self.label_detalhe.config(text="Selecione um item na lista para ver os detalhes.")
         cor = "#555555" if not resultados.empty else "#a67c00"
         if "indisponível" in mensagem.lower() or "nenhum item" in mensagem.lower():
             cor = "#C62828"
@@ -482,6 +538,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         self.combo_estado.pack(side="left", padx=(4, 10))
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
+        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._ao_mudar_estado)
 
         tk.Label(linha_salvo, text="BDI (%):", bg="#ececec").pack(side="left")
         self.var_bdi = tk.StringVar(value=_formatar_bdi(BDI_PADRAO))
@@ -496,7 +553,25 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_botoes,
-            text="Remover selecionado",
+            text="Editar nome da etapa",
+            command=self._renomear_grupo,
+            style="Edit.Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_botoes,
+            text="Etapa ↑",
+            command=lambda: self._mover_grupo(-1),
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_botoes,
+            text="Etapa ↓",
+            command=lambda: self._mover_grupo(1),
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 12))
+        ttk.Button(
+            linha_botoes,
+            text="Remover etapa/item",
             command=self._remover_selecionado,
             style="Compact.TButton",
         ).pack(side="left", padx=(0, 4))
@@ -505,6 +580,18 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             text="Editar item",
             command=self._editar_item_sinapi,
             style="Accent.Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_botoes,
+            text="Item ↑",
+            command=lambda: self._mover_item(-1),
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_botoes,
+            text="Item ↓",
+            command=lambda: self._mover_item(1),
+            style="Compact.TButton",
         ).pack(side="left", padx=(0, 12))
 
         ttk.Button(
@@ -641,10 +728,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._atualizar_grade()
 
     def _adicionar_orcamento(self):
-        nome = simpledialog.askstring(
+        nome = perguntar_texto(
+            self.winfo_toplevel(),
             "Adicionar orçamento",
             "Nome do novo orçamento:",
-            parent=self.winfo_toplevel(),
         )
         if not nome or not nome.strip():
             return
@@ -659,11 +746,11 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._atualizar_grade()
 
     def _renomear_orcamento(self):
-        nome = simpledialog.askstring(
+        nome = perguntar_texto(
+            self.winfo_toplevel(),
             "Editar nome",
             "Novo nome do orçamento:",
-            initialvalue=self.orcamento.nome,
-            parent=self.winfo_toplevel(),
+            valor_inicial=self.orcamento.nome,
         )
         if not nome or not nome.strip():
             return
@@ -852,10 +939,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self.var_codigo_rapido.set("")
 
     def _novo_grupo(self):
-        nome = simpledialog.askstring(
-            "Novo grupo",
+        nome = perguntar_texto(
+            self.winfo_toplevel(),
+            "Nova etapa",
             "Nome da etapa (ex.: Serviços preliminares):",
-            parent=self.winfo_toplevel(),
         )
         if not nome or not nome.strip():
             return
@@ -877,19 +964,19 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             )
             return
 
-        nome = simpledialog.askstring(
+        nome = perguntar_texto(
+            self.winfo_toplevel(),
             "Composição própria",
             "Nome do item (ex.: Reparo de trincas e fissuras com PU):",
-            parent=self.winfo_toplevel(),
         )
         if not nome or not nome.strip():
             return
 
-        unidade = simpledialog.askstring(
+        unidade = perguntar_texto(
+            self.winfo_toplevel(),
             "Composição própria",
             "Unidade de medida (ex.: m, m², un):",
-            initialvalue="m",
-            parent=self.winfo_toplevel(),
+            valor_inicial="m",
         )
         if not unidade or not unidade.strip():
             return
@@ -913,6 +1000,79 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ),
             parent=self.winfo_toplevel(),
         )
+        self._atualizar_grade()
+        self.grade.selecionar_item(item_id)
+
+    def _grupo_id_para_acoes(self):
+        meta = self._meta_selecionada()
+        if not meta:
+            return None
+        if meta["tipo"] == TIPO_GRUPO:
+            return meta["id"]
+        return meta.get("grupo_id")
+
+    def _renomear_grupo(self):
+        grupo_id = self._grupo_id_para_acoes()
+        if not grupo_id:
+            messagebox.showinfo(
+                "Editar nome da etapa",
+                "Selecione uma etapa na estrutura do orçamento.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        grupo = self.orcamento.obter_grupo(grupo_id)
+        if grupo is None:
+            return
+        nome = perguntar_texto(
+            self.winfo_toplevel(),
+            "Editar nome da etapa",
+            "Novo nome da etapa:",
+            valor_inicial=grupo["nome"],
+        )
+        if not nome or not nome.strip():
+            return
+        try:
+            self.orcamento.renomear_grupo(grupo_id, nome)
+        except ValueError as exc:
+            messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
+            return
+        self._atualizar_grade()
+        self.grade.selecionar_por_id(TIPO_GRUPO, grupo_id)
+
+    def _mover_grupo(self, delta):
+        meta = self._meta_selecionada()
+        if not meta or meta["tipo"] != TIPO_GRUPO:
+            messagebox.showinfo(
+                "Mover etapa",
+                "Selecione a linha da etapa (cabeçalho do grupo) para mover.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        try:
+            if not self.orcamento.mover_grupo(meta["id"], delta):
+                return
+        except ValueError as exc:
+            messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
+            return
+        self._atualizar_grade()
+        self.grade.selecionar_por_id(TIPO_GRUPO, meta["id"])
+
+    def _mover_item(self, delta):
+        meta = self._meta_selecionada()
+        if not meta or meta["tipo"] == TIPO_GRUPO:
+            messagebox.showinfo(
+                "Mover item",
+                "Selecione um item para mover dentro da etapa.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        item_id = meta["id"]
+        try:
+            if not self.orcamento.mover_item(item_id, delta):
+                return
+        except ValueError as exc:
+            messagebox.showwarning("Item", str(exc), parent=self.winfo_toplevel())
+            return
         self._atualizar_grade()
         self.grade.selecionar_item(item_id)
 

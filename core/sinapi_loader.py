@@ -1,5 +1,6 @@
 import os
 import re
+from pathlib import Path
 
 import pandas as pd
 
@@ -80,6 +81,30 @@ def recarregar_sinapi():
         return sinapi, None, "BASE AUSENTE"
 
     return carregar_sinapi_por_caminho(caminho, rotulo)
+
+
+PADRAO_XLSX_REFERENCIA = re.compile(
+    r"(?i)SINAPI_Refer[eê]ncia_(\d{4})_(\d{2})\.xlsx$"
+)
+
+
+def obter_xlsx_sinapi_referencia_mais_recente():
+    pasta = Path(app_dir()) / "sinapi" / "sinapi_referencia"
+    if not pasta.is_dir():
+        return None
+    candidatos = []
+    for arquivo in pasta.glob("*.xlsx"):
+        if arquivo.name.startswith("~$"):
+            continue
+        match = PADRAO_XLSX_REFERENCIA.match(arquivo.name)
+        if match:
+            candidatos.append(
+                ((int(match.group(1)), int(match.group(2))), arquivo)
+            )
+    if not candidatos:
+        return None
+    candidatos.sort(key=lambda item: item[0], reverse=True)
+    return candidatos[0][1]
 
 
 def obter_estados_da_sinapi(sinapi):

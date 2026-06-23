@@ -4,6 +4,7 @@ from PyInstaller.utils.hooks import collect_data_files
 datas = [
     ('vicios_construtivos.json', '.'),
     ('icone.ico', '.'),
+    ('assets/icons/excel.png', 'assets/icons'),
 ]
 datas += collect_data_files('certifi')
 

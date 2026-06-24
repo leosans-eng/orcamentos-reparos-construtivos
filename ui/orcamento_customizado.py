@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 
 from app_paths import asset_path
 from core.composicoes_proprias import custo_composicao_propria_item
+from core.exportacao_planilha_orcamento import exportar_orcamento_customizado_modelo4
 from core.composicoes_proprias_storage import listar as listar_composicoes_catalogo
 from core.orcamento_customizado import (
     BDI_PADRAO,
@@ -1421,7 +1422,26 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
 
     def _exportar_planilha(self):
-        DialogoSelecionarModeloPlanilha(self.winfo_toplevel())
+        DialogoSelecionarModeloPlanilha(
+            self.winfo_toplevel(),
+            on_selecionar=self._ao_selecionar_modelo_planilha,
+        )
+
+    def _ao_selecionar_modelo_planilha(self, numero):
+        if numero != 4:
+            return
+        referencia = self.ctx.sinapi_referencia_rotulo
+        if referencia == "BASE AUSENTE":
+            referencia = "Base não carregada"
+        exportar_orcamento_customizado_modelo4(
+            self.winfo_toplevel(),
+            self.orcamento,
+            listar_composicoes_catalogo(),
+            self.ctx.sinapi,
+            self._estado_selecionado(),
+            referencia,
+        )
+        self._persistir_orcamento_atual()
 
     def _atualizar_grade(self):
         self._preencher_grade()

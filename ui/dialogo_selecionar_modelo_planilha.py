@@ -132,6 +132,7 @@ class DialogoSelecionarModeloPlanilha(tk.Toplevel):
         def ao_clicar(_event=None, n=numero):
             if self.on_selecionar is not None:
                 self.on_selecionar(n)
+            self.destroy()
 
         cartao.bind("<Button-1>", ao_clicar)
         for filho in filhos:

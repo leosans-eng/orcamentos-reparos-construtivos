@@ -1,8 +1,9 @@
-"""Exportação de planilhas de orçamento com formatação padrão do módulo Área Privativa."""
+"""Exportação de planilhas de orçamento."""
 
 from __future__ import annotations
 
 import os
+import tempfile
 import unicodedata
 from datetime import datetime
 from tkinter import filedialog, messagebox
@@ -12,7 +13,10 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from core.composicoes_proprias import custo_composicao_propria_item
+from core.formatador_sinapi import Modelo, formatar_planilha
+from core.formatador_sinapi.comum import sanitizar_nome_arquivo as sanitizar_nome_formatador
 from core.orcamento_customizado import TIPO_COMPOSICAO_PROPRIA, TIPO_SINAPI
+from core.planilha_sintetica import gerar_planilha_sintetica
 from core.sinapi_busca import obter_item_sinapi
 
 COLUNAS_PLANILHA = [
@@ -350,14 +354,7 @@ def aplicar_formato_planilha_orcamento(
     wb.save(caminho_arquivo)
 
 
-def exportar_orcamento_customizado_modelo4(
-    parent,
-    orcamento,
-    catalogo,
-    sinapi,
-    estado: str,
-    referencia_sinapi: str,
-) -> bool:
+def _validar_exportacao(parent, orcamento, estado: str) -> bool:
     if not estado:
         messagebox.showwarning(
             "Gerar planilha",
@@ -373,6 +370,122 @@ def exportar_orcamento_customizado_modelo4(
             parent=parent,
         )
         return False
+    return True
+
+
+def _pasta_downloads_padrao() -> str:
+    pasta_downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+    if not os.path.isdir(pasta_downloads):
+        pasta_downloads = os.getcwd()
+    return pasta_downloads
+
+
+def _nome_obra_exportacao(orcamento) -> str:
+    return (orcamento.nome or "Orçamento customizado").strip()
+
+
+def exportar_orcamento_customizado_modelo_formatado(
+    parent,
+    modelo: int,
+    orcamento,
+    catalogo,
+    sinapi,
+    estado: str,
+    referencia_sinapi: str,
+) -> bool:
+    if modelo not in (1, 2, 3):
+        return False
+    if not _validar_exportacao(parent, orcamento, estado):
+        return False
+
+    sincronizar_precos_sinapi(orcamento, sinapi, estado)
+    nome_obra = _nome_obra_exportacao(orcamento)
+    nome_limpo = sanitizar_nome_formatador(nome_obra) or sanitizar_nome_arquivo(nome_obra)
+    nome_base = f"Planilha_Sintetica_Convertida_Modelo{modelo} - {nome_limpo}.xlsx"
+
+    arquivo = filedialog.asksaveasfilename(
+        parent=parent,
+        title="Salvar planilha como:",
+        initialdir=_pasta_downloads_padrao(),
+        initialfile=nome_base,
+        defaultextension=".xlsx",
+        filetypes=[("Planilha Excel", "*.xlsx")],
+    )
+    if not arquivo:
+        return False
+
+    fd, caminho_sintetica = tempfile.mkstemp(suffix=".xlsx", prefix="orc_sintetica_")
+    os.close(fd)
+    resultado = None
+    try:
+        gerar_planilha_sintetica(
+            caminho_sintetica,
+            orcamento,
+            catalogo,
+            sinapi,
+            estado,
+            referencia_sinapi,
+        )
+        resultado = formatar_planilha(
+            caminho_sintetica,
+            modelo=Modelo(modelo),
+            caminho_saida=arquivo,
+            gerar_word=modelo in (1, 3),
+        )
+    except PermissionError:
+        messagebox.showerror(
+            "Gerar planilha",
+            "Feche a planilha antes de gerar novamente.",
+            parent=parent,
+        )
+        return False
+    except OSError as exc:
+        messagebox.showerror(
+            "Gerar planilha",
+            f"Não foi possível gerar a planilha:\n{exc}",
+            parent=parent,
+        )
+        return False
+    finally:
+        try:
+            os.unlink(caminho_sintetica)
+        except OSError:
+            pass
+
+    if resultado is None:
+        return False
+
+    try:
+        os.startfile(resultado.caminho_excel)
+    except OSError:
+        pass
+
+    if resultado.caminho_word:
+        try:
+            os.startfile(resultado.caminho_word)
+        except OSError:
+            pass
+
+    mensagem = "Planilha gerada com sucesso!"
+    if resultado.caminho_word:
+        mensagem += "\n\nDocumento Word gerado no mesmo local."
+    if resultado.avisos:
+        mensagem += "\n\n" + "\n".join(resultado.avisos)
+
+    messagebox.showinfo("Gerar planilha", mensagem, parent=parent)
+    return True
+
+
+def exportar_orcamento_customizado_modelo4(
+    parent,
+    orcamento,
+    catalogo,
+    sinapi,
+    estado: str,
+    referencia_sinapi: str,
+) -> bool:
+    if not _validar_exportacao(parent, orcamento, estado):
+        return False
 
     sincronizar_precos_sinapi(orcamento, sinapi, estado)
     df = montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado)
@@ -381,14 +494,11 @@ def exportar_orcamento_customizado_modelo4(
         f"orcamento_customizado_{sanitizar_nome_arquivo(orcamento.nome)}_"
         f"{datetime.now().strftime('%Y-%m-%d_%H-%M')}.xlsx"
     )
-    pasta_downloads = os.path.join(os.path.expanduser("~"), "Downloads")
-    if not os.path.isdir(pasta_downloads):
-        pasta_downloads = os.getcwd()
 
     arquivo = filedialog.asksaveasfilename(
         parent=parent,
         title="Salvar planilha como:",
-        initialdir=pasta_downloads,
+        initialdir=_pasta_downloads_padrao(),
         initialfile=nome_base,
         defaultextension=".xlsx",
         filetypes=[("Planilha Excel", "*.xlsx")],

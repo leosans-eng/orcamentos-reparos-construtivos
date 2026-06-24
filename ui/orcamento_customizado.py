@@ -3,7 +3,10 @@ from tkinter import messagebox, ttk
 
 from app_paths import asset_path
 from core.composicoes_proprias import custo_composicao_propria_item
-from core.exportacao_planilha_orcamento import exportar_orcamento_customizado_modelo4
+from core.exportacao_planilha_orcamento import (
+    exportar_orcamento_customizado_modelo4,
+    exportar_orcamento_customizado_modelo_formatado,
+)
 from core.composicoes_proprias_storage import listar as listar_composicoes_catalogo
 from core.orcamento_customizado import (
     BDI_PADRAO,
@@ -1428,19 +1431,36 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
 
     def _ao_selecionar_modelo_planilha(self, numero):
-        if numero != 4:
-            return
         referencia = self.ctx.sinapi_referencia_rotulo
         if referencia == "BASE AUSENTE":
             referencia = "Base não carregada"
-        exportar_orcamento_customizado_modelo4(
-            self.winfo_toplevel(),
-            self.orcamento,
-            listar_composicoes_catalogo(),
-            self.ctx.sinapi,
-            self._estado_selecionado(),
-            referencia,
-        )
+        parent = self.winfo_toplevel()
+        catalogo = listar_composicoes_catalogo()
+        estado = self._estado_selecionado()
+        sinapi = self.ctx.sinapi
+
+        if numero in (1, 2, 3):
+            exportar_orcamento_customizado_modelo_formatado(
+                parent,
+                numero,
+                self.orcamento,
+                catalogo,
+                sinapi,
+                estado,
+                referencia,
+            )
+        elif numero == 4:
+            exportar_orcamento_customizado_modelo4(
+                parent,
+                self.orcamento,
+                catalogo,
+                sinapi,
+                estado,
+                referencia,
+            )
+        else:
+            return
+
         self._persistir_orcamento_atual()
 
     def _atualizar_grade(self):

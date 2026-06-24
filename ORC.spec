@@ -10,6 +10,8 @@ datas = [
     ('assets/modelos/modelo2.png', 'assets/modelos'),
     ('assets/modelos/modelo3.png', 'assets/modelos'),
     ('assets/modelos/modelo4.png', 'assets/modelos'),
+    ('assets/modelos/Modelo 1 - Word.docx', 'assets/modelos'),
+    ('assets/modelos/Modelo 3 - Word.docx', 'assets/modelos'),
 ]
 datas += collect_data_files('certifi')
 
@@ -19,7 +21,19 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=['atualizacao', 'app_paths', 'certifi'],
+    hiddenimports=[
+        'atualizacao',
+        'app_paths',
+        'certifi',
+        'num2words',
+        'docx',
+        'core.formatador_sinapi',
+        'core.formatador_sinapi.modelo1',
+        'core.formatador_sinapi.modelo2',
+        'core.formatador_sinapi.modelo3',
+        'core.formatador_sinapi.word_modelo1',
+        'core.formatador_sinapi.word_modelo3',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

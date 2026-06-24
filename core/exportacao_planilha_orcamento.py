@@ -14,7 +14,11 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from core.composicoes_proprias import custo_composicao_propria_item
 from core.formatador_sinapi import Modelo, formatar_planilha
-from core.formatador_sinapi.comum import sanitizar_nome_arquivo as sanitizar_nome_formatador
+from core.formatador_sinapi.comum import (
+    indice_linha,
+    planilha_ativa,
+    sanitizar_nome_arquivo,
+)
 from core.orcamento_customizado import TIPO_COMPOSICAO_PROPRIA, TIPO_SINAPI
 from core.planilha_sintetica import gerar_planilha_sintetica
 from core.sinapi_busca import obter_item_sinapi
@@ -29,14 +33,9 @@ COLUNAS_PLANILHA = [
 ]
 
 
-def sanitizar_nome_arquivo(texto: str) -> str:
-    texto = (texto or "").strip()
-    if not texto:
-        return "sem_nome"
-    for caractere in '<>:"/\\|?*':
-        texto = texto.replace(caractere, "_")
-    texto = "_".join(texto.split())
-    return texto[:80]
+def _sanitizar_nome_exportacao(texto: str) -> str:
+    nome = sanitizar_nome_arquivo(texto or "")
+    return nome if nome else "sem_nome"
 
 
 def normalizar_texto(texto) -> str:
@@ -180,7 +179,8 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
     )
 
     df = pd.DataFrame(linhas, columns=COLUNAS_PLANILHA)
-    df["Total s/ BDI"] = pd.to_numeric(df["Total s/ BDI"], errors="coerce").fillna(0)
+    df["Total s/ BDI"] = pd.to_numeric(df["Total s/ BDI"], errors="coerce")
+    df = df.fillna({"Total s/ BDI": 0.0})
     return df
 
 
@@ -193,7 +193,7 @@ def aplicar_formato_planilha_orcamento(
     referencia_sinapi: str,
 ) -> None:
     wb = load_workbook(caminho_arquivo)
-    ws = wb.active
+    ws = planilha_ativa(wb)
 
     fundo_cabecalho = PatternFill(
         start_color="006699", end_color="006699", fill_type="solid"
@@ -277,7 +277,7 @@ def aplicar_formato_planilha_orcamento(
             descricao_norm == "TOTAL SEM BDI"
             or descricao_norm.startswith("TOTAL DO BDI")
         ):
-            linha_idx = row[0].row
+            linha_idx = indice_linha(row[0])
             descricao_formatada = str(descricao).strip()
             if descricao_norm == "TOTAL SEM BDI":
                 descricao_formatada = "Total sem BDI"
@@ -302,7 +302,7 @@ def aplicar_formato_planilha_orcamento(
                 )
 
         elif descricao == "TOTAL GERAL":
-            linha_idx = row[0].row
+            linha_idx = indice_linha(row[0])
             ws.cell(row=linha_idx, column=1, value="Total do Orçamento")
             for col_idx in range(2, 6):
                 ws.cell(row=linha_idx, column=col_idx, value=None)
@@ -400,7 +400,7 @@ def exportar_orcamento_customizado_modelo_formatado(
 
     sincronizar_precos_sinapi(orcamento, sinapi, estado)
     nome_obra = _nome_obra_exportacao(orcamento)
-    nome_limpo = sanitizar_nome_formatador(nome_obra) or sanitizar_nome_arquivo(nome_obra)
+    nome_limpo = _sanitizar_nome_exportacao(nome_obra)
     nome_base = f"Planilha_Sintetica_Convertida_Modelo{modelo} - {nome_limpo}.xlsx"
 
     arquivo = filedialog.asksaveasfilename(
@@ -491,7 +491,7 @@ def exportar_orcamento_customizado_modelo4(
     df = montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado)
 
     nome_base = (
-        f"orcamento_customizado_{sanitizar_nome_arquivo(orcamento.nome)}_"
+        f"orcamento_customizado_{_sanitizar_nome_exportacao(orcamento.nome)}_"
         f"{datetime.now().strftime('%Y-%m-%d_%H-%M')}.xlsx"
     )
 

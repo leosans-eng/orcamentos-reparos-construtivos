@@ -1,4 +1,4 @@
-"""Ponto de entrada unificado para formatação de planilhas."""
+"""Orquestra a formatação das planilhas nos modelos 1, 2 e 3 do escritório."""
 
 from __future__ import annotations
 

@@ -7,10 +7,31 @@ import re
 
 from num2words import num2words
 from openpyxl.styles import Border, Side
+from openpyxl.workbook.workbook import Workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
 FORMATO_MOEDA = '_-"R$" * #,##0.00_-'
 
 
+def planilha_ativa(workbook: Workbook) -> Worksheet:
+    """Retorna a planilha ativa ou falha se o workbook estiver vazio."""
+    planilha = workbook.active
+    if planilha is None:
+        raise RuntimeError("A planilha ativa do arquivo Excel não foi encontrada.")
+    return planilha
+
+
+def indice_linha(celula) -> int:
+    """Índice da linha de uma célula openpyxl (nunca None)."""
+    linha = celula.row
+    if linha is None:
+        raise ValueError("Célula sem índice de linha.")
+    return int(linha)
+
+
+def atribuir_valor(celula, valor) -> None:
+    """Atribui valor ignorando limitação de tipo em células mescladas."""
+    celula.value = valor  # type: ignore[assignment]
 def valor_em_extenso(valor):
     """Converte um valor numérico para texto por extenso em português (formato monetário)."""
     if valor is None or valor == "":

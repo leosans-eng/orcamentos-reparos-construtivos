@@ -15,6 +15,8 @@ from core.formatador_sinapi.comum import (
     extrair_nome_obra,
     extrair_totais_finais,
     gerar_caminho_saida,
+    atribuir_valor,
+    planilha_ativa,
 )
 from core.formatador_sinapi.types import Modelo, ResultadoFormatacao
 
@@ -23,9 +25,11 @@ def _finalizar_total_secao(ws, row_secao, primeira_linha, ultima_linha, align_di
     cel_secao_total = ws.cell(row=row_secao, column=6)
     cel_secao_total.alignment = align_direita
     if primeira_linha > ultima_linha:
-        cel_secao_total.value = "A ORÇAR"
+        atribuir_valor(cel_secao_total, "A ORÇAR")
     else:
-        cel_secao_total.value = f"=SUM(F{primeira_linha}:F{ultima_linha})"
+        atribuir_valor(
+            cel_secao_total, f"=SUM(F{primeira_linha}:F{ultima_linha})"
+        )
         cel_secao_total.number_format = FORMATO_MOEDA
         linhas_totais_secoes.append(row_secao)
 
@@ -42,7 +46,7 @@ def formatar_modelo2(
         )
 
     wb_origem = openpyxl.load_workbook(caminho_origem_xlsx)
-    ws_origem = wb_origem.active
+    ws_origem = planilha_ativa(wb_origem)
 
     nome_obra = extrair_nome_obra(ws_origem)
     bdi_rotulo = extrair_bdi_rotulo(ws_origem)
@@ -55,7 +59,7 @@ def formatar_modelo2(
     )
 
     wb_destino = openpyxl.Workbook()
-    ws_destino = wb_destino.active
+    ws_destino = planilha_ativa(wb_destino)
     ws_destino.title = "Orçamento Formatado"
     ws_destino.views.sheetView[0].showGridLines = True
 
@@ -200,7 +204,7 @@ def formatar_modelo2(
         linha1 = ws_destino.max_row + 1
         ws_destino.merge_cells(start_row=linha1, start_column=1, end_row=linha1, end_column=4)
         cel = ws_destino.cell(row=linha1, column=1)
-        cel.value = "TOTAL PARCIAL="
+        atribuir_valor(cel, "TOTAL PARCIAL=")
         cel.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
         cel.font = Font(name="Aptos Narrow", size=12, bold=True)
         cel.fill = fill_secao
@@ -210,23 +214,26 @@ def formatar_modelo2(
         cel_e.font = font_secao
         cel_e.fill = fill_secao
         cel_e.alignment = align_direita
-        cel_e.value = (
-            "=" + "+".join(f"F{row}" for row in linhas_totais_secoes)
-            if linhas_totais_secoes
-            else 0
+        atribuir_valor(
+            cel_e,
+            (
+                "=" + "+".join(f"F{row}" for row in linhas_totais_secoes)
+                if linhas_totais_secoes
+                else 0
+            ),
         )
         cel_e.number_format = FORMATO_MOEDA
 
         linha2 = linha1 + 1
         ws_destino.merge_cells(start_row=linha2, start_column=1, end_row=linha2, end_column=3)
         cel = ws_destino.cell(row=linha2, column=1)
-        cel.value = "BDI - BENEFÍCIOS E DESPESAS INDIRETAS ="
+        atribuir_valor(cel, "BDI - BENEFÍCIOS E DESPESAS INDIRETAS =")
         cel.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
         cel.font = Font(name="Aptos Narrow", size=12, bold=True)
         cel.fill = fill_secao
 
         cel_d = ws_destino.cell(row=linha2, column=4)
-        cel_d.value = f"{bdi_rotulo}%"
+        atribuir_valor(cel_d, f"{bdi_rotulo}%")
         cel_d.alignment = align_centro
         cel_d.font = Font(name="Aptos Narrow", size=12, bold=True)
         cel_d.fill = PatternFill(start_color="A6A6A6", end_color="A6A6A6", fill_type="solid")
@@ -236,13 +243,13 @@ def formatar_modelo2(
         cel_e.font = font_secao
         cel_e.fill = fill_secao
         cel_e.alignment = align_direita
-        cel_e.value = f"=E{linha1}*D{linha2}"
+        atribuir_valor(cel_e, f"=E{linha1}*D{linha2}")
         cel_e.number_format = FORMATO_MOEDA
 
         linha3 = linha2 + 1
         ws_destino.merge_cells(start_row=linha3, start_column=1, end_row=linha3, end_column=4)
         cel = ws_destino.cell(row=linha3, column=1)
-        cel.value = "ORÇAMENTO TOTAL"
+        atribuir_valor(cel, "ORÇAMENTO TOTAL")
         cel.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
         cel.font = Font(name="Aptos Narrow", size=14, bold=True, color="FFFFFF")
         cel.fill = PatternFill(start_color="595959", end_color="595959", fill_type="solid")
@@ -252,7 +259,7 @@ def formatar_modelo2(
         cel_e.font = Font(name="Aptos Narrow", size=14, bold=True, color="FFFFFF")
         cel_e.fill = PatternFill(start_color="595959", end_color="595959", fill_type="solid")
         cel_e.alignment = align_direita
-        cel_e.value = f"=SUM(E{linha1}:F{linha2})"
+        atribuir_valor(cel_e, f"=SUM(E{linha1}:F{linha2})")
         cel_e.number_format = FORMATO_MOEDA
 
         aplicar_borda_contorno(ws_destino, linha1, 1, linha3, 6)

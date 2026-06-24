@@ -1,11 +1,16 @@
-"""Gera planilha sintética a partir do orçamento customizado."""
+"""Gera planilha intermediária no layout esperado pelo formatador de modelos.
+
+O ORC monta essa estrutura a partir do Orçamento Customizado antes de aplicar
+os modelos 1, 2 e 3. O layout é compatível com exportações do sistema i9
+(externo ao ORC), mas aqui a planilha é sempre gerada internamente.
+"""
 
 from __future__ import annotations
 
 import openpyxl
 
 from core.composicoes_proprias import custo_composicao_propria_item
-from core.formatador_sinapi.comum import valor_em_extenso
+from core.formatador_sinapi.comum import planilha_ativa, valor_em_extenso
 from core.orcamento_customizado import (
     TIPO_COMPOSICAO_PROPRIA,
     TIPO_SINAPI,
@@ -51,7 +56,7 @@ def _preencher_cabecalho(ws, orcamento, estado: str, referencia_rotulo: str) -> 
     ws.cell(row=4, column=1, value=f"Obra: {nome_obra}")
     ws.cell(row=5, column=1, value="Orçamento: CUSTOMIZADO")
     ws.cell(row=6, column=1, value="Cliente: ")
-    ws.cell(row=6, column=5, value="Planilha Sintética Simples")
+    ws.cell(row=6, column=5, value="Planilha intermediária ORC")
     ws.cell(row=7, column=1, value=f"BDI Padrão: {bdi}%")
     ws.cell(row=8, column=1, value=_formatar_referencia_bancos(estado, referencia_rotulo))
 
@@ -103,8 +108,8 @@ def gerar_planilha_sintetica(
     referencia_rotulo: str,
 ) -> str:
     wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Planilha Sintética"
+    ws = planilha_ativa(wb)
+    ws.title = "Orçamento"
 
     _preencher_cabecalho(ws, orcamento, estado, referencia_rotulo)
 

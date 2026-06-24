@@ -1,4 +1,9 @@
-"""Resolução do arquivo de entrada para uso local (CLI)."""
+"""Resolução de arquivos de planilha de entrada para importação futura.
+
+O layout esperado segue o padrão de exportação do sistema i9 (software externo ao ORC).
+Esse módulo será usado pelo módulo de importação de planilhas; a geração de modelos
+a partir do Orçamento Customizado não depende dele.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +24,7 @@ class ArquivoEntradaAmbiguo(Exception):
         self.candidatos = candidatos
         nomes = "\n".join(f"  - {caminho.name}" for caminho in candidatos)
         super().__init__(
-            "Vários arquivos de entrada encontrados. Informe o caminho na linha de comando:\n"
+            "Vários arquivos de entrada encontrados. Informe o caminho explicitamente:\n"
             f"{nomes}"
         )
 
@@ -41,52 +46,33 @@ def _candidatos_na_pasta(diretorio: Path) -> list[Path]:
     )
 
 
-def _carregar_local_config() -> str | None:
-    try:
-        import local_config
-    except ImportError:
-        return None
-
-    valor = getattr(local_config, "ARQUIVO_ENTRADA", None)
-    if valor is None:
-        return None
-    valor = str(valor).strip()
-    return valor or None
-
-
 def resolver_arquivo_entrada(
     caminho_informado: str | None = None,
     *,
     diretorio: str | Path | None = None,
 ) -> tuple[str, str]:
     """
-    Define qual planilha usar na CLI local.
+    Define qual planilha usar na importação.
 
     Ordem de prioridade:
-    1. Argumento informado na linha de comando
-    2. Variável de ambiente SLACKBOT_ARQUIVO_ENTRADA
-    3. Arquivo local_config.py (ARQUIVO_ENTRADA)
-    4. Detecção automática na pasta do projeto
+    1. Caminho informado pelo chamador
+    2. Variável de ambiente ORC_ARQUIVO_PLANILHA_ENTRADA
+    3. Detecção automática na pasta indicada (ou diretório atual)
     """
     if caminho_informado:
-        return os.path.abspath(caminho_informado), "informado na linha de comando"
+        return os.path.abspath(caminho_informado), "caminho informado"
 
-    env = (os.environ.get("SLACKBOT_ARQUIVO_ENTRADA") or os.environ.get("FORMATADOR_ARQUIVO_ENTRADA") or "").strip()
+    env = (os.environ.get("ORC_ARQUIVO_PLANILHA_ENTRADA") or "").strip()
     if env:
-        return os.path.abspath(env), "variável SLACKBOT_ARQUIVO_ENTRADA"
-
-    config = _carregar_local_config()
-    if config:
-        return os.path.abspath(config), "local_config.py"
+        return os.path.abspath(env), "variável ORC_ARQUIVO_PLANILHA_ENTRADA"
 
     base = Path(diretorio or os.getcwd())
     candidatos = _candidatos_na_pasta(base)
     if not candidatos:
         raise FileNotFoundError(
             "Nenhuma planilha de entrada encontrada.\n"
-            "Coloque um arquivo 'Planilha Sintética*.xlsx' na pasta do projeto, "
-            "informe o caminho (python scripts/formatar_modelo1.py arquivo.xlsx) ou configure "
-            "local_config.py (veja local_config.example.py)."
+            "Informe o caminho do arquivo ou coloque uma planilha "
+            "'Planilha Sintética*.xlsx' na pasta selecionada."
         )
     if len(candidatos) > 1:
         raise ArquivoEntradaAmbiguo(candidatos)

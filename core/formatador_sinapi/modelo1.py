@@ -16,6 +16,8 @@ from core.formatador_sinapi.comum import (
     extrair_referencia_sinapi,
     extrair_totais_finais,
     gerar_caminho_saida,
+    atribuir_valor,
+    planilha_ativa,
     valor_em_extenso,
 )
 from core.formatador_sinapi.types import Modelo, ResultadoFormatacao
@@ -33,7 +35,7 @@ def formatar_modelo1(
         )
 
     wb_origem = openpyxl.load_workbook(caminho_origem_xlsx)
-    ws_origem = wb_origem.active
+    ws_origem = planilha_ativa(wb_origem)
 
     nome_obra = extrair_nome_obra(ws_origem)
     referencia_sinapi = extrair_referencia_sinapi(ws_origem)
@@ -46,7 +48,7 @@ def formatar_modelo1(
     )
 
     wb_destino = openpyxl.Workbook()
-    ws_destino = wb_destino.active
+    ws_destino = planilha_ativa(wb_destino)
     ws_destino.title = "Orçamento Formatado"
     ws_destino.views.sheetView[0].showGridLines = True
 
@@ -185,8 +187,8 @@ def formatar_modelo1(
             row = tabela_final + 1 + index
             label = labels_default[index] if index < len(labels_default) else tot["label"]
             valor = tot["valor_k"] if tot["valor_k"] is not None else tot["valor_i"]
-            ws_destino.cell(row=row, column=col_label_totais).value = label
-            ws_destino.cell(row=row, column=col_valor_totais).value = valor
+            atribuir_valor(ws_destino.cell(row=row, column=col_label_totais), label)
+            atribuir_valor(ws_destino.cell(row=row, column=col_valor_totais), valor)
 
             cel_label = ws_destino.cell(row=row, column=col_label_totais)
             cel_label.font = font_secao
@@ -219,7 +221,10 @@ def formatar_modelo1(
         )
         texto_extenso_total = valor_em_extenso(valor_total_orcamento)
         linha_extenso_total = linha_totais_fim + 2
-        ws_destino.cell(row=linha_extenso_total, column=col_label_totais).value = texto_extenso_total
+        atribuir_valor(
+            ws_destino.cell(row=linha_extenso_total, column=col_label_totais),
+            texto_extenso_total,
+        )
 
         cel_extenso = ws_destino.cell(row=linha_extenso_total, column=col_label_totais)
         cel_extenso.font = Font(name="Calibri", size=10, bold=False, color="000000")
@@ -228,7 +233,10 @@ def formatar_modelo1(
 
         if referencia_sinapi:
             linha_referencia_sinapi = linha_extenso_total + 1
-            ws_destino.cell(row=linha_referencia_sinapi, column=col_label_totais).value = referencia_sinapi
+            atribuir_valor(
+                ws_destino.cell(row=linha_referencia_sinapi, column=col_label_totais),
+                referencia_sinapi,
+            )
             cel_referencia = ws_destino.cell(row=linha_referencia_sinapi, column=col_label_totais)
             cel_referencia.font = Font(name="Calibri", size=10, bold=True, color="000000")
             cel_referencia.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)

@@ -1,5 +1,5 @@
 ; Inno Setup — versão lida de core/app_state.py via /DMyAppVersion=...
-; Compile com: setup\orc_installer.bat
+; Compile com: setup\orc_installer.bat  (ou apenas o .exe: setup\create_exe.bat)
 
 #ifndef MyAppVersion
   #define MyAppVersion "Erro na versão, contatar suporte"
@@ -8,13 +8,19 @@
 #define MyAppName "ORC"
 #define MyAppPublisher "Léo Santos"
 #define MyAppExeName "ORC.exe"
+#define MyAppURL "https://github.com/leosans-eng/orcamento-reparos-construtivos"
 #define MySourceDir "..\dist\ORC"
 
 [Setup]
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
 
 AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
+
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=Instalador do ORC
 VersionInfoProductName={#MyAppName}
@@ -27,7 +33,7 @@ OutputDir=output
 OutputBaseFilename=ORC_Instalador_{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
-SetupIconFile=icone.ico
+SetupIconFile=..\icone.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 PrivilegesRequired=admin
 
@@ -43,8 +49,8 @@ GroupDescription: "Atalhos:"
 Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; \

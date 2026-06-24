@@ -51,6 +51,33 @@ def formatar_bdi_planilha(valor: float) -> str:
     return f"{float(valor):.2f}".replace(".", ",")
 
 
+def _comprimento_exibicao_moeda(valor) -> int:
+    """Estima largura da célula com formatação R$ #,##0.00."""
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return len(str(valor))
+    texto = (
+        f"R$ {numero:,.2f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
+    return len(texto)
+
+
+def _ajustar_largura_coluna_moeda(planilha, coluna: str, largura_minima: float = 16) -> None:
+    max_length = largura_minima
+    for cell in planilha[coluna]:
+        if cell.value is None:
+            continue
+        if isinstance(cell.value, (int, float)):
+            max_length = max(max_length, _comprimento_exibicao_moeda(cell.value))
+        else:
+            max_length = max(max_length, len(str(cell.value)))
+    planilha.column_dimensions[coluna].width = max_length + 2
+
+
 def sincronizar_precos_sinapi(orcamento, sinapi, estado: str) -> None:
     if not estado:
         return
@@ -239,11 +266,7 @@ def aplicar_formato_planilha_orcamento(
         ws.column_dimensions["D"].width = max_length + 1
 
     for col in ["F"]:
-        max_length = 0
-        for cell in ws[col]:
-            if cell.value is not None:
-                max_length = max(max_length, len(str(cell.value)))
-        ws.column_dimensions["F"].width = max_length
+        _ajustar_largura_coluna_moeda(ws, col)
 
     ws["A1"].font = Font(bold=True, size=12, color="FFFFFF")
     ws["A1"].fill = fundo_cabecalho

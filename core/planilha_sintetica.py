@@ -34,7 +34,7 @@ COLUNAS = (
 
 
 def _formatar_bdi_cabecalho(valor: float) -> str:
-    return f"{float(valor):.3f}".replace(".", ",")
+    return f"{float(valor):.2f}".replace(".", ",")
 
 
 def _formatar_referencia_bancos(estado: str, referencia_rotulo: str) -> str:

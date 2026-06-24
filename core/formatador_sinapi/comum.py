@@ -60,6 +60,16 @@ def extrair_nome_obra(ws_origem, linha=4):
     return ""
 
 
+def _normalizar_rotulo_bdi(rotulo: str) -> str:
+    """Garante no máximo duas casas decimais (ex.: 30,620 → 30,62)."""
+    rotulo = rotulo.strip()
+    if "," not in rotulo:
+        return rotulo
+    inteiro, decimal = rotulo.split(",", 1)
+    decimal = (decimal + "00")[:2]
+    return f"{inteiro},{decimal}"
+
+
 def extrair_bdi_rotulo(ws_origem, linha=7):
     """Extrai o percentual de BDI (ex.: '30,62') da linha de cabeçalho."""
     for col in range(1, ws_origem.max_column + 1):
@@ -69,7 +79,7 @@ def extrair_bdi_rotulo(ws_origem, linha=7):
         texto = str(valor).strip()
         match = re.search(r"BDI\s*Padr[aã]o:\s*([\d,]+)\s*%", texto, flags=re.IGNORECASE)
         if match:
-            return match.group(1).strip()
+            return _normalizar_rotulo_bdi(match.group(1))
     return "30,62"
 
 

@@ -80,6 +80,15 @@ class HubFrame(tk.Frame):
             linha=1,
             aviso="Tentativa de substituir o i9",
         )
+        self._criar_cartao(
+            cartoes,
+            titulo="Configurar Composições Próprias",
+            descricao="Cadastre composições com insumos SINAPI ou de mercado e coeficientes",
+            modulo="composicoes_proprias",
+            habilitado=True,
+            coluna=1,
+            linha=1,
+        )
 
     def _criar_cartao(
         self,

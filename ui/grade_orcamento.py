@@ -24,6 +24,7 @@ COR_SELECAO = "#cce4f0"
 COR_GRUPO = "#e8f4f8"
 COR_BORDA = "#cccccc"
 COR_COMPOSICAO = "#7b5e00"
+COR_ALERTA_DEPRECIADO = "#fff8e1"
 COR_TEXTO = "#333333"
 
 
@@ -120,10 +121,12 @@ class GradeOrcamento(tk.Frame):
         if fracao is not None:
             self.canvas.yview_moveto(fracao)
 
-    def adicionar_linha(self, meta, valores, estilo="item"):
+    def adicionar_linha(self, meta, valores, estilo="item", alerta_depreciado=False):
         idx = len(self._linhas)
         cor_fundo = COR_GRUPO if estilo == "grupo" else COR_FUNDO
-        if estilo != "grupo" and idx % 2 == 1:
+        if alerta_depreciado and estilo != "grupo":
+            cor_fundo = COR_ALERTA_DEPRECIADO
+        elif estilo != "grupo" and idx % 2 == 1:
             cor_fundo = "#f7f9fa"
 
         frame = tk.Frame(

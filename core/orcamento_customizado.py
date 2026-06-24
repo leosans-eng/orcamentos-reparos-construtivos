@@ -41,20 +41,15 @@ def _criar_item_sinapi(codigo, descricao, unidade, custo_unitario, quantidade, e
     }
 
 
-def _criar_composicao_propria(nome, unidade, quantidade=1.0):
-    """
-    Placeholder para composições definidas pelo usuário.
-
-    Futuro: ``componentes`` receberá insumos/composições SINAPI com coeficientes,
-    ex. reparo de trincas com PU (unidade m) consumindo vários itens da base.
-    """
+def _criar_composicao_propria(composicao_catalogo_id, codigo, nome, unidade, quantidade=1.0):
     return {
         "id": _novo_id(),
         "tipo": TIPO_COMPOSICAO_PROPRIA,
-        "nome": nome.strip(),
+        "composicao_catalogo_id": str(composicao_catalogo_id).strip(),
+        "codigo": str(codigo).strip(),
+        "nome": str(nome).strip(),
         "unidade": str(unidade).strip(),
         "quantidade": float(quantidade),
-        "componentes": [],
     }
 
 
@@ -70,7 +65,6 @@ def subtotal_item_sem_bdi(item):
     if item["tipo"] == TIPO_SINAPI:
         return item["custo_unitario"] * item["quantidade"]
     if item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
-        # Placeholder: custo será calculado a partir dos componentes no futuro.
         return 0.0
     return 0.0
 
@@ -94,7 +88,11 @@ def rotulo_item(item):
     if item["tipo"] == TIPO_SINAPI:
         return f"{item['codigo']} — {item['descricao']}"
     if item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
-        return f"[Composição própria] {item['nome']}"
+        codigo = item.get("codigo", "")
+        nome = item.get("nome", "")
+        if codigo:
+            return f"{codigo} — {nome}"
+        return f"[Composição própria] {nome}"
     return ""
 
 
@@ -184,16 +182,19 @@ class OrcamentoCustomizado:
         grupo["itens"].append(item)
         return item["id"]
 
-    def adicionar_composicao_propria(self, grupo_id, nome, unidade, quantidade=1.0):
-        """Registra composição própria (estrutura reservada para expansão futura)."""
+    def adicionar_composicao_propria(
+        self, grupo_id, composicao_catalogo_id, codigo, nome, unidade, quantidade=1.0
+    ):
         grupo = self.obter_grupo(grupo_id)
         if grupo is None:
             raise ValueError("Grupo não encontrado.")
-        if not nome or not nome.strip():
-            raise ValueError("Informe o nome da composição.")
+        if not composicao_catalogo_id:
+            raise ValueError("Composição do catálogo não informada.")
         if quantidade <= 0:
             raise ValueError("A quantidade deve ser maior que zero.")
-        item = _criar_composicao_propria(nome, unidade, quantidade)
+        item = _criar_composicao_propria(
+            composicao_catalogo_id, codigo, nome, unidade, quantidade
+        )
         grupo["itens"].append(item)
         return item["id"]
 

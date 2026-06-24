@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from core.composicoes_proprias import custo_composicao_propria_item
+from core.composicoes_proprias_storage import listar as listar_composicoes_catalogo
 from core.orcamento_customizado import (
     BDI_PADRAO,
     TIPO_COMPOSICAO_PROPRIA,
@@ -9,7 +11,6 @@ from core.orcamento_customizado import (
     OrcamentoCustomizado,
     custo_unitario_com_bdi,
     rotulo_item,
-    subtotal_grupo,
     subtotal_item,
 )
 from core.orcamento_storage import (
@@ -468,6 +469,235 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.on_confirmar(codigo, descricao, unidade, custo, quantidade, estado)
         if fechar:
             self.destroy()
+
+
+class DialogoBuscaComposicaoPropria(tk.Toplevel):
+    def __init__(self, parent, ctx, catalogo, estado_inicial, on_confirmar):
+        super().__init__(parent)
+        self.ctx = ctx
+        self.catalogo = catalogo
+        self.on_confirmar = on_confirmar
+        self._ultima_largura_wrap = 0
+
+        self.title("Inserir composição própria")
+        self.geometry("900x620")
+        self.minsize(640, 420)
+        aplicar_icone_janela(self)
+        self.configure(bg="#ececec")
+        self.transient(parent)
+        self.grab_set()
+
+        self._montar(estado_inicial)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.update_idletasks()
+        centralizar_janela(self, parent)
+
+    def _montar(self, estado_inicial):
+        painel = tk.Frame(self, bg="#ececec", padx=12, pady=10)
+        painel.pack(fill="both", expand=True)
+
+        linha_filtros = tk.Frame(painel, bg="#ececec")
+        linha_filtros.pack(fill="x", pady=(0, 6))
+
+        tk.Label(linha_filtros, text="Estado:", bg="#ececec").grid(
+            row=0, column=0, padx=(0, 4), pady=3, sticky="w"
+        )
+        estados = self.ctx.obter_estados()
+        self.combo_estado = ttk.Combobox(
+            linha_filtros,
+            values=valores_combo_estado(estados),
+            width=14,
+            state="readonly",
+        )
+        self.combo_estado.grid(row=0, column=1, padx=4, pady=3, sticky="w")
+        estado_valido = estado_do_combo(estado_inicial)
+        if estado_valido and estado_valido in estados:
+            self.combo_estado.set(estado_valido)
+        else:
+            self.combo_estado.set(PLACEHOLDER_ESTADO)
+        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._atualizar_lista)
+
+        tk.Label(linha_filtros, text="Filtrar:", bg="#ececec").grid(
+            row=1, column=0, padx=(0, 4), pady=3, sticky="w"
+        )
+        self.var_busca = tk.StringVar()
+        self.var_busca.trace_add("write", lambda *_a: self._atualizar_lista())
+        ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36).grid(
+            row=1, column=1, padx=4, pady=3, sticky="ew"
+        )
+
+        tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(
+            row=1, column=2, padx=(14, 4), pady=3, sticky="w"
+        )
+        self.var_quantidade = tk.StringVar(value="1")
+        ttk.Entry(linha_filtros, textvariable=self.var_quantidade, width=10).grid(
+            row=1, column=3, padx=4, pady=3, sticky="w"
+        )
+        linha_filtros.columnconfigure(1, weight=1)
+
+        painel_resultados = tk.LabelFrame(
+            painel, text="Composições cadastradas", bg="#ececec", padx=6, pady=4
+        )
+        painel_resultados.pack(fill="both", expand=True, pady=(0, 8))
+
+        colunas = ("codigo", "nome", "unidade", "custo")
+        self.tree = ttk.Treeview(painel_resultados, columns=colunas, show="headings", height=12)
+        self.tree.heading("codigo", text="Código")
+        self.tree.heading("nome", text="Nome")
+        self.tree.heading("unidade", text="Unid.")
+        self.tree.heading("custo", text="Custo unit. (R$)")
+        self.tree.column("codigo", width=60, minwidth=60, stretch=False, anchor="center")
+        self.tree.column("nome", width=420, minwidth=200, stretch=True)
+        self.tree.column("unidade", width=55, minwidth=45, stretch=False, anchor="center")
+        self.tree.column("custo", width=110, minwidth=90, stretch=False, anchor="e")
+
+        scroll = ttk.Scrollbar(painel_resultados, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        painel_detalhe = tk.Frame(
+            painel, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
+        )
+        painel_detalhe.pack(fill="x", pady=(0, 8))
+
+        self.label_detalhe = tk.Label(
+            painel_detalhe,
+            text="Selecione uma composição na lista para ver os detalhes.",
+            font=("Arial", 9),
+            fg="#444444",
+            bg="#f5fafc",
+            justify="left",
+            anchor="w",
+            padx=10,
+            pady=8,
+        )
+        self.label_detalhe.pack(fill="x")
+
+        rodape = tk.Frame(painel, bg="#ececec")
+        rodape.pack(fill="x")
+        botoes_acao = tk.Frame(rodape, bg="#ececec")
+        botoes_acao.pack(side="right")
+        ttk.Button(
+            botoes_acao, text="Cancelar", command=self.destroy, style="Delete.TButton"
+        ).pack(side="right")
+        ttk.Button(
+            botoes_acao,
+            text="Inserir",
+            command=self._confirmar,
+            style="Add.TButton",
+        ).pack(side="right", padx=(0, 8))
+
+        self.combo_estado.bind("<<ComboboxSelected>>", self._atualizar_lista)
+        self.tree.bind("<<TreeviewSelect>>", self._ao_selecionar_item)
+        self.tree.bind("<Double-1>", lambda _e: self._confirmar())
+        self.bind("<Configure>", self._ao_redimensionar)
+
+        self._atualizar_lista()
+        self.after_idle(self._ajustar_layout_detalhe)
+
+    def _ao_redimensionar(self, event=None):
+        if event is not None and event.widget is not self:
+            return
+        self._ajustar_layout_detalhe()
+
+    def _ajustar_layout_detalhe(self):
+        self.update_idletasks()
+        largura = self.winfo_width()
+        if largura < 200 or largura == self._ultima_largura_wrap:
+            return
+        self._ultima_largura_wrap = largura
+        self.label_detalhe.config(wraplength=max(280, largura - 48))
+
+    def _estado_selecionado(self):
+        return estado_do_combo(self.combo_estado.get())
+
+    def _filtrar_catalogo(self):
+        texto = self.var_busca.get().strip().lower()
+        if not texto:
+            return list(self.catalogo)
+        filtradas = []
+        for comp in self.catalogo:
+            codigo = str(comp.get("codigo", "")).lower()
+            nome = str(comp.get("nome", "")).lower()
+            if texto in codigo or texto in nome:
+                filtradas.append(comp)
+        return filtradas
+
+    def _atualizar_lista(self, _event=None):
+        from core.composicoes_proprias import calcular_custo_unitario
+
+        self.tree.delete(*self.tree.get_children())
+        estado = self._estado_selecionado()
+        for comp in self._filtrar_catalogo():
+            custo, _ = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
+            self.tree.insert(
+                "",
+                "end",
+                iid=comp["id"],
+                values=(
+                    comp.get("codigo", ""),
+                    comp.get("nome", ""),
+                    comp.get("unidade", ""),
+                    _formatar_moeda(custo) if estado else "—",
+                ),
+            )
+        self.label_detalhe.config(text="Selecione uma composição na lista para ver os detalhes.")
+
+    def _ao_selecionar_item(self, _event=None):
+        selecionado = self.tree.selection()
+        if not selecionado:
+            return
+        comp_id = selecionado[0]
+        comp = next((c for c in self.catalogo if c.get("id") == comp_id), None)
+        if comp is None:
+            return
+        estado = self._estado_selecionado()
+        from core.composicoes_proprias import calcular_custo_unitario
+
+        custo, tem_dep = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
+        aviso = " · ATENÇÃO: há componentes SINAPI depreciados" if tem_dep else ""
+        self.label_detalhe.config(
+            text=(
+                f"Código: {comp.get('codigo', '')}  ·  Unidade: {comp.get('unidade', '')}  ·  "
+                f"Custo unit.: {_formatar_moeda(custo) if estado else '—'}{aviso}\n"
+                f"{comp.get('nome', '')}"
+            ),
+        )
+
+    def _parse_quantidade(self, texto):
+        return float(str(texto).strip().replace(",", "."))
+
+    def _confirmar(self):
+        selecionado = self.tree.selection()
+        if not selecionado:
+            messagebox.showinfo(
+                "Inserir composição",
+                "Selecione uma composição na lista.",
+                parent=self,
+            )
+            return
+
+        comp_id = selecionado[0]
+        comp = next((c for c in self.catalogo if c.get("id") == comp_id), None)
+        if comp is None:
+            return
+
+        try:
+            quantidade = self._parse_quantidade(self.var_quantidade.get())
+            if quantidade <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showwarning(
+                "Quantidade",
+                "Informe um valor numérico maior que zero.",
+                parent=self,
+            )
+            return
+
+        self.on_confirmar(comp, quantidade)
+        self.destroy()
 
 
 class OrcamentoCustomizadoFrame(tk.Frame):
@@ -967,44 +1197,41 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             )
             return
 
-        nome = perguntar_texto(
-            self.winfo_toplevel(),
-            "Composição própria",
-            "Nome do item (ex.: Reparo de trincas e fissuras com PU):",
-        )
-        if not nome or not nome.strip():
-            return
-
-        unidade = perguntar_texto(
-            self.winfo_toplevel(),
-            "Composição própria",
-            "Unidade de medida (ex.: m, m², un):",
-            valor_inicial="m",
-        )
-        if not unidade or not unidade.strip():
-            return
-
-        try:
-            item_id = self.orcamento.adicionar_composicao_propria(
-                grupo_id, nome, unidade, quantidade=1.0
-            )
-        except ValueError as exc:
-            messagebox.showwarning(
-                "Composição própria", str(exc), parent=self.winfo_toplevel()
+        catalogo = listar_composicoes_catalogo()
+        if not catalogo:
+            messagebox.showinfo(
+                "Composição própria",
+                "Nenhuma composição cadastrada. Configure em "
+                "\"Configurar Composições Próprias\" no Hub.",
+                parent=self.winfo_toplevel(),
             )
             return
 
-        messagebox.showinfo(
-            "Composição própria",
-            (
-                "Item registrado como composição própria (em desenvolvimento).\n\n"
-                "No futuro você poderá vincular insumos e composições SINAPI "
-                "com coeficientes definidos por você."
-            ),
-            parent=self.winfo_toplevel(),
+        def ao_confirmar(comp, quantidade):
+            try:
+                item_id = self.orcamento.adicionar_composicao_propria(
+                    grupo_id,
+                    comp["id"],
+                    comp.get("codigo", ""),
+                    comp.get("nome", ""),
+                    comp.get("unidade", ""),
+                    quantidade,
+                )
+            except ValueError as exc:
+                messagebox.showwarning(
+                    "Composição própria", str(exc), parent=self.winfo_toplevel()
+                )
+                return
+            self._atualizar_grade()
+            self.grade.selecionar_item(item_id)
+
+        DialogoBuscaComposicaoPropria(
+            self.winfo_toplevel(),
+            self.ctx,
+            catalogo,
+            self._estado_selecionado(),
+            ao_confirmar,
         )
-        self._atualizar_grade()
-        self.grade.selecionar_item(item_id)
 
     def _grupo_id_para_acoes(self):
         meta = self._meta_selecionada()
@@ -1167,6 +1394,27 @@ class OrcamentoCustomizadoFrame(tk.Frame):
     def _atualizar_grade(self):
         self._preencher_grade()
 
+    def _subtotal_grupo_calculado(self, grupo, bdi, catalogo, estado):
+        total = 0.0
+        for item in grupo.get("itens", []):
+            if item["tipo"] == TIPO_SINAPI:
+                total += subtotal_item(item, bdi)
+            elif item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
+                custo_unit, _ = custo_composicao_propria_item(
+                    item, catalogo, self.ctx.sinapi, estado
+                )
+                sub = custo_unit * item["quantidade"]
+                if bdi:
+                    sub = custo_unitario_com_bdi(custo_unit, bdi) * item["quantidade"]
+                total += sub
+        return total
+
+    def _total_geral_calculado(self, bdi, catalogo, estado):
+        return sum(
+            self._subtotal_grupo_calculado(g, bdi, catalogo, estado)
+            for g in self.orcamento.grupos
+        )
+
     def _preencher_grade(self):
         scroll = self.grade.posicao_scroll()
         selecao = self.grade.obter_meta_selecionada()
@@ -1174,9 +1422,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         estado_atual = self._estado_selecionado()
         bdi = self._obter_bdi()
+        catalogo = listar_composicoes_catalogo()
 
         for idx_grupo, grupo in enumerate(self.orcamento.grupos, start=1):
-            sub_grupo = subtotal_grupo(grupo, bdi)
+            sub_grupo = self._subtotal_grupo_calculado(grupo, bdi, catalogo, estado_atual)
             self.grade.adicionar_linha(
                 meta={"tipo": TIPO_GRUPO, "id": grupo["id"]},
                 valores={
@@ -1230,6 +1479,11 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                         estilo="item",
                     )
                 else:
+                    custo_unit, tem_depreciado = custo_composicao_propria_item(
+                        item, catalogo, self.ctx.sinapi, estado_atual
+                    )
+                    custo_bdi = custo_unitario_com_bdi(custo_unit, bdi)
+                    total = custo_bdi * item["quantidade"]
                     self.grade.adicionar_linha(
                         meta={
                             "tipo": TIPO_COMPOSICAO_PROPRIA,
@@ -1238,20 +1492,24 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                         },
                         valores={
                             "item": num_item,
-                            "codigo": "",
-                            "descricao": f"[Composição própria] {item['nome']}",
+                            "codigo": item.get("codigo", ""),
+                            "descricao": item.get("nome", ""),
                             "quantidade": _formatar_quantidade(item["quantidade"]),
                             "unidade": item["unidade"],
-                            "custo_unit": "—",
-                            "custo_bdi": "—",
-                            "total": _formatar_moeda(0),
+                            "custo_unit": _formatar_moeda(custo_unit) if estado_atual else "—",
+                            "custo_bdi": _formatar_moeda(custo_bdi) if estado_atual else "—",
+                            "total": _formatar_moeda(total) if estado_atual else "—",
                         },
                         estilo="composicao",
+                        alerta_depreciado=tem_depreciado,
                     )
 
         bdi_txt = _formatar_bdi(bdi)
         self.label_total.config(
-            text=f"Total geral (c/ BDI {bdi_txt}%): {_formatar_moeda(self.orcamento.total())}"
+            text=(
+                f"Total geral (c/ BDI {bdi_txt}%): "
+                f"{_formatar_moeda(self._total_geral_calculado(bdi, catalogo, estado_atual))}"
+            )
         )
         if selecao:
             self.grade.selecionar_meta(selecao)

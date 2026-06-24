@@ -9,6 +9,7 @@ from core.app_state import (
     AppContext,
 )
 from ui.area_privativa import criar_area_privativa
+from ui.composicoes_proprias import ComposicoesPropriasFrame
 from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.hub import HubFrame
 from ui.orcamento_customizado import OrcamentoCustomizadoFrame
@@ -19,6 +20,7 @@ TITULOS_JANELA = {
     "area_privativa": "ORC — Área Privativa",
     "consulta_sinapi": "ORC — Consulta SINAPI",
     "orcamento_customizado": "ORC — Orçamento Customizado",
+    "composicoes_proprias": "ORC — Composições Próprias",
 }
 
 
@@ -123,6 +125,12 @@ class OrcApp:
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),
             )
+        elif nome == "composicoes_proprias":
+            self._frames[nome] = ComposicoesPropriasFrame(
+                self.area_conteudo,
+                self.ctx,
+                on_voltar=lambda: self.mostrar_modulo("hub"),
+            )
 
     def _ao_selecionar_modulo_hub(self, modulo):
         if modulo == "area_comum":
@@ -136,7 +144,7 @@ class OrcApp:
         ):
             self._frames["area_privativa"].desativar_scroll()
 
-        modulos_expandidos = ("consulta_sinapi", "orcamento_customizado")
+        modulos_expandidos = ("consulta_sinapi", "orcamento_customizado", "composicoes_proprias")
         saindo_modulo_expandido = (
             self._modulo_atual in modulos_expandidos
             and nome not in modulos_expandidos
@@ -174,7 +182,7 @@ class OrcApp:
         elif nome == "area_privativa":
             self._frames[nome].ativar_scroll()
             self._frames[nome].focar()
-        elif nome in ("consulta_sinapi", "orcamento_customizado"):
+        elif nome in ("consulta_sinapi", "orcamento_customizado", "composicoes_proprias"):
             self._frames[nome].focar()
 
     def executar(self):

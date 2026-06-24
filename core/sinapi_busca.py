@@ -250,3 +250,10 @@ def obter_item_sinapi(sinapi, codigo, estado):
     if linhas.empty:
         return None
     return linhas.iloc[0]
+
+
+def item_sinapi_ausente(sinapi, codigo, estado) -> bool:
+    """True quando o código não existe na base SINAPI para o estado selecionado."""
+    if not str(estado or "").strip():
+        return False
+    return obter_item_sinapi(sinapi, codigo, estado) is None

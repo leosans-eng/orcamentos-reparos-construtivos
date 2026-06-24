@@ -30,7 +30,12 @@ from core.orcamento_storage import (
     renomear_orcamento,
     salvar_arquivo,
 )
-from core.sinapi_busca import obter_item_sinapi, obter_unidades_sinapi, pesquisar_sinapi
+from core.sinapi_busca import (
+    item_sinapi_ausente,
+    obter_item_sinapi,
+    obter_unidades_sinapi,
+    pesquisar_sinapi,
+)
 from ui.dialogo_importar_i9 import DialogoImportarI9
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
@@ -1604,6 +1609,9 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     custo = item["custo_unitario"]
                     custo_bdi = custo_unitario_com_bdi(custo, bdi)
                     total = subtotal_item(item, bdi)
+                    indisponivel = item_sinapi_ausente(
+                        self.ctx.sinapi, item["codigo"], estado_atual
+                    )
                     self.grade.adicionar_linha(
                         meta={
                             "tipo": TIPO_SINAPI,
@@ -1621,6 +1629,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                             "total": _formatar_moeda(total),
                         },
                         estilo="item",
+                        alerta_depreciado=indisponivel,
                     )
                 else:
                     custo_unit, tem_depreciado = custo_composicao_propria_item(

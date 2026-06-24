@@ -27,7 +27,6 @@ from ui.widgets import (
     estado_do_combo,
     perguntar_texto,
     valores_combo_estado,
-    vincular_busca_tecla_estado,
 )
 
 COR_DEPRECIADO = "#fff8e1"
@@ -164,7 +163,6 @@ class ComposicoesPropriasFrame(tk.Frame):
         self.combo_estado.pack(side="left", padx=(4, 12))
         self.combo_estado.set(PLACEHOLDER_ESTADO)
         self.combo_estado.bind("<<ComboboxSelected>>", self._atualizar_listas)
-        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._atualizar_listas)
 
         painel = tk.PanedWindow(conteudo, orient=tk.HORIZONTAL, sashwidth=6, bg="#cccccc")
         painel.pack(fill="both", expand=True)

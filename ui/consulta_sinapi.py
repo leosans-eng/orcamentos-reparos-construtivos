@@ -11,7 +11,6 @@ from ui.widgets import (
     criar_barra_modulo,
     estado_do_combo,
     valores_combo_estado,
-    vincular_busca_tecla_estado,
 )
 
 # Debounce proposital (ms): evita rebuscar a cada tecla enquanto o usuário digita.
@@ -64,7 +63,6 @@ class ConsultaSinapiFrame(tk.Frame):
         )
         self.combo_estado.grid(row=0, column=1, padx=4, pady=4, sticky="w")
         self.combo_estado.set(PLACEHOLDER_ESTADO)
-        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._ao_mudar_estado)
 
         tk.Label(linha_filtros, text="Unidade:", bg="#ececec").grid(
             row=0, column=2, padx=(16, 6), pady=4, sticky="w"

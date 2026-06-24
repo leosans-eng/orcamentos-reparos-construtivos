@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 
 from core.app_state import ALTURA_TREE_MIN, LARGURA_JANELA_PADRAO, NOMES_GRUPOS_REPARO
-from ui.widgets import criar_barra_modulo, vincular_busca_tecla_estado
+from ui.widgets import criar_barra_modulo
 
 
 def criar_area_privativa(parent, ctx, on_voltar):
@@ -143,7 +143,6 @@ def criar_area_privativa(parent, ctx, on_voltar):
             atualizar_tree()
 
     combo_estado.bind("<<ComboboxSelected>>", estado_alterado)
-    vincular_busca_tecla_estado(combo_estado, on_selecionado=estado_alterado)
 
     def obter_estado():
 

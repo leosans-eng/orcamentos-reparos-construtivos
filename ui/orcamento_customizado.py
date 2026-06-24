@@ -43,7 +43,6 @@ from ui.widgets import (
     estado_do_combo,
     perguntar_texto,
     valores_combo_estado,
-    vincular_busca_tecla_estado,
 )
 
 DEBOUNCE_BUSCA_MS = 250
@@ -204,7 +203,6 @@ class DialogoBuscaSinapi(tk.Toplevel):
             self.combo_estado.set(estado_valido)
         else:
             self.combo_estado.set(PLACEHOLDER_ESTADO)
-        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._ao_mudar_estado)
 
         tk.Label(linha_filtros, text="Unidade:", bg="#ececec").grid(
             row=0, column=2, padx=(14, 4), pady=3, sticky="w"
@@ -524,7 +522,6 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
             self.combo_estado.set(estado_valido)
         else:
             self.combo_estado.set(PLACEHOLDER_ESTADO)
-        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._atualizar_lista)
 
         tk.Label(linha_filtros, text="Filtrar:", bg="#ececec").grid(
             row=1, column=0, padx=(0, 4), pady=3, sticky="w"
@@ -746,7 +743,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         tk.Label(linha_salvo, text="Selecionar:", bg="#ececec").pack(side="left")
         self.combo_orcamento = ttk.Combobox(
-            linha_salvo, width=30, state="readonly"
+            linha_salvo, width=50, state="readonly"
         )
         self.combo_orcamento.pack(side="left", padx=(4, 8))
         self.combo_orcamento.bind("<<ComboboxSelected>>", self._ao_trocar_orcamento)
@@ -793,7 +790,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         self.combo_estado.pack(side="left", padx=(4, 0))
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
-        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._ao_mudar_estado)
 
         linha_botoes = tk.Frame(conteudo, bg="#ececec")
         linha_botoes.pack(fill="x", padx=4, pady=(0, 4))

@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk
-import time
 
 from app_paths import icon_path
 
@@ -34,64 +33,6 @@ def aplicar_icone_janela(janela):
         janela.iconbitmap(icone)
     except tk.TclError:
         pass
-
-
-def vincular_busca_tecla_estado(combo, on_selecionado=None):
-    """No combo de estado, tecla inicial seleciona UF (repetir cicla entre as opções)."""
-    estado_busca = {"prefixo": "", "indice": -1, "ultimo_tempo": 0.0}
-
-    def selecionar_por_letra(letra):
-        valores = list(combo["values"])
-        candidatos = [
-            v
-            for v in valores
-            if v != PLACEHOLDER_ESTADO and str(v).upper().startswith(letra)
-        ]
-        if not candidatos:
-            return False
-
-        agora = time.time()
-        if letra == estado_busca["prefixo"] and agora - estado_busca["ultimo_tempo"] < 1.0:
-            estado_busca["indice"] = (estado_busca["indice"] + 1) % len(candidatos)
-        else:
-            estado_busca["prefixo"] = letra
-            estado_busca["indice"] = 0
-        estado_busca["ultimo_tempo"] = agora
-
-        combo.set(candidatos[estado_busca["indice"]])
-        if on_selecionado is not None:
-            on_selecionado()
-        return True
-
-    def ao_tecla(event):
-        if event.keysym in (
-            "Up",
-            "Down",
-            "Return",
-            "Escape",
-            "Tab",
-            "Shift_L",
-            "Shift_R",
-            "Control_L",
-            "Control_R",
-            "Alt_L",
-            "Alt_R",
-        ):
-            return
-        char = event.char
-        if char and len(char) == 1 and char.isprintable():
-            if char.isalpha():
-                selecionar_por_letra(char.upper())
-            return "break"
-        return "break"
-
-    def garantir_foco(_event=None):
-        combo.after_idle(combo.focus_set)
-
-    combo.configure(state="normal", takefocus=True)
-    combo.bind("<KeyPress>", ao_tecla, add="+")
-    combo.bind("<Button-1>", garantir_foco, add="+")
-    combo.bind("<FocusIn>", garantir_foco, add="+")
 
 
 def perguntar_texto(

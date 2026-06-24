@@ -83,6 +83,19 @@ def extrair_bdi_rotulo(ws_origem, linha=7):
     return "30,62"
 
 
+def extrair_estado_sinapi(ws_origem, linha=8):
+    """Extrai a UF de referência SINAPI (ex.: 'PE') da linha de Bancos."""
+    for col in range(1, ws_origem.max_column + 1):
+        valor = ws_origem.cell(row=linha, column=col).value
+        if not valor:
+            continue
+        texto = str(valor).strip()
+        match = re.search(r"SINAPI:\s*([A-Z]{2})\b", texto, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).upper()
+    return ""
+
+
 def extrair_referencia_sinapi(ws_origem, linha=8):
     """Extrai referência SINAPI (ex.: 'SINAPI PE (04/2026)') da linha de Bancos."""
     for col in range(1, ws_origem.max_column + 1):

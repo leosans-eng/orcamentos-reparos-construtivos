@@ -15,6 +15,7 @@ PADROES_ENTRADA = (
     "Planilha Sintética Simples*.xlsx",
     "Planilha Sintética*.xlsx",
 )
+EXTENSOES_ACEITAS = (".xlsx", ".xlsm")
 
 
 class ArquivoEntradaAmbiguo(Exception):
@@ -78,3 +79,13 @@ def resolver_arquivo_entrada(
         raise ArquivoEntradaAmbiguo(candidatos)
 
     return str(candidatos[0]), "detectado automaticamente na pasta"
+
+
+def validar_caminho_planilha(caminho: str | Path) -> Path:
+    """Valida extensão e existência do arquivo Excel de entrada."""
+    arquivo = Path(caminho)
+    if not arquivo.is_file():
+        raise FileNotFoundError(f"Arquivo não encontrado:\n{arquivo}")
+    if arquivo.suffix.lower() not in EXTENSOES_ACEITAS:
+        raise ValueError("Selecione um arquivo Excel (.xlsx).")
+    return arquivo

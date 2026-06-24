@@ -33,6 +33,7 @@ a = Analysis(
         'core.formatador_sinapi.modelo3',
         'core.formatador_sinapi.word_modelo1',
         'core.formatador_sinapi.word_modelo3',
+        'windnd',
     ],
     hookspath=[],
     hooksconfig={},

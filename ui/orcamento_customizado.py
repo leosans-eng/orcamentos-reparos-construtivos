@@ -8,6 +8,7 @@ from core.exportacao_planilha_orcamento import (
     exportar_orcamento_customizado_modelo_formatado,
 )
 from core.composicoes_proprias_storage import listar as listar_composicoes_catalogo
+from core.importacao_i9 import importar_planilha_i9
 from core.orcamento_customizado import (
     BDI_PADRAO,
     TIPO_COMPOSICAO_PROPRIA,
@@ -30,6 +31,7 @@ from core.orcamento_storage import (
     salvar_arquivo,
 )
 from core.sinapi_busca import obter_item_sinapi, obter_unidades_sinapi, pesquisar_sinapi
+from ui.dialogo_importar_i9 import DialogoImportarI9
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
 from ui.widgets import (
@@ -766,21 +768,32 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             text="Excluir orçamento",
             command=self._excluir_orcamento,
             style="Delete.Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_salvo,
+            text="Importar i9",
+            command=self._importar_i9,
+            style="Compact.TButton",
         ).pack(side="left", padx=(0, 12))
 
-        tk.Label(linha_salvo, text="Estado:", bg="#ececec").pack(side="left")
-        estados = self.ctx.obter_estados()
-        self.combo_estado = ttk.Combobox(
-            linha_salvo, values=valores_combo_estado(estados), width=12, state="readonly"
-        )
-        self.combo_estado.pack(side="left", padx=(4, 10))
-        self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
-        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._ao_mudar_estado)
+        frame_direita = tk.Frame(linha_salvo, bg="#ececec")
+        frame_direita.pack(side="right")
 
-        tk.Label(linha_salvo, text="BDI (%):", bg="#ececec").pack(side="left")
+        tk.Label(frame_direita, text="BDI (%):", bg="#ececec").pack(side="left")
         self.var_bdi = tk.StringVar(value=_formatar_bdi(BDI_PADRAO))
         self.var_bdi.trace_add("write", self._ao_alterar_bdi)
-        ttk.Entry(linha_salvo, textvariable=self.var_bdi, width=7).pack(side="left", padx=(4, 0))
+        ttk.Entry(frame_direita, textvariable=self.var_bdi, width=7).pack(
+            side="left", padx=(4, 10)
+        )
+
+        tk.Label(frame_direita, text="Estado:", bg="#ececec").pack(side="left")
+        estados = self.ctx.obter_estados()
+        self.combo_estado = ttk.Combobox(
+            frame_direita, values=valores_combo_estado(estados), width=12, state="readonly"
+        )
+        self.combo_estado.pack(side="left", padx=(4, 0))
+        self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
+        vincular_busca_tecla_estado(self.combo_estado, on_selecionado=self._ao_mudar_estado)
 
         linha_botoes = tk.Frame(conteudo, bg="#ececec")
         linha_botoes.pack(fill="x", padx=4, pady=(0, 4))
@@ -1047,6 +1060,58 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self._atualizar_grade()
         except ValueError as exc:
             messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
+
+    def _importar_i9(self):
+        def ao_importar(caminho):
+            try:
+                resultado = importar_planilha_i9(
+                    caminho, listar_composicoes_catalogo()
+                )
+            except (OSError, ValueError) as exc:
+                messagebox.showerror(
+                    "Importar i9",
+                    str(exc),
+                    parent=self.winfo_toplevel(),
+                )
+                raise
+
+            self._persistir_orcamento_atual()
+            self._dados_arquivo = atualizar_orcamento_na_lista(
+                self._dados_arquivo, resultado.orcamento
+            )
+            salvar_arquivo(self._dados_arquivo)
+            self.orcamento = dict_para_orcamento(
+                obter_orcamento_dict(self._dados_arquivo, resultado.orcamento.id)
+            )
+            self._atualizar_combo_orcamentos()
+            self.combo_orcamento.set(
+                self._rotulo_orcamento(self.orcamento.id, self.orcamento.nome)
+            )
+            self._aplicar_orcamento_na_interface()
+            self._atualizar_grade()
+
+            resumo = (
+                f"Orçamento \"{self.orcamento.nome}\" importado com sucesso.\n"
+                f"{resultado.grupos_importados} etapa(s) e "
+                f"{resultado.itens_importados} item(ns) adicionados."
+            )
+            if resultado.avisos:
+                avisos = "\n".join(f"• {aviso}" for aviso in resultado.avisos[:8])
+                if len(resultado.avisos) > 8:
+                    avisos += f"\n• ... e mais {len(resultado.avisos) - 8} aviso(s)."
+                messagebox.showwarning(
+                    "Importar i9",
+                    f"{resumo}\n\nAvisos:\n{avisos}",
+                    parent=self.winfo_toplevel(),
+                )
+            else:
+                messagebox.showinfo(
+                    "Importar i9",
+                    resumo,
+                    parent=self.winfo_toplevel(),
+                )
+
+        DialogoImportarI9(self.winfo_toplevel(), on_importar=ao_importar)
 
     def _texto_referencia(self):
         ref = self.ctx.sinapi_referencia_rotulo

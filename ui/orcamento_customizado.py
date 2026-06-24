@@ -26,6 +26,7 @@ from core.orcamento_storage import (
     salvar_arquivo,
 )
 from core.sinapi_busca import obter_item_sinapi, obter_unidades_sinapi, pesquisar_sinapi
+from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
@@ -1420,7 +1421,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
 
     def _exportar_planilha(self):
-        pass
+        DialogoSelecionarModeloPlanilha(self.winfo_toplevel())
 
     def _atualizar_grade(self):
         self._preencher_grade()

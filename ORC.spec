@@ -6,6 +6,10 @@ datas = [
     ('icone.ico', '.'),
     ('assets/icons/excel24.png', 'assets/icons'),
     ('assets/icons/excel-preto.png', 'assets/icons'),
+    ('assets/modelos/modelo1.png', 'assets/modelos'),
+    ('assets/modelos/modelo2.png', 'assets/modelos'),
+    ('assets/modelos/modelo3.png', 'assets/modelos'),
+    ('assets/modelos/modelo4.png', 'assets/modelos'),
 ]
 datas += collect_data_files('certifi')
 

@@ -1,5 +1,4 @@
 create_venv.bat
-create_exe.bat
 .venv/
 .cursor/
 backup/
@@ -12,9 +11,9 @@ sinapi/sinapi_referencia/
 build/
 dist/
 setup/output/
-setup/icone.ico
 __pycache__/
 sinapi/teste.py
 sinapi/status.json
 *status.json
 docs/
+dados_usuario/

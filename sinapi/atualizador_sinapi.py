@@ -1,8 +1,8 @@
 from pathlib import Path
 from datetime import datetime
+from typing import MutableMapping
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import time
 import requests
 import zipfile
 import io
@@ -47,7 +47,7 @@ adapter = HTTPAdapter(max_retries=retry)
 session.mount("https://", adapter)
 session.mount("http://", adapter)
 
-HEADERS = {
+HEADERS: MutableMapping[str, str | bytes] = {
     "User-Agent": (
         "Mozilla/5.0 "
         "(Windows NT 10.0; Win64; x64) "
@@ -67,14 +67,19 @@ HEADERS = {
 # Meses anteriores ao atual a verificar no servidor da Caixa.
 MESES_RETROATIVOS_BUSCA = 3
 
-# Tentativas por mês antes de considerar indisponível naquele período.
-TENTATIVAS_POR_MES = 3
-
 # ======= #
 # PADRÕES #
 # ======= #
 
-PADRAO_CSV = re.compile(
+PADRAO_CATALOGO = re.compile(
+    r"(?i)SINAPI_Refer[eê]ncia_(\d{4})_(\d{2})_catalogo\.csv$"
+)
+
+PADRAO_PRECOS = re.compile(
+    r"(?i)SINAPI_Refer[eê]ncia_(\d{4})_(\d{2})_precos\.csv$"
+)
+
+PADRAO_MONOLITICO_OBSOLETO = re.compile(
     r"(?i)SINAPI_Refer[eê]ncia_(\d{4})_(\d{2})\.csv$"
 )
 
@@ -94,18 +99,21 @@ def salvar_status(dados):
 # DESCOBRE ÚLTIMA VERSÃO LOCAL #
 # ============================ #
 
+def _versao_do_csv(nome_arquivo: str):
+    for padrao in (PADRAO_CATALOGO, PADRAO_PRECOS):
+        match = padrao.match(nome_arquivo)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+    return None
+
+
 def obter_ultima_versao_local():
     versoes = []
 
     for arquivo in PASTA_PROCESSADO.glob("*.csv"):
-
-        match = PADRAO_CSV.match(arquivo.name)
-
-        if match:
-            ano = int(match.group(1))
-            mes = int(match.group(2))
-
-            versoes.append((ano, mes))
+        versao = _versao_do_csv(arquivo.name)
+        if versao:
+            versoes.append(versao)
 
     if not versoes:
         return None
@@ -154,6 +162,19 @@ def gerar_url(ano, mes):
 # ================ #
 # TESTA EXISTÊNCIA #
 # ================ #
+
+def _formatar_codigos_resposta(response):
+    codigos = [str(r.status_code) for r in response.history]
+    codigos.append(str(response.status_code))
+    return " -> ".join(codigos)
+
+
+def _codigos_de_excecao(exc):
+    response = getattr(exc, "response", None)
+    if response is not None:
+        return _formatar_codigos_resposta(response)
+    return None
+
 
 def _resposta_indica_zip(response):
     """
@@ -220,33 +241,45 @@ def sinapi_existe(ano, mes):
 
     url = gerar_url(ano, mes)
 
-    for tentativa in range(TENTATIVAS_POR_MES):
+    try:
 
-        try:
+        response = session.get(
+            url,
+            headers=HEADERS,
+            timeout=30,
+            stream=True,
+            allow_redirects=True,
+        )
 
-            response = session.get(
-                url,
-                headers=HEADERS,
-                timeout=30,
-                stream=True,
-                allow_redirects=True,
-            )
+        print(
+            f"  HTTP {_formatar_codigos_resposta(response)} "
+            f"({ano}_{mes:02d})"
+        )
 
-            resultado = _resposta_indica_zip(response)
+        resultado = _resposta_indica_zip(response)
 
-            if resultado is not None:
-                return resultado
+        if resultado is not None:
+            return resultado
 
-        except requests.RequestException as e:
+    except requests.TooManyRedirects as e:
 
+        codigos = _codigos_de_excecao(e)
+        if codigos:
             print(
-                f"Erro verificando "
-                f"{ano}_{mes:02d} "
-                f"(tentativa {tentativa + 1}): {e}"
+                f"  HTTP {codigos} ({ano}_{mes:02d}) "
+                f"— limite de redirects"
             )
+        else:
+            print(
+                f"  HTTP limite de redirects excedido ({ano}_{mes:02d})"
+            )
+        return False
 
-        if tentativa < TENTATIVAS_POR_MES - 1:
-            time.sleep(1.5 * (tentativa + 1))
+    except requests.RequestException as e:
+
+        codigos = _codigos_de_excecao(e)
+        sufixo = f" — HTTP {codigos}" if codigos else ""
+        print(f"Erro verificando {ano}_{mes:02d}: {e}{sufixo}")
 
     return None
 
@@ -324,6 +357,8 @@ def baixar_e_extrair(ano, mes):
         headers=HEADERS,
         timeout=120
     )
+
+    print(f"  HTTP {_formatar_codigos_resposta(response)} (download)")
 
     response.raise_for_status()
 
@@ -488,15 +523,21 @@ def limpar_versoes_antigas():
     # -----------------------------
 
     for arquivo in PASTA_PROCESSADO.glob("*.csv"):
+        nome = arquivo.name
 
-        match = PADRAO_CSV.match(arquivo.name)
-
-        if not match:
+        if PADRAO_MONOLITICO_OBSOLETO.match(nome):
+            try:
+                arquivo.unlink()
+                print(f"CSV obsoleto removido: {nome}")
+            except Exception as e:
+                print(f"Erro removendo CSV obsoleto {nome}: {e}")
             continue
 
-        ano = int(match.group(1))
-        mes = int(match.group(2))
+        versao = _versao_do_csv(nome)
+        if versao is None:
+            continue
 
+        ano, mes = versao
         if (ano, mes) != (ano_mais_recente, mes_mais_recente):
 
             try:

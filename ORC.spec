@@ -4,8 +4,17 @@ from PyInstaller.utils.hooks import collect_data_files
 datas = [
     ('vicios_construtivos.json', '.'),
     ('icone.ico', '.'),
+    ('assets/icons/excel24.png', 'assets/icons'),
+    ('assets/icons/excel-preto.png', 'assets/icons'),
+    ('assets/modelos/modelo1.png', 'assets/modelos'),
+    ('assets/modelos/modelo2.png', 'assets/modelos'),
+    ('assets/modelos/modelo3.png', 'assets/modelos'),
+    ('assets/modelos/modelo4.png', 'assets/modelos'),
+    ('assets/modelos/Modelo 1 - Word.docx', 'assets/modelos'),
+    ('assets/modelos/Modelo 3 - Word.docx', 'assets/modelos'),
 ]
 datas += collect_data_files('certifi')
+datas += collect_data_files('docx')
 
 
 a = Analysis(
@@ -13,7 +22,31 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=['atualizacao', 'app_paths', 'certifi'],
+    hiddenimports=[
+        'atualizacao',
+        'app_paths',
+        'certifi',
+        'num2words',
+        'docx',
+        'windnd',
+        'core.formatador_sinapi',
+        'core.formatador_sinapi.modelo1',
+        'core.formatador_sinapi.modelo2',
+        'core.formatador_sinapi.modelo3',
+        'core.formatador_sinapi.word_modelo1',
+        'core.formatador_sinapi.word_modelo3',
+        'core.formatador_sinapi.entrada',
+        'core.formatador_sinapi.service',
+        'core.sinapi_base',
+        'core.sinapi_busca',
+        'core.importacao_i9',
+        'core.exportacao_planilha_orcamento',
+        'core.planilha_sintetica',
+        'core.orcamento_customizado',
+        'core.composicoes_proprias',
+        'core.composicoes_proprias_storage',
+        'core.orcamento_storage',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

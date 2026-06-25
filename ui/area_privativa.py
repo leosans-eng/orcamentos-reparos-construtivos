@@ -10,7 +10,8 @@ from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 
 from core.app_state import ALTURA_TREE_MIN, LARGURA_JANELA_PADRAO, NOMES_GRUPOS_REPARO
-from ui.widgets import criar_botao_voltar
+from core.sinapi_busca import obter_item_sinapi
+from ui.widgets import criar_barra_modulo
 
 
 def criar_area_privativa(parent, ctx, on_voltar):
@@ -21,9 +22,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     wrapper = tk.Frame(parent)
 
-    barra = tk.Frame(wrapper, bg="#ececec")
-    barra.pack(fill="x", padx=10, pady=(8, 0))
-    criar_botao_voltar(barra, on_voltar, bg_parent="#ececec").pack(side="left")
+    criar_barra_modulo(wrapper, "Área Privativa", on_voltar)
 
     # SCROLL DA JANELA             #
     # ---------------------------- #
@@ -139,7 +138,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
     combo_estado = ttk.Combobox(frame_dados, values=estados, width=6, state="readonly")
     combo_estado.grid(row=0, column=5, padx=5)
 
-    def estado_alterado(event):
+    def estado_alterado(event=None):
 
         if lista_anomalias:
             atualizar_tree()
@@ -155,6 +154,9 @@ def criar_area_privativa(parent, ctx, on_voltar):
             raise ValueError
 
         return estado
+
+    def linha_sinapi_codigo(codigo, estado):
+        return obter_item_sinapi(ctx.sinapi, str(codigo).strip(), estado)
 
     # linha 2 - Acompanhamento Técnico, Eventuais, Estado, Aluguel e BDI
     var_acompanhamento = tk.BooleanVar(value=True)
@@ -690,13 +692,9 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
                 estado = combo_estado.get()
 
-                linha_sinapi = ctx.sinapi[
-                    (ctx.sinapi["codigo"] == codigo) &
-                    (ctx.sinapi["estado"] == estado)
-                ]
-
-                if not linha_sinapi.empty:
-                    valor = linha_sinapi.iloc[0]["custo"]
+                linha_sinapi = linha_sinapi_codigo(codigo, estado)
+                if linha_sinapi is not None:
+                    valor = linha_sinapi.get("custo", 0)
                 else:
                     valor = 0
 
@@ -821,18 +819,11 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
                     estado = obter_estado()
 
-                    linha_sinapi = ctx.sinapi[
-                        (ctx.sinapi["codigo"] == codigo) &
-                        (ctx.sinapi["estado"] == estado)
-                    ]
-
-                    if not linha_sinapi.empty:
-
-                        descricao = linha_sinapi.iloc[0]["descricao"]
-                        valor = linha_sinapi.iloc[0]["custo"]
-
+                    linha_sinapi = linha_sinapi_codigo(codigo, estado)
+                    if linha_sinapi is not None:
+                        descricao = linha_sinapi.get("descricao", "")
+                        valor = linha_sinapi.get("custo", 0)
                     else:
-
                         descricao = "Código não encontrado"
                         valor = 0
 
@@ -875,14 +866,10 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 codigo = str(etapa["codigo_sinapi"])
                 estado = obter_estado()
 
-                linha_sinapi = ctx.sinapi[
-                    (ctx.sinapi["codigo"] == codigo) &
-                    (ctx.sinapi["estado"] == estado)
-                ]
-
-                if not linha_sinapi.empty:
-                    descricao = linha_sinapi.iloc[0]["descricao"]
-                    valor = linha_sinapi.iloc[0]["custo"]
+                linha_sinapi = linha_sinapi_codigo(codigo, estado)
+                if linha_sinapi is not None:
+                    descricao = linha_sinapi.get("descricao", "")
+                    valor = linha_sinapi.get("custo", 0)
                 else:
                     descricao = "Código não encontrado"
                     valor = 0

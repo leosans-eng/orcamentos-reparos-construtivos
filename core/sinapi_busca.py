@@ -3,12 +3,14 @@ import unicodedata
 
 import pandas as pd
 
+from core.sinapi_base import COLUNAS_BUSCA, SinapiBase
+
 # Sinônimos usados na busca (chave e variantes já normalizadas sem acento).
 # Se o usuário digitar qualquer termo do grupo, os demais também contam na busca.
 SINONIMOS = {
     "ceramica": ["ceramico", "ceramica", "ceramicos", "porcelanato", "revestimento ceramico"],
     "azulejo": ["azulejo", "azulejos", "pastilha", "pastilhas"],
-    "reboco": ["reboco", "rebocos", "emboco", "emboço", "argamassa de reboco"],
+    "reboco": ["reboco", "rebocos", "emboco", "emboço", "argamassa de reboco", "reboque"],
     "chapisco": ["chapisco", "chapiscos", "emboço", "emboco"],
     "pintura": ["pintura", "pinturas", "tinta", "pintar", "latex", "látex"],
     "alvenaria": ["alvenaria", "alvenarias", "tijolo", "tijolos", "bloco", "blocos"],
@@ -64,13 +66,13 @@ def _consulta_parece_codigo(consulta):
     return bool(limpo) and limpo.isdigit()
 
 
+def _as_base(sinapi: SinapiBase) -> SinapiBase:
+    return sinapi
+
+
 def _filtrar_por_estado(sinapi, estado):
-    if sinapi.empty or "estado" not in sinapi.columns:
-        return sinapi.iloc[0:0].copy()
-    estado = str(estado).strip()
-    if not estado:
-        return sinapi.iloc[0:0].copy()
-    return sinapi[sinapi["estado"].astype(str).str.strip() == estado].copy()
+    base = _as_base(sinapi)
+    return base.dataframe_estado(estado)
 
 
 def _mascara_grupos(descricoes_norm, grupos):
@@ -149,9 +151,10 @@ def _filtrar_por_consulta(df, consulta, permitir_parcial=True):
 
 def obter_unidades_sinapi(sinapi, estado=None, consulta=None):
     """Unidades distintas na base, opcionalmente restritas ao estado e à consulta."""
-    if sinapi.empty or "unidade" not in sinapi.columns:
+    base = _as_base(sinapi)
+    if base.empty:
         return []
-    df = _filtrar_por_estado(sinapi, estado) if estado else sinapi
+    df = base.dataframe_estado(estado) if estado else base.catalogo
     if df.empty:
         return []
     if consulta and consulta.strip():
@@ -173,9 +176,7 @@ def pesquisar_sinapi(sinapi, estado, consulta, unidade=None, limite=250):
     Busca insumos/composições em uma única passagem de filtro.
     Retorna (resultados, mensagem, unidades_disponiveis).
     """
-    colunas = list(sinapi.columns) if not sinapi.empty else [
-        "codigo", "descricao", "unidade", "estado", "custo",
-    ]
+    colunas = list(COLUNAS_BUSCA)
     vazio = pd.DataFrame(columns=colunas)
 
     df = _filtrar_por_estado(sinapi, estado)
@@ -199,14 +200,16 @@ def pesquisar_sinapi(sinapi, estado, consulta, unidade=None, limite=250):
     if not _consulta_parece_codigo(texto):
         consulta_norm = normalizar_texto(texto)
         grupos = [expandir_token(t) for t in tokens]
-        resultados["_score"] = [
-            _pontuar_linha(row["codigo"], row["descricao"], grupos, consulta_norm)
-            for _, row in resultados.iterrows()
-        ]
-        resultados = resultados.sort_values("_score", ascending=False).drop(columns=["_score"])
+        resultados = resultados.copy()
+        resultados["_score"] = resultados.apply(
+            lambda row: _pontuar_linha(row["codigo"], row["descricao"], grupos, consulta_norm),
+            axis=1,
+        )
+        resultados = pd.DataFrame(resultados).sort_values(by="_score", ascending=False)
+        resultados = resultados.drop(columns=["_score"])
 
     resultados = _filtrar_por_unidade(resultados, unidade)
-    if resultados.empty:
+    if not isinstance(resultados, pd.DataFrame) or resultados.empty:
         sufixo_un = f" na unidade {unidade}" if unidade and unidade != "Todas" else ""
         return vazio, f"Nenhum insumo ou composição encontrada{sufixo_un}. Tente sinônimos ou menos palavras.", unidades
 
@@ -238,15 +241,15 @@ def buscar_sinapi(sinapi, estado, consulta, limite=250, modo_parcial=False, unid
 
 
 def obter_item_sinapi(sinapi, codigo, estado):
-    """Retorna uma linha da base ou None — útil para composições futuras."""
-    if sinapi.empty:
+    """Retorna uma linha da base ou None."""
+    base = _as_base(sinapi)
+    if base.empty:
         return None
-    codigo = str(codigo).strip()
-    estado = str(estado).strip()
-    linhas = sinapi[
-        (sinapi["codigo"].astype(str).str.strip() == codigo)
-        & (sinapi["estado"].astype(str).str.strip() == estado)
-    ]
-    if linhas.empty:
-        return None
-    return linhas.iloc[0]
+    return base.obter_linha(codigo, estado)
+
+
+def item_sinapi_ausente(sinapi, codigo, estado) -> bool:
+    """True quando o código não existe na base SINAPI para o estado selecionado."""
+    if not str(estado or "").strip():
+        return False
+    return obter_item_sinapi(sinapi, codigo, estado) is None

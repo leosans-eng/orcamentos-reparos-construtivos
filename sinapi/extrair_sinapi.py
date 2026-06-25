@@ -15,24 +15,21 @@ PASTA_PROCESSADO = APP_DIR / "sinapi" / "sinapi_processado"
 
 PASTA_PROCESSADO.mkdir(parents=True, exist_ok=True)
 
-# ---------------------------- #
-# PROCESSAR UM ARQUIVO         #
-# ---------------------------- #
+
+def _nome_base_referencia(caminho_excel: Path) -> str:
+    return caminho_excel.stem
+
 
 def processar_arquivo(caminho_excel, callback=None):
 
     caminho_excel = Path(caminho_excel)
+    nome_base = _nome_base_referencia(caminho_excel)
 
-    nome_csv = caminho_excel.stem + ".csv"
-
-    caminho_csv = os.path.join(
-        PASTA_PROCESSADO,
-        nome_csv
-    )
+    caminho_catalogo = PASTA_PROCESSADO / f"{nome_base}_catalogo.csv"
+    caminho_precos = PASTA_PROCESSADO / f"{nome_base}_precos.csv"
 
     def log(msg):
         print(msg)
-
         if callback:
             callback(msg)
 
@@ -49,6 +46,9 @@ def processar_arquivo(caminho_excel, callback=None):
         read_only=True,
         data_only=True
     )
+
+    catalogo: dict[str, tuple[str, str, str]] = {}
+    precos: list[tuple[str, str, float]] = []
 
     # ========================================================== #
     # EXTRAÇÃO DAS COMPOSIÇÕES (CSD)                             #
@@ -78,10 +78,6 @@ def processar_arquivo(caminho_excel, callback=None):
 
     log(f"Estados detectados ({len(estados)}): {estados}")
 
-    # ---------------------------- #
-    # LER CÓDIGOS DA ABA ANALÍTICO #
-    # ---------------------------- #
-
     log("Lendo códigos da aba Analítico...")
 
     ws_analitico = wb["Analítico"]
@@ -109,173 +105,161 @@ def processar_arquivo(caminho_excel, callback=None):
     contador = 0
     linhas_gravadas = 0
 
+    indices_custo = [c - 1 for c in colunas_custo]
+
+    for row in ws.iter_rows(min_row=11, values_only=True):
+
+        contador += 1
+
+        descricao = row[2]
+        unidade = row[3]
+
+        if not isinstance(descricao, str):
+            continue
+
+        chave = (descricao.strip(), unidade.strip())
+        codigo = mapa_codigos.get(chave)
+
+        if not codigo:
+            continue
+
+        codigo_str = str(codigo)
+        catalogo[codigo_str] = (descricao, unidade, "C")
+
+        for estado, idx in zip(estados, indices_custo):
+
+            custo = row[idx]
+
+            if custo is None:
+                continue
+
+            precos.append((codigo_str, estado, float(custo)))
+            linhas_gravadas += 1
+
+        if contador % 1000 == 0:
+
+            log(
+                f"CSD: {contador} linhas analisadas | "
+                f"{linhas_gravadas} preços gravados"
+            )
+
+    log("==========Extração das composições finalizada.==========")
+
+    # ========================================================== #
+    # EXTRAÇÃO DOS INSUMOS (ISD)                                 #
+    # ========================================================== #
+
+    log("\nExtraindo insumos da aba ISD...")
+
+    ws_isd = wb["ISD"]
+
+    linha_cabecalho = None
+
+    for r in range(1, 50):
+
+        valor = ws_isd.cell(row=r, column=2).value
+
+        if valor and "Código" in str(valor):
+            linha_cabecalho = r
+            break
+
+    if not linha_cabecalho:
+        raise Exception("Cabeçalho da ISD não encontrado")
+
+    log(f"Cabeçalho ISD encontrado na linha: {linha_cabecalho}")
+
+    estados_isd = []
+    colunas_custo_isd = []
+
+    col = 6  # coluna F
+
+    while True:
+
+        estado = ws_isd.cell(row=linha_cabecalho, column=col).value
+
+        if not estado:
+            break
+
+        estados_isd.append(str(estado).strip())
+        colunas_custo_isd.append(col - 1)
+
+        col += 1
+
+        if col > 200:
+            break
+
+    log(f"Estados detectados ({len(estados_isd)}): {estados_isd}")
+
+    linhas_isd = 0
+
+    for row in ws_isd.iter_rows(
+        min_row=linha_cabecalho + 1,
+        values_only=True
+    ):
+
+        linhas_isd += 1
+
+        codigo = row[1]
+        descricao = row[2]
+        unidade = row[3]
+
+        if not codigo:
+            continue
+
+        if not isinstance(descricao, str):
+            continue
+
+        codigo_str = str(int(codigo))
+        catalogo[codigo_str] = (descricao, unidade, "I")
+
+        for estado, idx in zip(estados_isd, colunas_custo_isd):
+
+            custo = row[idx]
+
+            if custo is None:
+                continue
+
+            precos.append((codigo_str, estado, float(custo)))
+            linhas_gravadas += 1
+
+        if linhas_isd % 2000 == 0:
+
+            log(
+                f"ISD: {linhas_isd} linhas analisadas | "
+                f"{linhas_gravadas} preços gravados"
+            )
+
     with open(
-        caminho_csv,
+        caminho_catalogo,
         "w",
         newline="",
         encoding="utf-8"
-    ) as f:
-
-        writer = csv.writer(f)
-
-        writer.writerow([
-            "codigo",
-            "descricao",
-            "unidade",
-            "estado",
-            "custo"
-        ])
-
-        indices_custo = [c-1 for c in colunas_custo]
-
-        # ---------------------------- #
-        # EXTRAÇÃO CSD                 #
-        # ---------------------------- #
-
-        for row in ws.iter_rows(min_row=11, values_only=True):
-
-            contador += 1
-
-            descricao = row[2]
-            unidade = row[3]
-
-            if not isinstance(descricao, str):
-                continue
-
-            chave = (descricao.strip(), unidade.strip())
-            codigo = mapa_codigos.get(chave)
-
-            if not codigo:
-                continue
-
-            for estado, idx in zip(estados, indices_custo):
-
-                custo = row[idx]
-
-                if custo is None:
-                    continue
-
-                writer.writerow([
-                    codigo,
-                    descricao,
-                    unidade,
-                    estado,
-                    float(custo)
-                ])
-
-                linhas_gravadas += 1
-
-            if contador % 1000 == 0:
-
-                log(
-                    f"CSD: {contador} linhas analisadas | "
-                    f"{linhas_gravadas} registros gravados"
-                )
-
-        log("==========Extração das composições finalizada.==========")
-
-        # ========================================================== #
-        # EXTRAÇÃO DOS INSUMOS (ISD)                                 #
-        # ========================================================== #
-
-        log("\nExtraindo insumos da aba ISD...")
-
-        ws_isd = wb["ISD"]
-
-        # localizar cabeçalho
-
-        linha_cabecalho = None
-
-        for r in range(1, 50):
-
-            valor = ws_isd.cell(row=r, column=2).value
-
-            if valor and "Código" in str(valor):
-                linha_cabecalho = r
-                break
-
-        if not linha_cabecalho:
-            raise Exception("Cabeçalho da ISD não encontrado")
-
-        log(f"Cabeçalho ISD encontrado na linha: {linha_cabecalho}")
-
-        estados_isd = []
-        colunas_custo_isd = []
-
-        col = 6  # coluna F
-
-        while True:
-
-            estado = ws_isd.cell(row=linha_cabecalho, column=col).value
-
-            if not estado:
-                break
-
-            estados_isd.append(str(estado).strip())
-            colunas_custo_isd.append(col - 1)
-
-            col += 1
-
-            if col > 200:
-                break
-
-        log(f"Estados detectados ({len(estados_isd)}): {estados_isd}")
-
-        linhas_isd = 0
-
-        for row in ws_isd.iter_rows(
-            min_row=linha_cabecalho + 1,
-            values_only=True
+    ) as f_cat:
+        writer = csv.writer(f_cat)
+        writer.writerow(["codigo", "descricao", "unidade", "tipo"])
+        for codigo, (descricao, unidade, tipo) in sorted(
+            catalogo.items(), key=lambda item: int(item[0])
         ):
+            writer.writerow([codigo, descricao, unidade, tipo])
 
-            linhas_isd += 1
+    with open(
+        caminho_precos,
+        "w",
+        newline="",
+        encoding="utf-8"
+    ) as f_pre:
+        writer = csv.writer(f_pre)
+        writer.writerow(["codigo", "estado", "custo"])
+        writer.writerows(precos)
 
-            codigo = row[1]
-            descricao = row[2]
-            unidade = row[3]
-
-            if not codigo:
-                continue
-
-            if not isinstance(descricao, str):
-                continue
-
-            for estado, idx in zip(estados_isd, colunas_custo_isd):
-
-                custo = row[idx]
-
-                if custo is None:
-                    continue
-
-                writer.writerow([
-                    int(codigo),
-                    descricao,
-                    unidade,
-                    estado,
-                    float(custo)
-                ])
-
-                linhas_gravadas += 1
-
-            if linhas_isd % 2000 == 0:
-
-                log(
-                    f"ISD: {linhas_isd} linhas analisadas | "
-                    f"{linhas_gravadas} registros gravados"
-                )
-
-    log(f"Arquivo CSV criado: {caminho_csv}")
+    log(f"Catálogo criado: {caminho_catalogo} ({len(catalogo)} itens)")
+    log(f"Preços criados: {caminho_precos} ({len(precos)} registros)")
     log(f"Linhas CSD analisadas: {contador}")
     log(f"Linhas ISD analisadas: {linhas_isd}")
-    log(f"Registros totais: {linhas_gravadas}")
-
     log("\n==========Extração finalizada.==========")
 
-    return caminho_csv
+    return str(caminho_catalogo)
 
-# ==========================================
-# EXECUÇÃO DIRETA
-# ==========================================
 
 if __name__ == "__main__":
 

@@ -1,8 +1,17 @@
+import os
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 from core.sinapi_busca import pesquisar_sinapi, obter_unidades_sinapi
-from ui.widgets import COR_TITULO_PADRAO, criar_botao_voltar
+from core.sinapi_loader import obter_xlsx_sinapi_referencia_mais_recente
+from app_paths import asset_path
+from ui.widgets import (
+    PLACEHOLDER_ESTADO,
+    centralizar_janela,
+    criar_barra_modulo,
+    estado_do_combo,
+    valores_combo_estado,
+)
 
 # Debounce proposital (ms): evita rebuscar a cada tecla enquanto o usuário digita.
 DEBOUNCE_BUSCA_MS = 300
@@ -20,29 +29,14 @@ class ConsultaSinapiFrame(tk.Frame):
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
     def _montar(self):
-        barra = tk.Frame(self, bg="#ececec")
-        barra.pack(fill="x", padx=10, pady=(8, 0))
-        criar_botao_voltar(barra, self.on_voltar, bg_parent="#ececec").pack(side="left")
-
-        cabecalho = tk.Frame(self, bg="#ececec")
-        cabecalho.pack(fill="x", padx=16, pady=(12, 8))
-
-        tk.Label(
-            cabecalho,
-            text="Consulta SINAPI",
-            font=("Arial", 14, "bold"),
-            fg=COR_TITULO_PADRAO,
-            bg="#ececec",
-        ).pack(side="left")
-
-        self.label_referencia = tk.Label(
-            cabecalho,
-            text=self._texto_referencia(),
-            font=("Arial", 9),
-            fg="#666666",
-            bg="#ececec",
+        self._icone_excel = None
+        self.label_referencia = criar_barra_modulo(
+            self,
+            "Consulta SINAPI",
+            self.on_voltar,
+            texto_referencia=self._texto_referencia(),
+            montar_acoes_antes_referencia=self._montar_botao_sinapi_cabecalho,
         )
-        self.label_referencia.pack(side="right")
 
         painel_busca = tk.LabelFrame(
             self,
@@ -63,13 +57,12 @@ class ConsultaSinapiFrame(tk.Frame):
         estados = self.ctx.obter_estados()
         self.combo_estado = ttk.Combobox(
             linha_filtros,
-            values=estados,
-            width=8,
+            values=valores_combo_estado(estados),
+            width=14,
             state="readonly",
         )
         self.combo_estado.grid(row=0, column=1, padx=4, pady=4, sticky="w")
-        if estados:
-            self.combo_estado.set("SP" if "SP" in estados else estados[0])
+        self.combo_estado.set(PLACEHOLDER_ESTADO)
 
         tk.Label(linha_filtros, text="Unidade:", bg="#ececec").grid(
             row=0, column=2, padx=(16, 6), pady=4, sticky="w"
@@ -128,7 +121,7 @@ class ConsultaSinapiFrame(tk.Frame):
         )
         painel_resultados.pack(fill="both", expand=True, padx=16, pady=(0, 12))
 
-        colunas = ("codigo", "descricao", "unidade", "custo")
+        colunas = ("codigo", "tipo_ic", "descricao", "unidade", "custo")
         self.tree = ttk.Treeview(
             painel_resultados,
             columns=colunas,
@@ -136,12 +129,14 @@ class ConsultaSinapiFrame(tk.Frame):
             height=14,
         )
         self.tree.heading("codigo", text="Código")
+        self.tree.heading("tipo_ic", text="I/C")
         self.tree.heading("descricao", text="Descrição")
         self.tree.heading("unidade", text="Unid.")
         self.tree.heading("custo", text="Custo unit. (R$)")
 
         self.tree.column("codigo", width=90, minwidth=70, stretch=False)
-        self.tree.column("descricao", width=520, minwidth=200, stretch=True)
+        self.tree.column("tipo_ic", width=40, minwidth=36, stretch=False, anchor="center")
+        self.tree.column("descricao", width=500, minwidth=200, stretch=True)
         self.tree.column("unidade", width=60, minwidth=50, stretch=False, anchor="center")
         self.tree.column("custo", width=110, minwidth=90, stretch=False, anchor="e")
 
@@ -185,6 +180,49 @@ class ConsultaSinapiFrame(tk.Frame):
             return "Base não carregada"
         return f"Referência SINAPI: {ref}"
 
+    def _montar_botao_sinapi_cabecalho(self, parent):
+        caminho_icone = asset_path("icons", "excel24.png")
+        kwargs_botao = {
+            "text": "Abrir SINAPI Completa",
+            "command": self._abrir_sinapi_real,
+            "bg": "#ececec",
+            "activebackground": "#dfe8ec",
+            "relief": "flat",
+            "bd": 0,
+            "padx": 4,
+            "pady": 0,
+            "cursor": "hand2",
+            "font": ("Arial", 9),
+            "fg": "#444444",
+        }
+        if caminho_icone is not None:
+            self._icone_excel = tk.PhotoImage(file=str(caminho_icone))
+            kwargs_botao["image"] = self._icone_excel
+            kwargs_botao["compound"] = "left"
+        tk.Button(parent, **kwargs_botao).pack(side="right", padx=(0, 10))
+
+    def _abrir_sinapi_real(self):
+        caminho = obter_xlsx_sinapi_referencia_mais_recente()
+        if caminho is None or not caminho.is_file():
+            messagebox.showwarning(
+                "SINAPI Real",
+                (
+                    "Nenhum arquivo Excel da SINAPI foi encontrado em "
+                    "sinapi/sinapi_referencia.\n\n"
+                    "Aguarde a atualização automática ou verifique a pasta."
+                ),
+                parent=self.winfo_toplevel(),
+            )
+            return
+        try:
+            os.startfile(str(caminho))
+        except OSError as exc:
+            messagebox.showerror(
+                "SINAPI Real",
+                f"Não foi possível abrir o arquivo:\n{caminho}\n\n{exc}",
+                parent=self.winfo_toplevel(),
+            )
+
     def _ao_redimensionar(self, event=None):
         if event is not None and event.widget is not self:
             return
@@ -217,7 +255,7 @@ class ConsultaSinapiFrame(tk.Frame):
             self.combo_unidade.set(UNIDADE_TODAS)
 
     def _atualizar_unidades(self, consulta=None):
-        estado = self.combo_estado.get().strip()
+        estado = estado_do_combo(self.combo_estado.get())
         if consulta is None:
             consulta = self.var_busca.get() if hasattr(self, "var_busca") else ""
         texto = consulta
@@ -233,11 +271,12 @@ class ConsultaSinapiFrame(tk.Frame):
 
     def _ao_atualizar_sinapi(self):
         estados = self.ctx.obter_estados()
-        self.combo_estado["values"] = estados
-        if estados and self.combo_estado.get() not in estados:
-            self.combo_estado.set("SP" if "SP" in estados else estados[0])
+        self.combo_estado["values"] = valores_combo_estado(estados)
+        if self.combo_estado.get() not in self.combo_estado["values"]:
+            self.combo_estado.set(PLACEHOLDER_ESTADO)
         self._atualizar_unidades()
-        self.label_referencia.config(text=self._texto_referencia())
+        if self.label_referencia is not None:
+            self.label_referencia.config(text=self._texto_referencia())
         if self.var_busca.get().strip():
             self._executar_busca()
 
@@ -251,7 +290,7 @@ class ConsultaSinapiFrame(tk.Frame):
             self.after_cancel(self._job_busca)
             self._job_busca = None
 
-        estado = self.combo_estado.get().strip()
+        estado = estado_do_combo(self.combo_estado.get())
         consulta = self.var_busca.get()
         unidade = self._unidade_selecionada()
 
@@ -289,6 +328,7 @@ class ConsultaSinapiFrame(tk.Frame):
                 "end",
                 values=(
                     str(linha.get("codigo", "")),
+                    str(linha.get("tipo", "")).strip().upper()[:1] or "—",
                     str(linha.get("descricao", "")),
                     str(linha.get("unidade", "")),
                     custo_fmt,
@@ -301,14 +341,14 @@ class ConsultaSinapiFrame(tk.Frame):
         if not selecionado:
             return
         valores = self.tree.item(selecionado[0], "values")
-        if len(valores) < 4:
+        if len(valores) < 5:
             return
-        codigo, descricao, unidade, custo = valores
-        estado = self.combo_estado.get().strip()
+        codigo, tipo_ic, descricao, unidade, custo = valores
+        estado = estado_do_combo(self.combo_estado.get())
         self.label_detalhe.config(
             text=(
-                f"Código: {codigo}  ·  Estado: {estado}  ·  Unidade: {unidade}  ·  "
-                f"Custo: {custo}\n{descricao}"
+                f"Código: {codigo}  ·  {tipo_ic}  ·  Estado: {estado}  ·  "
+                f"Unidade: {unidade}  ·  Custo: {custo}\n{descricao}"
             ),
         )
 

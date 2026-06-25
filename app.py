@@ -9,13 +9,18 @@ from core.app_state import (
     AppContext,
 )
 from ui.area_privativa import criar_area_privativa
+from ui.composicoes_proprias import ComposicoesPropriasFrame
 from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.hub import HubFrame
+from ui.orcamento_customizado import OrcamentoCustomizadoFrame
+from ui.widgets import centralizar_janela_principal, configurar_estilos_ttk
 
 TITULOS_JANELA = {
     "hub": "ORC — Orçamentos de Reparos Construtivos",
     "area_privativa": "ORC — Área Privativa",
     "consulta_sinapi": "ORC — Consulta SINAPI",
+    "orcamento_customizado": "ORC — Orçamento Customizado",
+    "composicoes_proprias": "ORC — Composições Próprias",
 }
 
 
@@ -27,12 +32,13 @@ class OrcApp:
 
         self.janela = tk.Tk()
         self.ctx.janela = self.janela
+        configurar_estilos_ttk(self.janela)
 
         self.janela.title(TITULOS_JANELA["hub"])
-        self.janela.geometry(
-            f"{LARGURA_JANELA_PADRAO}x{ALTURA_JANELA_PADRAO}+200+40"
-        )
         self.janela.minsize(860, 520)
+        centralizar_janela_principal(
+            self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
+        )
 
         icone = icon_path()
         if icone is not None:
@@ -60,17 +66,19 @@ class OrcApp:
             pass
 
     def _montar_rodape(self):
-        self.ctx.frame_rodape = tk.Frame(self.janela)
-        self.ctx.frame_rodape.pack(side="bottom", fill="x", padx=10, pady=(0, 6))
+        frame_rodape = tk.Frame(self.janela)
+        self.ctx.frame_rodape = frame_rodape
+        frame_rodape.pack(side="bottom", fill="x", padx=10, pady=(0, 6))
 
-        self.ctx.label_rodape = tk.Label(
-            self.ctx.frame_rodape,
+        label_rodape = tk.Label(
+            frame_rodape,
             text=self.ctx.texto_rodape_interface(),
             font=("Arial", 8),
             fg="#555555",
             anchor="w",
         )
-        self.ctx.label_rodape.pack(side="left", anchor="w")
+        self.ctx.label_rodape = label_rodape
+        label_rodape.pack(side="left", anchor="w")
 
         if self.ctx.caminho_sinapi_carregado:
             nome_csv = (
@@ -81,7 +89,7 @@ class OrcApp:
             nome_csv = "Nenhum arquivo SINAPI carregado"
 
         self.ctx.label_nome_csv_rodape = tk.Label(
-            self.ctx.frame_rodape,
+            frame_rodape,
             text=nome_csv,
             font=("Arial", 8, "bold"),
             fg="#C62828",
@@ -111,6 +119,18 @@ class OrcApp:
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),
             )
+        elif nome == "orcamento_customizado":
+            self._frames[nome] = OrcamentoCustomizadoFrame(
+                self.area_conteudo,
+                self.ctx,
+                on_voltar=lambda: self.mostrar_modulo("hub"),
+            )
+        elif nome == "composicoes_proprias":
+            self._frames[nome] = ComposicoesPropriasFrame(
+                self.area_conteudo,
+                self.ctx,
+                on_voltar=lambda: self.mostrar_modulo("hub"),
+            )
 
     def _ao_selecionar_modulo_hub(self, modulo):
         if modulo == "area_comum":
@@ -124,10 +144,12 @@ class OrcApp:
         ):
             self._frames["area_privativa"].desativar_scroll()
 
-        saindo_consulta = (
-            self._modulo_atual == "consulta_sinapi" and nome != "consulta_sinapi"
+        modulos_expandidos = ("consulta_sinapi", "orcamento_customizado", "composicoes_proprias")
+        saindo_modulo_expandido = (
+            self._modulo_atual in modulos_expandidos
+            and nome not in modulos_expandidos
         )
-        entrando_consulta = nome == "consulta_sinapi"
+        entrando_modulo_expandido = nome in modulos_expandidos
 
         for frame in self._frames.values():
             frame.pack_forget()
@@ -139,24 +161,28 @@ class OrcApp:
         self._modulo_atual = nome
         self.janela.title(TITULOS_JANELA.get(nome, TITULOS_JANELA["hub"]))
 
-        if entrando_consulta:
+        if entrando_modulo_expandido:
             try:
                 self.janela.state("zoomed")
             except tk.TclError:
                 self.janela.attributes("-zoomed", True)
-        elif saindo_consulta:
+        elif saindo_modulo_expandido:
             try:
                 self.janela.state("normal")
             except tk.TclError:
                 self.janela.attributes("-zoomed", False)
-            self.janela.geometry(
-                f"{LARGURA_JANELA_PADRAO}x{ALTURA_JANELA_PADRAO}+200+40"
+            centralizar_janela_principal(
+                self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
             )
 
-        if nome == "area_privativa":
+        if nome == "hub":
+            centralizar_janela_principal(
+                self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
+            )
+        elif nome == "area_privativa":
             self._frames[nome].ativar_scroll()
             self._frames[nome].focar()
-        elif nome == "consulta_sinapi":
+        elif nome in ("consulta_sinapi", "orcamento_customizado", "composicoes_proprias"):
             self._frames[nome].focar()
 
     def executar(self):

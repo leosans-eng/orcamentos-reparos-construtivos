@@ -47,6 +47,8 @@ def nome_tipo_sinapi(valor) -> str:
         return TIPO_INSUMO
     if letra == "C":
         return TIPO_COMPOSICAO
+    if letra == "P":
+        return "Composição própria"
     return ""
 
 

@@ -217,17 +217,39 @@ class OrcamentoCustomizado:
     def substituir_item_sinapi(
         self, item_id, codigo, descricao, unidade, custo_unitario, estado, tipo_sinapi=""
     ):
-        _grupo, item = self.obter_item(item_id)
-        if item is None:
+        grupo, item = self.obter_item(item_id)
+        if item is None or grupo is None:
             raise ValueError("Item não encontrado.")
-        if item["tipo"] != TIPO_SINAPI:
-            raise ValueError("Só é possível substituir itens SINAPI.")
-        item["codigo"] = str(codigo).strip()
-        item["descricao"] = str(descricao).strip()
-        item["unidade"] = str(unidade).strip()
-        item["custo_unitario"] = float(custo_unitario)
-        item["estado"] = str(estado).strip()
-        item["tipo_sinapi"] = str(tipo_sinapi or "").strip().upper()[:1]
+        quantidade = item["quantidade"]
+        novo_item = _criar_item_sinapi(
+            codigo,
+            descricao,
+            unidade,
+            custo_unitario,
+            quantidade,
+            estado,
+            tipo_sinapi,
+        )
+        novo_item["id"] = item_id
+        indice = next(i for i, candidato in enumerate(grupo["itens"]) if candidato["id"] == item_id)
+        grupo["itens"][indice] = novo_item
+        return item_id
+
+    def substituir_por_composicao_propria(
+        self, item_id, composicao_catalogo_id, codigo, nome, unidade
+    ):
+        grupo, item = self.obter_item(item_id)
+        if item is None or grupo is None:
+            raise ValueError("Item não encontrado.")
+        if not composicao_catalogo_id:
+            raise ValueError("Composição do catálogo não informada.")
+        quantidade = item["quantidade"]
+        novo_item = _criar_composicao_propria(
+            composicao_catalogo_id, codigo, nome, unidade, quantidade
+        )
+        novo_item["id"] = item_id
+        indice = next(i for i, candidato in enumerate(grupo["itens"]) if candidato["id"] == item_id)
+        grupo["itens"][indice] = novo_item
         return item_id
 
     def remover_item(self, item_id):

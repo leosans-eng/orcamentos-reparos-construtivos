@@ -54,6 +54,24 @@ def obter_composicao_por_id(catalogo, composicao_id):
     return None
 
 
+def filtrar_composicoes_catalogo(catalogo, consulta="", unidade=None):
+    """Filtra composições do catálogo por texto (código/nome) e unidade."""
+    texto = str(consulta or "").strip().lower()
+    alvo_un = str(unidade or "").strip().upper() if unidade else ""
+    filtradas = []
+    for comp in catalogo:
+        codigo = str(comp.get("codigo", "")).lower()
+        nome = str(comp.get("nome", "")).lower()
+        if texto and texto not in codigo and texto not in nome:
+            continue
+        if alvo_un:
+            un = str(comp.get("unidade", "")).strip().upper()
+            if un != alvo_un:
+                continue
+        filtradas.append(comp)
+    return filtradas
+
+
 def calcular_custo_unitario(composicao, sinapi_df, estado):
     """Retorna (custo_unitario, tem_depreciado)."""
     if not composicao:

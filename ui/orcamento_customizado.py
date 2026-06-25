@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from app_paths import asset_path
-from core.composicoes_proprias import custo_composicao_propria_item
+from core.composicoes_proprias import custo_composicao_propria_item, filtrar_composicoes_catalogo
 from core.exportacao_planilha_orcamento import (
     exportar_orcamento_customizado_modelo4,
     exportar_orcamento_customizado_modelo_formatado,
@@ -33,6 +33,8 @@ from core.orcamento_storage import (
     salvar_arquivo,
 )
 from core.sinapi_busca import (
+    TIPO_COMPOSICAO,
+    TIPO_INSUMO,
     TIPO_TODOS,
     VALORES_FILTRO_TIPO,
     nome_tipo_sinapi,
@@ -165,10 +167,16 @@ class DialogoBuscaSinapi(tk.Toplevel):
         texto_confirmar="Inserir no grupo",
         texto_confirmar_fechar="Inserir e fechar",
         fechar_unico=False,
+        incluir_composicoes_proprias=False,
+        catalogo_composicoes=None,
+        on_confirmar_propria=None,
     ):
         super().__init__(parent)
         self.ctx = ctx
         self.on_confirmar = on_confirmar
+        self.on_confirmar_propria = on_confirmar_propria
+        self.incluir_composicoes_proprias = incluir_composicoes_proprias
+        self.catalogo_composicoes = list(catalogo_composicoes or [])
         self._job_busca = None
         self.mostrar_quantidade = mostrar_quantidade
         self.texto_confirmar = texto_confirmar
@@ -387,9 +395,6 @@ class DialogoBuscaSinapi(tk.Toplevel):
         valor = self.combo_unidade.get().strip()
         return None if not valor or valor == UNIDADE_TODAS else valor
 
-    def _tipo_selecionado(self):
-        return tipo_sinapi_para_filtro(self.combo_tipo.get())
-
     def _aplicar_unidades(self, unidades):
         valores = [UNIDADE_TODAS] + list(unidades)
         atual = self.combo_unidade.get().strip()
@@ -431,10 +436,18 @@ class DialogoBuscaSinapi(tk.Toplevel):
             estado,
             consulta,
             unidade=self._unidade_selecionada(),
-            tipo=self._tipo_selecionado(),
+            tipo=self._tipo_selecionado_sinapi(),
         )
         self._aplicar_unidades(unidades)
         self.tree.delete(*self.tree.get_children())
+
+        tipo_filtro = self.combo_tipo.get().strip()
+        incluir_proprias = (
+            self.incluir_composicoes_proprias
+            and self.catalogo_composicoes
+            and tipo_filtro in (TIPO_TODOS, TIPO_COMPOSICAO)
+        )
+
         for _, linha in resultados.iterrows():
             self.tree.insert(
                 "",
@@ -447,11 +460,48 @@ class DialogoBuscaSinapi(tk.Toplevel):
                     _formatar_moeda(linha.get("custo", 0)),
                 ),
             )
+
+        if incluir_proprias:
+            from core.composicoes_proprias import calcular_custo_unitario
+
+            unidade = self._unidade_selecionada()
+            for comp in filtrar_composicoes_catalogo(
+                self.catalogo_composicoes, consulta, unidade
+            ):
+                custo, _ = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
+                self.tree.insert(
+                    "",
+                    "end",
+                    iid=f"p:{comp['id']}",
+                    values=(
+                        comp.get("codigo", ""),
+                        "P",
+                        comp.get("nome", ""),
+                        comp.get("unidade", ""),
+                        _formatar_moeda(custo),
+                    ),
+                )
+
+        if incluir_proprias and not self.tree.get_children() and consulta.strip():
+            mensagem = (
+                "Nenhum insumo, composição SINAPI ou composição própria encontrada. "
+                "Tente sinônimos ou menos palavras."
+            )
+        elif incluir_proprias and self.tree.get_children() and consulta.strip():
+            total = len(self.tree.get_children())
+            mensagem = f"{total} resultado(s) encontrado(s) (SINAPI e composições próprias)."
+
         self.label_detalhe.config(text="Selecione um item na lista para ver os detalhes.")
-        cor = "#555555" if not resultados.empty else "#a67c00"
+        cor = "#555555" if self.tree.get_children() else "#a67c00"
         if "indisponível" in mensagem.lower() or "nenhum item" in mensagem.lower():
             cor = "#C62828"
         self.label_status.config(text=mensagem, fg=cor)
+
+    def _tipo_selecionado_sinapi(self):
+        selecao = self.combo_tipo.get().strip()
+        if selecao == TIPO_COMPOSICAO and self.incluir_composicoes_proprias:
+            return "C"
+        return tipo_sinapi_para_filtro(selecao)
 
     def _parse_quantidade(self, texto):
         return float(str(texto).strip().replace(",", "."))
@@ -466,7 +516,12 @@ class DialogoBuscaSinapi(tk.Toplevel):
             )
             return
 
-        valores = self.tree.item(selecionado[0], "values")
+        iid = selecionado[0]
+        if str(iid).startswith("p:"):
+            self._confirmar_propria(iid, fechar)
+            return
+
+        valores = self.tree.item(iid, "values")
         if len(valores) < 5:
             return
 
@@ -503,6 +558,42 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.on_confirmar(
             codigo, descricao, unidade, custo, quantidade, estado, tipo_ic if tipo_ic != "—" else ""
         )
+        if fechar:
+            self.destroy()
+
+    def _confirmar_propria(self, iid, fechar=False):
+        if not self.on_confirmar_propria:
+            messagebox.showinfo(
+                "Composição própria",
+                "Seleção de composição própria não disponível neste contexto.",
+                parent=self,
+            )
+            return
+
+        comp_id = str(iid)[2:]
+        comp = next(
+            (c for c in self.catalogo_composicoes if c.get("id") == comp_id),
+            None,
+        )
+        if comp is None:
+            return
+
+        if self.mostrar_quantidade:
+            try:
+                quantidade = self._parse_quantidade(self.var_quantidade.get())
+                if quantidade <= 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showwarning(
+                    "Quantidade",
+                    "Informe um valor numérico maior que zero.",
+                    parent=self,
+                )
+                return
+        else:
+            quantidade = 1.0
+
+        self.on_confirmar_propria(comp, quantidade)
         if fechar:
             self.destroy()
 
@@ -821,88 +912,115 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.combo_estado.pack(side="left", padx=(4, 0))
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
 
-        linha_botoes = tk.Frame(conteudo, bg="#ececec")
-        linha_botoes.pack(fill="x", padx=4, pady=(0, 4))
+        linha_acoes = tk.Frame(conteudo, bg="#ececec")
+        linha_acoes.pack(fill="x", padx=4, pady=(0, 8))
 
+        frame_etapas = tk.LabelFrame(
+            linha_acoes,
+            text="Etapas e itens",
+            bg="#ececec",
+            padx=8,
+            pady=6,
+        )
+        frame_etapas.pack(side="left", fill="x", expand=True)
+
+        linha_etapas_1 = tk.Frame(frame_etapas, bg="#ececec")
+        linha_etapas_1.pack(fill="x", pady=(0, 4))
         ttk.Button(
-            linha_botoes, text="Nova etapa", command=self._novo_grupo, style="Add.Compact.TButton"
+            linha_etapas_1,
+            text="Nova etapa",
+            command=self._novo_grupo,
+            style="Add.Compact.TButton",
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
-            linha_botoes,
+            linha_etapas_1,
             text="Editar nome da etapa",
             command=self._renomear_grupo,
             style="Edit.Compact.TButton",
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
-            linha_botoes,
+            linha_etapas_1,
             text="Etapa ↑",
             command=lambda: self._mover_grupo(-1),
             style="Compact.TButton",
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
-            linha_botoes,
+            linha_etapas_1,
             text="Etapa ↓",
             command=lambda: self._mover_grupo(1),
             style="Compact.TButton",
-        ).pack(side="left", padx=(0, 12))
-        ttk.Button(
-            linha_botoes,
-            text="Inserir item SINAPI",
-            command=self._abrir_busca_sinapi,
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_botoes,
-            text="Inserir composição PRÓPRIA",
-            command=self._adicionar_composicao_propria,
-            style="Compact.TButton",
         ).pack(side="left")
 
-        linha_botoes_2 = tk.Frame(conteudo, bg="#ececec")
-        linha_botoes_2.pack(fill="x", padx=4, pady=(0, 8))
-
+        linha_etapas_2 = tk.Frame(frame_etapas, bg="#ececec")
+        linha_etapas_2.pack(fill="x")
         ttk.Button(
-            linha_botoes_2,
+            linha_etapas_2,
             text="Remover etapa/item",
             command=self._remover_selecionado,
             style="Delete.Compact.TButton",
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
-            linha_botoes_2,
+            linha_etapas_2,
             text="Editar item",
             command=self._editar_item_sinapi,
             style="Accent.Compact.TButton",
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
-            linha_botoes_2,
+            linha_etapas_2,
             text="Item ↑",
             command=lambda: self._mover_item(-1),
             style="Compact.TButton",
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
-            linha_botoes_2,
+            linha_etapas_2,
             text="Item ↓",
             command=lambda: self._mover_item(1),
             style="Compact.TButton",
-        ).pack(side="left", padx=(0, 12))
+        ).pack(side="left")
 
-        tk.Label(linha_botoes_2, text="Inserir rápido — Cód.:", bg="#ececec").pack(side="left")
+        frame_inserir = tk.LabelFrame(
+            linha_acoes,
+            text="Inserir itens",
+            bg="#ececec",
+            padx=8,
+            pady=6,
+        )
+        frame_inserir.pack(side="right", padx=(12, 0))
+
+        linha_inserir_1 = tk.Frame(frame_inserir, bg="#ececec")
+        linha_inserir_1.pack(fill="x", pady=(0, 4))
+        ttk.Button(
+            linha_inserir_1,
+            text="Inserir item SINAPI",
+            command=self._abrir_busca_sinapi,
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_inserir_1,
+            text="Inserir composição PRÓPRIA",
+            command=self._adicionar_composicao_propria,
+            style="Compact.TButton",
+        ).pack(side="left")
+
+        linha_inserir_2 = tk.Frame(frame_inserir, bg="#ececec")
+        linha_inserir_2.pack(fill="x")
+        tk.Label(linha_inserir_2, text="Rápido — Cód.:", bg="#ececec").pack(side="left")
         self.var_codigo_rapido = tk.StringVar()
-        entrada_cod = ttk.Entry(linha_botoes_2, textvariable=self.var_codigo_rapido, width=10)
+        entrada_cod = ttk.Entry(linha_inserir_2, textvariable=self.var_codigo_rapido, width=10)
         entrada_cod.pack(side="left", padx=(4, 8))
-        tk.Label(linha_botoes_2, text="Qtd.:", bg="#ececec").pack(side="left")
+        tk.Label(linha_inserir_2, text="Qtd.:", bg="#ececec").pack(side="left")
         self.var_qtd_rapido = tk.StringVar(value="1")
-        entrada_qtd = ttk.Entry(linha_botoes_2, textvariable=self.var_qtd_rapido, width=8)
+        entrada_qtd = ttk.Entry(linha_inserir_2, textvariable=self.var_qtd_rapido, width=8)
         entrada_qtd.pack(side="left", padx=(4, 8))
         ttk.Button(
-            linha_botoes_2, text="Inserir", command=self._inserir_rapido, style="Compact.TButton"
+            linha_inserir_2, text="Inserir", command=self._inserir_rapido, style="Compact.TButton"
         ).pack(side="left")
         entrada_cod.bind("<Return>", lambda _e: self._inserir_rapido())
         entrada_qtd.bind("<Return>", lambda _e: self._inserir_rapido())
 
         painel_grade = tk.LabelFrame(
             conteudo,
-            text="Estrutura do orçamento",
+            text="Estrutura do orçamento  ·  Ctrl/Shift+clique: seleção múltipla  ·  Delete: remover",
             bg="#ececec",
             padx=6,
             pady=6,
@@ -912,8 +1030,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.grade = GradeOrcamento(
             painel_grade,
             on_duplo_clique_qtd=self._dialogo_editar_quantidade,
+            on_tecla_delete=lambda _e: self._remover_selecionado(silencioso=True),
         )
         self.grade.pack(fill="both", expand=True)
+
+        for tecla in ("<Delete>", "<KP_Delete>"):
+            self.bind(tecla, self._ao_tecla_delete_orcamento, add="+")
+            painel_grade.bind(tecla, self._ao_tecla_delete_orcamento, add="+")
 
         rodape_orc = tk.Frame(
             conteudo, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
@@ -1209,7 +1332,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             messagebox.showwarning("Adicionar item", str(exc), parent=self.winfo_toplevel())
             return None
         self._atualizar_grade()
-        self.grade.selecionar_item(item_id)
+        self.grade.selecionar_item(item_id, rolar=False)
         return item_id
 
     def _abrir_busca_sinapi(self):
@@ -1362,7 +1485,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 )
                 return
             self._atualizar_grade()
-            self.grade.selecionar_item(item_id)
+            self.grade.selecionar_item(item_id, rolar=False)
 
         DialogoBuscaComposicaoPropria(
             self.winfo_toplevel(),
@@ -1448,25 +1571,72 @@ class OrcamentoCustomizadoFrame(tk.Frame):
     def _meta_selecionada(self):
         return self.grade.obter_meta_selecionada()
 
-    def _remover_selecionado(self):
-        meta = self._meta_selecionada()
-        if not meta:
+    _CLASSES_ENTRADA = frozenset({"TEntry", "Entry", "TCombobox", "Combobox"})
+
+    def _foco_em_campo_edicao(self):
+        atual = self.focus_get()
+        while atual is not None:
+            if atual.winfo_class() in self._CLASSES_ENTRADA:
+                return True
+            atual = atual.master
+        return False
+
+    def _ao_tecla_delete_orcamento(self, _event=None):
+        if self._foco_em_campo_edicao():
+            return
+        self._remover_selecionado(silencioso=True)
+        return "break"
+
+    def _remover_selecionado(self, silencioso=False):
+        metas = self.grade.obter_metas_selecionadas()
+        if not metas:
+            if not silencioso:
+                messagebox.showinfo(
+                    "Remover",
+                    "Selecione um grupo ou item para remover.",
+                    parent=self.winfo_toplevel(),
+                )
+            return
+
+        grupos = [m for m in metas if m["tipo"] == TIPO_GRUPO]
+        itens = [m for m in metas if m["tipo"] != TIPO_GRUPO]
+
+        if grupos and itens:
             messagebox.showinfo(
                 "Remover",
-                "Selecione um grupo ou item para remover.",
+                "Selecione apenas etapas ou apenas itens para remover.",
                 parent=self.winfo_toplevel(),
             )
             return
 
-        if meta["tipo"] == TIPO_GRUPO:
+        if len(grupos) > 1:
+            messagebox.showinfo(
+                "Remover",
+                "Remova uma etapa por vez.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        if len(grupos) == 1:
             if not messagebox.askyesno(
                 "Remover grupo",
                 "Remover a etapa e todos os seus itens?",
                 parent=self.winfo_toplevel(),
             ):
                 return
-            self.orcamento.remover_grupo(meta["id"])
-        else:
+            self.orcamento.remover_grupo(grupos[0]["id"])
+            self._atualizar_grade()
+            return
+
+        if len(itens) > 1:
+            if not messagebox.askyesno(
+                "Remover itens",
+                f"Remover os {len(itens)} itens selecionados?",
+                parent=self.winfo_toplevel(),
+            ):
+                return
+
+        for meta in itens:
             self.orcamento.remover_item(meta["id"])
 
         self._atualizar_grade()
@@ -1485,7 +1655,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 )
                 return
             self._atualizar_grade()
-            self.grade.selecionar_item(item_id)
+            self.grade.selecionar_item(item_id, rolar=False)
 
         DialogoEditarQuantidade(
             self.winfo_toplevel(),
@@ -1496,17 +1666,26 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
     def _editar_item_sinapi(self):
         meta = self._meta_selecionada()
-        if not meta or meta["tipo"] != TIPO_SINAPI:
+        if not meta or meta["tipo"] == TIPO_GRUPO:
             messagebox.showinfo(
                 "Editar item",
-                "Selecione um item SINAPI para substituir por outro da base.",
+                "Selecione um item (SINAPI ou composição própria) para substituir.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        if len(self.grade.obter_metas_selecionadas()) > 1:
+            messagebox.showinfo(
+                "Editar item",
+                "Selecione apenas um item para editar.",
                 parent=self.winfo_toplevel(),
             )
             return
 
         item_id = meta["id"]
+        catalogo = listar_composicoes_catalogo()
 
-        def ao_substituir(codigo, descricao, unidade, custo, _quantidade, estado, tipo_sinapi=""):
+        def ao_substituir_sinapi(codigo, descricao, unidade, custo, _quantidade, estado, tipo_sinapi=""):
             if estado and estado in self.ctx.obter_estados():
                 self.combo_estado.set(estado)
             try:
@@ -1517,17 +1696,35 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
                 return
             self._atualizar_grade()
-            self.grade.selecionar_item(item_id)
+            self.grade.selecionar_item(item_id, rolar=False)
+
+        def ao_substituir_propria(comp, _quantidade):
+            try:
+                self.orcamento.substituir_por_composicao_propria(
+                    item_id,
+                    comp["id"],
+                    comp.get("codigo", ""),
+                    comp.get("nome", ""),
+                    comp.get("unidade", ""),
+                )
+            except ValueError as exc:
+                messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
+                return
+            self._atualizar_grade()
+            self.grade.selecionar_item(item_id, rolar=False)
 
         DialogoBuscaSinapi(
             self.winfo_toplevel(),
             self.ctx,
             self._estado_selecionado(),
-            ao_substituir,
-            titulo="Substituir item SINAPI",
+            ao_substituir_sinapi,
+            titulo="Substituir item",
             mostrar_quantidade=False,
             texto_confirmar="Substituir item",
             fechar_unico=True,
+            incluir_composicoes_proprias=bool(catalogo),
+            catalogo_composicoes=catalogo,
+            on_confirmar_propria=ao_substituir_propria,
         )
 
     def _exportar_planilha(self):
@@ -1627,8 +1824,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
 
     def _preencher_grade(self):
-        scroll = self.grade.posicao_scroll()
-        selecao = self.grade.obter_meta_selecionada()
+        y_scroll = self.grade.salvar_posicao_scroll()
+        selecoes = self.grade.obter_metas_selecionadas()
         self.grade.limpar()
 
         estado_atual = self._estado_selecionado()
@@ -1718,9 +1915,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 f"{_formatar_moeda(self._total_geral_calculado(bdi, catalogo, estado_atual))}"
             )
         )
-        if selecao:
-            self.grade.selecionar_meta(selecao)
-        self.grade.restaurar_scroll(scroll)
+        if selecoes:
+            self.grade.finalizar_reconstrucao(y_scroll, selecoes)
+        else:
+            self.grade.finalizar_reconstrucao(y_scroll)
         self._persistir_orcamento_atual()
 
     def focar(self):

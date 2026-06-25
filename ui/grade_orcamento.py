@@ -32,11 +32,13 @@ COR_TEXTO = "#333333"
 class GradeOrcamento(tk.Frame):
     """Grade orçamentária com Canvas — uma linha (Frame) por item, altura variável."""
 
-    def __init__(self, parent, on_duplo_clique_qtd=None):
+    def __init__(self, parent, on_duplo_clique_qtd=None, on_tecla_delete=None):
         super().__init__(parent, bg="#ececec")
         self.on_duplo_clique_qtd = on_duplo_clique_qtd
+        self.on_tecla_delete = on_tecla_delete
         self._linhas = []
-        self._selecao_meta = None
+        self._selecao_metas: list[dict] = []
+        self._ancora_indice: int | None = None
         self._tem_itens_depreciados = False
         self._largura_descricao = 280
         self._montar()
@@ -61,7 +63,9 @@ class GradeOrcamento(tk.Frame):
         container = tk.Frame(self, bg="#ececec")
         container.pack(fill="both", expand=True, pady=(2, 0))
 
-        self.canvas = tk.Canvas(container, highlightthickness=0, bg=COR_FUNDO)
+        self.canvas = tk.Canvas(
+            container, highlightthickness=0, bg=COR_FUNDO, takefocus=1
+        )
         self.scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
         self.frame_linhas = tk.Frame(self.canvas, bg=COR_FUNDO)
 
@@ -75,6 +79,17 @@ class GradeOrcamento(tk.Frame):
         self.canvas.bind("<Configure>", self._ao_redimensionar_canvas)
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
         self.frame_linhas.bind("<MouseWheel>", self._on_mousewheel)
+        for alvo in (self, container, self.canvas, self.frame_linhas, self.cabecalho):
+            self._vincular_tecla_delete(alvo)
+
+    def _vincular_tecla_delete(self, widget):
+        for tecla in ("<Delete>", "<KP_Delete>"):
+            widget.bind(tecla, self._ao_tecla_delete, add="+")
+
+    def _ao_tecla_delete(self, event):
+        if self.on_tecla_delete is not None:
+            self.on_tecla_delete(event)
+            return "break"
 
 
     def _conteudo_cabe_no_canvas(self):
@@ -114,18 +129,51 @@ class GradeOrcamento(tk.Frame):
         for linha in self._linhas:
             linha["frame"].destroy()
         self._linhas.clear()
-        self._selecao_meta = None
+        self._selecao_metas.clear()
+        self._ancora_indice = None
         self._tem_itens_depreciados = False
 
     def tem_itens_depreciados(self) -> bool:
         return self._tem_itens_depreciados
 
-    def posicao_scroll(self):
-        return self.canvas.yview()[0]
+    def salvar_posicao_scroll(self):
+        try:
+            return float(self.canvas.canvasy(0))
+        except tk.TclError:
+            return 0.0
 
-    def restaurar_scroll(self, fracao):
-        if fracao is not None:
-            self.canvas.yview_moveto(fracao)
+    def restaurar_posicao_scroll(self, y_canvas):
+        self.update_idletasks()
+        bbox = self.canvas.bbox("all")
+        if not bbox:
+            return
+        self.canvas.configure(scrollregion=bbox)
+        altura_total = self.frame_linhas.winfo_height()
+        altura_visivel = self.canvas.winfo_height()
+        if altura_total <= altura_visivel:
+            return
+        fracao = y_canvas / (altura_total - altura_visivel)
+        self.canvas.yview_moveto(max(0.0, min(1.0, fracao)))
+
+    def finalizar_reconstrucao(self, y_canvas, metas_selecionadas=None):
+        def aplicar():
+            self.update_idletasks()
+            self._atualizar_scrollregion()
+            self.restaurar_posicao_scroll(y_canvas)
+            if metas_selecionadas:
+                existentes = [
+                    meta
+                    for meta in metas_selecionadas
+                    if self._indice_por_meta(meta) is not None
+                ]
+                if existentes:
+                    self.selecionar_metas(existentes)
+                else:
+                    self._selecao_metas.clear()
+                    self._ancora_indice = None
+                    self._atualizar_destaques()
+
+        self.after_idle(aplicar)
 
     def adicionar_linha(self, meta, valores, estilo="item", alerta_depreciado=False):
         idx = len(self._linhas)
@@ -217,18 +265,21 @@ class GradeOrcamento(tk.Frame):
         }
         self._linhas.append(registro)
 
-        if self._selecao_meta and self._meta_coincide(meta, self._selecao_meta):
+        if any(self._meta_coincide(meta, sel) for sel in self._selecao_metas):
             self._aplicar_destaque(registro)
 
-        self._vincular_selecao(frame, meta)
+        self._vincular_selecao(frame, idx)
+        self._vincular_tecla_delete(frame)
         for filho in frame.winfo_children():
-            self._vincular_selecao(filho, meta)
+            self._vincular_selecao(filho, idx)
+            self._vincular_tecla_delete(filho)
             filho.bind("<MouseWheel>", self._on_mousewheel)
 
-        self.after_idle(self._atualizar_scrollregion)
-
-    def _vincular_selecao(self, widget, meta):
-        widget.bind("<Button-1>", lambda _e, m=meta: self.selecionar_meta(m))
+    def _vincular_selecao(self, widget, indice_linha):
+        widget.bind(
+            "<Button-1>",
+            lambda event, i=indice_linha: self._ao_clicar_linha(i, event),
+        )
 
     def _duplo_clique_qtd(self, meta):
         if self.on_duplo_clique_qtd and meta.get("tipo") != TIPO_GRUPO:
@@ -237,27 +288,78 @@ class GradeOrcamento(tk.Frame):
     def _meta_coincide(self, a, b):
         return a.get("tipo") == b.get("tipo") and a.get("id") == b.get("id")
 
-    def selecionar_meta(self, meta):
-        self._selecao_meta = dict(meta)
-        for linha in self._linhas:
+    def _indice_por_meta(self, meta):
+        for indice, linha in enumerate(self._linhas):
             if self._meta_coincide(linha["meta"], meta):
+                return indice
+        return None
+
+    def _ao_clicar_linha(self, indice_linha, event):
+        if indice_linha < 0 or indice_linha >= len(self._linhas):
+            return
+        meta = dict(self._linhas[indice_linha]["meta"])
+        ctrl = bool(event.state & 0x4)
+        shift = bool(event.state & 0x1)
+
+        if shift and self._ancora_indice is not None:
+            inicio = min(self._ancora_indice, indice_linha)
+            fim = max(self._ancora_indice, indice_linha)
+            self._selecao_metas = [
+                dict(self._linhas[i]["meta"]) for i in range(inicio, fim + 1)
+            ]
+        elif ctrl:
+            if any(self._meta_coincide(meta, sel) for sel in self._selecao_metas):
+                self._selecao_metas = [
+                    sel
+                    for sel in self._selecao_metas
+                    if not self._meta_coincide(meta, sel)
+                ]
+            else:
+                self._selecao_metas.append(meta)
+            self._ancora_indice = indice_linha
+        else:
+            self._selecao_metas = [meta]
+            self._ancora_indice = indice_linha
+
+        self.focus_set()
+        self.canvas.focus_set()
+        self._atualizar_destaques()
+
+    def _atualizar_destaques(self):
+        for linha in self._linhas:
+            if any(self._meta_coincide(linha["meta"], sel) for sel in self._selecao_metas):
                 self._aplicar_destaque(linha)
             else:
                 self._remover_destaque(linha)
 
-    def selecionar_por_id(self, tipo, item_id):
+    def selecionar_meta(self, meta, rolar=False):
+        self._selecao_metas = [dict(meta)]
+        self._ancora_indice = self._indice_por_meta(meta)
+        self._atualizar_destaques()
+        if rolar:
+            indice = self._ancora_indice
+            if indice is not None:
+                self._rolar_para_linha(self._linhas[indice]["frame"])
+
+    def selecionar_metas(self, metas):
+        self._selecao_metas = [dict(meta) for meta in metas]
+        if self._selecao_metas:
+            self._ancora_indice = self._indice_por_meta(self._selecao_metas[0])
+        else:
+            self._ancora_indice = None
+        self._atualizar_destaques()
+
+    def selecionar_por_id(self, tipo, item_id, rolar=True):
         for linha in self._linhas:
             if linha["meta"].get("tipo") == tipo and linha["meta"].get("id") == item_id:
-                self.selecionar_meta(linha["meta"])
-                self._rolar_para_linha(linha["frame"])
+                self.selecionar_meta(linha["meta"], rolar=rolar)
                 return
 
-    def selecionar_item(self, item_id):
+    def selecionar_item(self, item_id, rolar=True):
         for linha in self._linhas:
             meta = linha["meta"]
             if meta.get("id") == item_id and meta.get("tipo") != TIPO_GRUPO:
-                self.selecionar_meta(meta)
-                self._rolar_para_linha(linha["frame"])
+                self.selecionar_meta(meta, rolar=rolar)
                 return
 
     def _rolar_para_linha(self, frame):
@@ -286,9 +388,12 @@ class GradeOrcamento(tk.Frame):
                 pass
 
     def obter_meta_selecionada(self):
-        if not self._selecao_meta:
+        if not self._selecao_metas:
             return None
-        return dict(self._selecao_meta)
+        return dict(self._selecao_metas[0])
+
+    def obter_metas_selecionadas(self):
+        return [dict(meta) for meta in self._selecao_metas]
 
     def obter_grupo_id_selecionado(self):
         meta = self.obter_meta_selecionada()

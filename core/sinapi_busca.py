@@ -35,6 +35,29 @@ STOPWORDS = {
     "um", "uma", "ao", "na", "no", "nas", "nos", "por", "ate", "até",
 }
 
+TIPO_TODOS = "Todos"
+TIPO_INSUMO = "Insumo"
+TIPO_COMPOSICAO = "Composição"
+VALORES_FILTRO_TIPO = (TIPO_TODOS, TIPO_INSUMO, TIPO_COMPOSICAO)
+
+
+def nome_tipo_sinapi(valor) -> str:
+    letra = str(valor or "").strip().upper()[:1]
+    if letra == "I":
+        return TIPO_INSUMO
+    if letra == "C":
+        return TIPO_COMPOSICAO
+    return ""
+
+
+def tipo_sinapi_para_filtro(selecao) -> str | None:
+    texto = str(selecao or "").strip()
+    if texto == TIPO_INSUMO:
+        return "I"
+    if texto == TIPO_COMPOSICAO:
+        return "C"
+    return None
+
 
 def normalizar_texto(texto):
     if texto is None:
@@ -171,7 +194,14 @@ def _filtrar_por_unidade(df, unidade):
     return df[df["unidade"].astype(str).str.strip().str.upper() == alvo].copy()
 
 
-def pesquisar_sinapi(sinapi, estado, consulta, unidade=None, limite=250):
+def _filtrar_por_tipo(df, tipo):
+    if df.empty or not tipo or "tipo" not in df.columns:
+        return df
+    alvo = str(tipo).strip().upper()[:1]
+    return df[df["tipo"].astype(str).str.strip().str.upper().str[:1] == alvo].copy()
+
+
+def pesquisar_sinapi(sinapi, estado, consulta, unidade=None, tipo=None, limite=250):
     """
     Busca insumos/composições em uma única passagem de filtro.
     Retorna (resultados, mensagem, unidades_disponiveis).
@@ -208,6 +238,20 @@ def pesquisar_sinapi(sinapi, estado, consulta, unidade=None, limite=250):
         resultados = pd.DataFrame(resultados).sort_values(by="_score", ascending=False)
         resultados = resultados.drop(columns=["_score"])
 
+    resultados = _filtrar_por_tipo(resultados, tipo)
+    if not isinstance(resultados, pd.DataFrame) or resultados.empty:
+        sufixo_tipo = ""
+        if tipo == "I":
+            sufixo_tipo = " do tipo Insumo"
+        elif tipo == "C":
+            sufixo_tipo = " do tipo Composição"
+        return (
+            vazio,
+            f"Nenhum insumo ou composição encontrada{sufixo_tipo}. "
+            "Tente sinônimos ou menos palavras.",
+            unidades,
+        )
+
     resultados = _filtrar_por_unidade(resultados, unidade)
     if not isinstance(resultados, pd.DataFrame) or resultados.empty:
         sufixo_un = f" na unidade {unidade}" if unidade and unidade != "Todas" else ""
@@ -223,7 +267,7 @@ def pesquisar_sinapi(sinapi, estado, consulta, unidade=None, limite=250):
     return exibidos, msg, unidades
 
 
-def buscar_sinapi(sinapi, estado, consulta, limite=250, modo_parcial=False, unidade=None):
+def buscar_sinapi(sinapi, estado, consulta, limite=250, modo_parcial=False, unidade=None, tipo=None):
     """
     Busca insumos ou composições SINAPI no DataFrame carregado.
 
@@ -235,6 +279,7 @@ def buscar_sinapi(sinapi, estado, consulta, limite=250, modo_parcial=False, unid
         estado,
         consulta,
         unidade=unidade,
+        tipo=tipo,
         limite=limite,
     )
     return resultados, mensagem

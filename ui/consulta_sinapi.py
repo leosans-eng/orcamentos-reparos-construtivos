@@ -2,7 +2,14 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from core.sinapi_busca import pesquisar_sinapi, obter_unidades_sinapi
+from core.sinapi_busca import (
+    TIPO_TODOS,
+    VALORES_FILTRO_TIPO,
+    nome_tipo_sinapi,
+    obter_unidades_sinapi,
+    pesquisar_sinapi,
+    tipo_sinapi_para_filtro,
+)
 from core.sinapi_loader import obter_xlsx_sinapi_referencia_mais_recente
 from app_paths import asset_path
 from ui.widgets import (
@@ -77,14 +84,27 @@ class ConsultaSinapiFrame(tk.Frame):
         self.combo_unidade.grid(row=0, column=3, padx=4, pady=4, sticky="w")
         self.combo_unidade.set(UNIDADE_TODAS)
 
-        tk.Label(linha_filtros, text="Buscar:", bg="#ececec").grid(
+        tk.Label(linha_filtros, text="Tipo (I/C):", bg="#ececec").grid(
             row=0, column=4, padx=(16, 6), pady=4, sticky="w"
+        )
+
+        self.combo_tipo = ttk.Combobox(
+            linha_filtros,
+            values=list(VALORES_FILTRO_TIPO),
+            width=12,
+            state="readonly",
+        )
+        self.combo_tipo.grid(row=0, column=5, padx=4, pady=4, sticky="w")
+        self.combo_tipo.set(TIPO_TODOS)
+
+        tk.Label(linha_filtros, text="Buscar:", bg="#ececec").grid(
+            row=0, column=6, padx=(16, 6), pady=4, sticky="w"
         )
 
         self.var_busca = tk.StringVar()
         self.entrada_busca = ttk.Entry(linha_filtros, textvariable=self.var_busca, width=40)
-        self.entrada_busca.grid(row=0, column=5, padx=4, pady=4, sticky="ew")
-        linha_filtros.columnconfigure(5, weight=1)
+        self.entrada_busca.grid(row=0, column=7, padx=4, pady=4, sticky="ew")
+        linha_filtros.columnconfigure(7, weight=1)
 
         self._atualizar_unidades()
 
@@ -134,7 +154,7 @@ class ConsultaSinapiFrame(tk.Frame):
         self.tree.heading("unidade", text="Unid.")
         self.tree.heading("custo", text="Custo unit. (R$)")
 
-        self.tree.column("codigo", width=90, minwidth=70, stretch=False)
+        self.tree.column("codigo", width=60, minwidth=50, stretch=False, anchor="center")
         self.tree.column("tipo_ic", width=40, minwidth=36, stretch=False, anchor="center")
         self.tree.column("descricao", width=500, minwidth=200, stretch=True)
         self.tree.column("unidade", width=60, minwidth=50, stretch=False, anchor="center")
@@ -166,6 +186,7 @@ class ConsultaSinapiFrame(tk.Frame):
         self.var_busca.trace_add("write", self._ao_digitar)
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
         self.combo_unidade.bind("<<ComboboxSelected>>", lambda _e: self._executar_busca())
+        self.combo_tipo.bind("<<ComboboxSelected>>", lambda _e: self._executar_busca())
         self.tree.bind("<<TreeviewSelect>>", self._ao_selecionar_item)
 
         if self.ctx.sinapi.empty:
@@ -245,6 +266,9 @@ class ConsultaSinapiFrame(tk.Frame):
         valor = self.combo_unidade.get().strip()
         return None if not valor or valor == UNIDADE_TODAS else valor
 
+    def _tipo_selecionado(self):
+        return tipo_sinapi_para_filtro(self.combo_tipo.get())
+
     def _aplicar_unidades(self, unidades):
         valores = [UNIDADE_TODAS] + list(unidades)
         atual = self.combo_unidade.get().strip()
@@ -306,6 +330,7 @@ class ConsultaSinapiFrame(tk.Frame):
             estado,
             consulta,
             unidade=unidade,
+            tipo=self._tipo_selecionado(),
         )
         self._aplicar_unidades(unidades)
         self._preencher_resultados(resultados)
@@ -345,9 +370,10 @@ class ConsultaSinapiFrame(tk.Frame):
             return
         codigo, tipo_ic, descricao, unidade, custo = valores
         estado = estado_do_combo(self.combo_estado.get())
+        tipo_rotulo = nome_tipo_sinapi(tipo_ic) or tipo_ic
         self.label_detalhe.config(
             text=(
-                f"Código: {codigo}  ·  {tipo_ic}  ·  Estado: {estado}  ·  "
+                f"Código: {codigo}  ·  {tipo_rotulo}  ·  Estado: {estado}  ·  "
                 f"Unidade: {unidade}  ·  Custo: {custo}\n{descricao}"
             ),
         )

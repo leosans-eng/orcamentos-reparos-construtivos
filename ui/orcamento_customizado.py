@@ -33,9 +33,13 @@ from core.orcamento_storage import (
     salvar_arquivo,
 )
 from core.sinapi_busca import (
+    TIPO_TODOS,
+    VALORES_FILTRO_TIPO,
+    nome_tipo_sinapi,
     obter_item_sinapi,
     obter_unidades_sinapi,
     pesquisar_sinapi,
+    tipo_sinapi_para_filtro,
 )
 from ui.dialogo_importar_i9 import DialogoImportarI9
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
@@ -219,6 +223,15 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.combo_unidade.grid(row=0, column=3, padx=4, pady=3, sticky="w")
         self.combo_unidade.set(UNIDADE_TODAS)
 
+        tk.Label(linha_filtros, text="Tipo (I/C):", bg="#ececec").grid(
+            row=0, column=4, padx=(14, 4), pady=3, sticky="w"
+        )
+        self.combo_tipo = ttk.Combobox(
+            linha_filtros, values=list(VALORES_FILTRO_TIPO), width=12, state="readonly"
+        )
+        self.combo_tipo.grid(row=0, column=5, padx=4, pady=3, sticky="w")
+        self.combo_tipo.set(TIPO_TODOS)
+
         tk.Label(linha_filtros, text="Buscar:", bg="#ececec").grid(
             row=1, column=0, padx=(0, 4), pady=3, sticky="w"
         )
@@ -323,6 +336,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.var_busca.trace_add("write", self._ao_digitar)
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
         self.combo_unidade.bind("<<ComboboxSelected>>", lambda _e: self._executar_busca())
+        self.combo_tipo.bind("<<ComboboxSelected>>", lambda _e: self._executar_busca())
         self.tree.bind("<<TreeviewSelect>>", self._ao_selecionar_item)
         self.tree.bind(
             "<Double-1>",
@@ -358,9 +372,10 @@ class DialogoBuscaSinapi(tk.Toplevel):
             return
         codigo, tipo_ic, descricao, unidade, custo = valores
         estado = self._estado_selecionado()
+        tipo_rotulo = nome_tipo_sinapi(tipo_ic) or tipo_ic
         self.label_detalhe.config(
             text=(
-                f"Código: {codigo}  ·  {tipo_ic}  ·  Estado: {estado}  ·  "
+                f"Código: {codigo}  ·  {tipo_rotulo}  ·  Estado: {estado}  ·  "
                 f"Unidade: {unidade}  ·  Custo: {custo}\n{descricao}"
             ),
         )
@@ -371,6 +386,9 @@ class DialogoBuscaSinapi(tk.Toplevel):
     def _unidade_selecionada(self):
         valor = self.combo_unidade.get().strip()
         return None if not valor or valor == UNIDADE_TODAS else valor
+
+    def _tipo_selecionado(self):
+        return tipo_sinapi_para_filtro(self.combo_tipo.get())
 
     def _aplicar_unidades(self, unidades):
         valores = [UNIDADE_TODAS] + list(unidades)
@@ -413,6 +431,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
             estado,
             consulta,
             unidade=self._unidade_selecionada(),
+            tipo=self._tipo_selecionado(),
         )
         self._aplicar_unidades(unidades)
         self.tree.delete(*self.tree.get_children())

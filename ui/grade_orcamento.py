@@ -41,6 +41,8 @@ class GradeOrcamento(tk.Frame):
         self._ancora_indice: int | None = None
         self._tem_itens_depreciados = False
         self._largura_descricao = 280
+        self._reconstruindo = False
+        self._fracao_scroll_salva = 0.0
         self._montar()
 
     def _montar(self):
@@ -112,7 +114,22 @@ class GradeOrcamento(tk.Frame):
         self.canvas.yview_scroll(int(-event.delta / 120), "units")
 
     def _atualizar_scrollregion(self, _event=None):
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        if self._reconstruindo:
+            return
+        bbox = self.canvas.bbox("all")
+        if bbox:
+            self.canvas.configure(scrollregion=bbox)
+
+    def iniciar_reconstrucao(self):
+        self.update_idletasks()
+        self._reconstruindo = True
+        try:
+            self._fracao_scroll_salva = float(self.canvas.yview()[0])
+        except tk.TclError:
+            self._fracao_scroll_salva = 0.0
+
+    def salvar_fracao_scroll(self):
+        return self._fracao_scroll_salva
 
     def _ao_redimensionar_canvas(self, event):
         largura = max(event.width, 400)
@@ -137,43 +154,38 @@ class GradeOrcamento(tk.Frame):
         return self._tem_itens_depreciados
 
     def salvar_posicao_scroll(self):
+        self.update_idletasks()
         try:
-            return float(self.canvas.canvasy(0))
+            return float(self.canvas.yview()[0])
         except tk.TclError:
             return 0.0
 
-    def restaurar_posicao_scroll(self, y_canvas):
+    def restaurar_fracao_scroll(self, fracao_top):
         self.update_idletasks()
         bbox = self.canvas.bbox("all")
         if not bbox:
             return
         self.canvas.configure(scrollregion=bbox)
-        altura_total = self.frame_linhas.winfo_height()
-        altura_visivel = self.canvas.winfo_height()
-        if altura_total <= altura_visivel:
-            return
-        fracao = y_canvas / (altura_total - altura_visivel)
-        self.canvas.yview_moveto(max(0.0, min(1.0, fracao)))
+        self.update_idletasks()
+        self.canvas.yview_moveto(max(0.0, min(1.0, fracao_top)))
 
-    def finalizar_reconstrucao(self, y_canvas, metas_selecionadas=None):
-        def aplicar():
-            self.update_idletasks()
-            self._atualizar_scrollregion()
-            self.restaurar_posicao_scroll(y_canvas)
-            if metas_selecionadas:
-                existentes = [
-                    meta
-                    for meta in metas_selecionadas
-                    if self._indice_por_meta(meta) is not None
-                ]
-                if existentes:
-                    self.selecionar_metas(existentes)
-                else:
-                    self._selecao_metas.clear()
-                    self._ancora_indice = None
-                    self._atualizar_destaques()
-
-        self.after_idle(aplicar)
+    def finalizar_reconstrucao(self, fracao_top=None, metas_selecionadas=None):
+        if fracao_top is None:
+            fracao_top = self._fracao_scroll_salva
+        self._reconstruindo = False
+        self.restaurar_fracao_scroll(fracao_top)
+        if metas_selecionadas is not None:
+            existentes = [
+                meta
+                for meta in metas_selecionadas
+                if self._indice_por_meta(meta) is not None
+            ]
+            if existentes:
+                self.selecionar_metas(existentes)
+            else:
+                self._selecao_metas.clear()
+                self._ancora_indice = None
+                self._atualizar_destaques()
 
     def adicionar_linha(self, meta, valores, estilo="item", alerta_depreciado=False):
         idx = len(self._linhas)

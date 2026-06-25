@@ -1331,8 +1331,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Adicionar item", str(exc), parent=self.winfo_toplevel())
             return None
-        self._atualizar_grade()
-        self.grade.selecionar_item(item_id, rolar=False)
+        self._atualizar_grade(
+            focar_meta={
+                "tipo": TIPO_SINAPI,
+                "id": item_id,
+                "grupo_id": grupo_id,
+            }
+        )
         return item_id
 
     def _abrir_busca_sinapi(self):
@@ -1446,8 +1451,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Grupo", str(exc), parent=self.winfo_toplevel())
             return
-        self._atualizar_grade()
-        self.grade.selecionar_por_id(TIPO_GRUPO, grupo_id)
+        self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
 
     def _adicionar_composicao_propria(self):
         grupo_id = self._grupo_id_selecionado()
@@ -1484,8 +1488,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "Composição própria", str(exc), parent=self.winfo_toplevel()
                 )
                 return
-            self._atualizar_grade()
-            self.grade.selecionar_item(item_id, rolar=False)
+            self._atualizar_grade(
+                focar_meta={
+                    "tipo": TIPO_COMPOSICAO_PROPRIA,
+                    "id": item_id,
+                    "grupo_id": grupo_id,
+                }
+            )
 
         DialogoBuscaComposicaoPropria(
             self.winfo_toplevel(),
@@ -1528,8 +1537,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
             return
-        self._atualizar_grade()
-        self.grade.selecionar_por_id(TIPO_GRUPO, grupo_id)
+        self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
 
     def _mover_grupo(self, delta):
         meta = self._meta_selecionada()
@@ -1546,8 +1554,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
             return
-        self._atualizar_grade()
-        self.grade.selecionar_por_id(TIPO_GRUPO, meta["id"])
+        self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": meta["id"]})
 
     def _mover_item(self, delta):
         meta = self._meta_selecionada()
@@ -1565,8 +1572,9 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Item", str(exc), parent=self.winfo_toplevel())
             return
-        self._atualizar_grade()
-        self.grade.selecionar_item(item_id)
+        self._atualizar_grade(
+            focar_meta={"tipo": meta["tipo"], "id": item_id, "grupo_id": meta.get("grupo_id")}
+        )
 
     def _meta_selecionada(self):
         return self.grade.obter_meta_selecionada()
@@ -1625,7 +1633,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ):
                 return
             self.orcamento.remover_grupo(grupos[0]["id"])
-            self._atualizar_grade()
+            self._atualizar_grade(focar_meta=[])
             return
 
         if len(itens) > 1:
@@ -1639,10 +1647,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         for meta in itens:
             self.orcamento.remover_item(meta["id"])
 
-        self._atualizar_grade()
+        self._atualizar_grade(focar_meta=[])
 
     def _dialogo_editar_quantidade(self, item_id):
-        _grupo, item = self.orcamento.obter_item(item_id)
+        grupo, item = self.orcamento.obter_item(item_id)
         if item is None:
             return
 
@@ -1654,8 +1662,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "Quantidade", str(exc), parent=self.winfo_toplevel()
                 )
                 return
-            self._atualizar_grade()
-            self.grade.selecionar_item(item_id, rolar=False)
+            self._atualizar_grade(
+                focar_meta={
+                    "tipo": item["tipo"],
+                    "id": item_id,
+                    "grupo_id": grupo["id"] if grupo else None,
+                }
+            )
 
         DialogoEditarQuantidade(
             self.winfo_toplevel(),
@@ -1695,8 +1708,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             except ValueError as exc:
                 messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
                 return
-            self._atualizar_grade()
-            self.grade.selecionar_item(item_id, rolar=False)
+            self._atualizar_grade(
+                focar_meta={
+                    "tipo": TIPO_SINAPI,
+                    "id": item_id,
+                    "grupo_id": meta.get("grupo_id"),
+                }
+            )
 
         def ao_substituir_propria(comp, _quantidade):
             try:
@@ -1710,8 +1728,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             except ValueError as exc:
                 messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
                 return
-            self._atualizar_grade()
-            self.grade.selecionar_item(item_id, rolar=False)
+            self._atualizar_grade(
+                focar_meta={
+                    "tipo": TIPO_COMPOSICAO_PROPRIA,
+                    "id": item_id,
+                    "grupo_id": meta.get("grupo_id"),
+                }
+            )
 
         DialogoBuscaSinapi(
             self.winfo_toplevel(),
@@ -1774,8 +1797,17 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         self._persistir_orcamento_atual()
 
-    def _atualizar_grade(self):
-        self._preencher_grade()
+    def _atualizar_grade(self, focar_meta=None):
+        self._preencher_grade(focar_meta=focar_meta)
+
+    def _selecoes_para_reconstrucao(self, focar_meta):
+        if focar_meta is not None:
+            if focar_meta == []:
+                return []
+            if isinstance(focar_meta, dict):
+                return [focar_meta]
+            return list(focar_meta)
+        return self.grade.obter_metas_selecionadas()
 
     def _sincronizar_precos_sinapi(self, estado_atual):
         if not estado_atual:
@@ -1823,9 +1855,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             for g in self.orcamento.grupos
         )
 
-    def _preencher_grade(self):
-        y_scroll = self.grade.salvar_posicao_scroll()
-        selecoes = self.grade.obter_metas_selecionadas()
+    def _preencher_grade(self, focar_meta=None):
+        self.grade.iniciar_reconstrucao()
+        fracao = self.grade.salvar_fracao_scroll()
+        selecoes = self._selecoes_para_reconstrucao(focar_meta)
         self.grade.limpar()
 
         estado_atual = self._estado_selecionado()
@@ -1915,10 +1948,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 f"{_formatar_moeda(self._total_geral_calculado(bdi, catalogo, estado_atual))}"
             )
         )
-        if selecoes:
-            self.grade.finalizar_reconstrucao(y_scroll, selecoes)
-        else:
-            self.grade.finalizar_reconstrucao(y_scroll)
+        self.grade.finalizar_reconstrucao(fracao, selecoes)
         self._persistir_orcamento_atual()
 
     def focar(self):

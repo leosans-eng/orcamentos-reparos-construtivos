@@ -10,6 +10,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from core.formatador_sinapi.comum import (
     FORMATO_MOEDA,
     aplicar_borda_contorno,
+    eh_rotulo_a_orcar,
     encontrar_linha_dados_start,
     extrair_bdi_rotulo,
     extrair_nome_obra,
@@ -122,8 +123,13 @@ def formatar_modelo1(
             continue
 
         if codigo_original == "":
-            valor_extenso = valor_em_extenso(total_c_bdi)
-            ws_destino.append([item, "", descricao, valor_extenso, "", "", "", "", total_c_bdi])
+            if eh_rotulo_a_orcar(total_c_bdi):
+                valor_extenso = ""
+                total_secao = total_c_bdi
+            else:
+                valor_extenso = valor_em_extenso(total_c_bdi)
+                total_secao = total_c_bdi
+            ws_destino.append([item, "", descricao, valor_extenso, "", "", "", "", total_secao])
             ws_destino.row_dimensions[num_linha_atual].height = max(altura_linha, 26)
             ws_destino.merge_cells(
                 start_row=num_linha_atual, start_column=4, end_row=num_linha_atual, end_column=8
@@ -146,7 +152,8 @@ def formatar_modelo1(
                     )
                 elif c_idx == 9:
                     celula.alignment = align_direita
-                    celula.number_format = FORMATO_MOEDA
+                    if not eh_rotulo_a_orcar(total_secao):
+                        celula.number_format = FORMATO_MOEDA
         else:
             un = str(ws_origem.cell(row=row_idx, column=6).value or "").strip()
             ws_destino.append(

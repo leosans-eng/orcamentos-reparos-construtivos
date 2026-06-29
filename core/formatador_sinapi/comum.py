@@ -11,6 +11,12 @@ from openpyxl.workbook.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 FORMATO_MOEDA = '_-"R$" * #,##0.00_-'
+ROTULO_A_ORCAR = "A ORÇAR"
+
+
+def eh_rotulo_a_orcar(valor) -> bool:
+    """Indica se o valor representa etapa sem itens a orçar."""
+    return isinstance(valor, str) and valor.strip().upper() == ROTULO_A_ORCAR
 
 
 def planilha_ativa(workbook: Workbook) -> Worksheet:

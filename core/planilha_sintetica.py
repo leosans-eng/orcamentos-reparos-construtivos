@@ -10,7 +10,11 @@ from __future__ import annotations
 import openpyxl
 
 from core.composicoes_proprias import custo_composicao_propria_item
-from core.formatador_sinapi.comum import planilha_ativa, valor_em_extenso
+from core.formatador_sinapi.comum import (
+    ROTULO_A_ORCAR,
+    planilha_ativa,
+    valor_em_extenso,
+)
 from core.orcamento_customizado import (
     TIPO_COMPOSICAO_PROPRIA,
     TIPO_SINAPI,
@@ -123,14 +127,14 @@ def gerar_planilha_sintetica(
     bdi = float(orcamento.bdi_percent)
     total_sem_bdi = 0.0
 
-    grupos_com_itens = [g for g in orcamento.grupos if g.get("itens")]
-    for indice_grupo, grupo in enumerate(grupos_com_itens):
+    for indice_grupo, grupo in enumerate(orcamento.grupos, start=1):
+        itens = grupo.get("itens") or []
         subtotal_grupo_s = 0.0
         subtotal_grupo_c = 0.0
         rotulo_grupo = f" {indice_grupo}"
 
         itens_dados = [
-            _dados_item(item, catalogo, sinapi, estado, bdi) for item in grupo["itens"]
+            _dados_item(item, catalogo, sinapi, estado, bdi) for item in itens
         ]
         for dados in itens_dados:
             subtotal_grupo_s += dados["total_s"]
@@ -138,12 +142,16 @@ def gerar_planilha_sintetica(
 
         subtotal_grupo_s = round(subtotal_grupo_s, 2)
         subtotal_grupo_c = round(subtotal_grupo_c, 2)
-        total_sem_bdi += subtotal_grupo_s
+        if itens:
+            total_sem_bdi += subtotal_grupo_s
 
         ws.cell(row=linha, column=1, value=rotulo_grupo)
         ws.cell(row=linha, column=5, value=grupo["nome"].strip().upper())
-        ws.cell(row=linha, column=6, value=valor_em_extenso(subtotal_grupo_c))
-        ws.cell(row=linha, column=11, value=subtotal_grupo_c)
+        if itens:
+            ws.cell(row=linha, column=6, value=valor_em_extenso(subtotal_grupo_c))
+            ws.cell(row=linha, column=11, value=subtotal_grupo_c)
+        else:
+            ws.cell(row=linha, column=11, value=ROTULO_A_ORCAR)
         linha += 1
 
         for indice_item, dados in enumerate(itens_dados, start=1):

@@ -10,6 +10,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from core.formatador_sinapi.comum import (
     FORMATO_MOEDA,
     aplicar_borda_contorno,
+    eh_rotulo_a_orcar,
     encontrar_linha_dados_start,
     extrair_bdi_rotulo,
     extrair_nome_obra,
@@ -67,7 +68,8 @@ def _criar_aba_orcamento_resumo(
                 celula.alignment = align_esquerda
             elif c_idx == 3:
                 celula.alignment = align_direita
-                celula.number_format = FORMATO_MOEDA
+                if not eh_rotulo_a_orcar(linha["total_c_bdi"]):
+                    celula.number_format = FORMATO_MOEDA
 
     if linhas_principais:
         aplicar_borda_contorno(ws_resumo, 1, 1, ws_resumo.max_row, 3)
@@ -183,8 +185,13 @@ def formatar_modelo3(
                 "descricao": descricao,
                 "total_c_bdi": total_c_bdi,
             })
-            valor_extenso = valor_em_extenso(total_c_bdi)
-            ws_destino.append([item, "", descricao, valor_extenso, "", "", total_c_bdi])
+            if eh_rotulo_a_orcar(total_c_bdi):
+                valor_extenso = ""
+                total_secao = total_c_bdi
+            else:
+                valor_extenso = valor_em_extenso(total_c_bdi)
+                total_secao = total_c_bdi
+            ws_destino.append([item, "", descricao, valor_extenso, "", "", total_secao])
             ws_destino.row_dimensions[num_linha_atual].height = max(altura_linha, 26)
             ws_destino.merge_cells(
                 start_row=num_linha_atual, start_column=4, end_row=num_linha_atual, end_column=6
@@ -207,7 +214,8 @@ def formatar_modelo3(
                     )
                 elif c_idx == num_colunas:
                     celula.alignment = align_direita
-                    celula.number_format = FORMATO_MOEDA
+                    if not eh_rotulo_a_orcar(total_secao):
+                        celula.number_format = FORMATO_MOEDA
         else:
             un = str(ws_origem.cell(row=row_idx, column=6).value or "").strip()
             ws_destino.append([item, codigo, descricao, un, qtd, preco_c_bdi, total_c_bdi])

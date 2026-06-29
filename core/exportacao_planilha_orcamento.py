@@ -20,6 +20,7 @@ from core.formatador_sinapi.comum import (
     sanitizar_nome_arquivo,
 )
 from core.orcamento_customizado import TIPO_COMPOSICAO_PROPRIA, TIPO_SINAPI
+from core.formatador_sinapi.comum import ROTULO_A_ORCAR, eh_rotulo_a_orcar
 from core.planilha_sintetica import gerar_planilha_sintetica
 from core.sinapi_busca import obter_item_sinapi
 
@@ -154,6 +155,16 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
             )
 
         if not grupo.get("itens"):
+            linhas.append(
+                {
+                    "Código SINAPI": "",
+                    "Descrição do item": grupo["nome"].strip().upper(),
+                    "Unid.": "",
+                    "Qtd.": "",
+                    "Valor Unit.": "",
+                    "Total s/ BDI": ROTULO_A_ORCAR,
+                }
+            )
             continue
 
         subtotal_grupo = round(subtotal_grupo, 2)
@@ -208,8 +219,16 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
     )
 
     df = pd.DataFrame(linhas, columns=COLUNAS_PLANILHA)
-    df["Total s/ BDI"] = pd.to_numeric(df["Total s/ BDI"], errors="coerce")
-    df = df.fillna({"Total s/ BDI": 0.0})
+
+    def _normalizar_total_coluna(valor):
+        if eh_rotulo_a_orcar(valor):
+            return ROTULO_A_ORCAR
+        try:
+            return float(valor) if valor not in (None, "") else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+
+    df["Total s/ BDI"] = df["Total s/ BDI"].apply(_normalizar_total_coluna)
     return df
 
 

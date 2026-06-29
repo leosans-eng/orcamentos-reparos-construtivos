@@ -51,13 +51,17 @@ def formatar_bdi_planilha(valor: float) -> str:
     return f"{float(valor):.2f}".replace(".", ",")
 
 
+def _us_para_br_numero(texto_us: str) -> str:
+    return texto_us.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def _comprimento_exibicao_moeda(valor) -> int:
-    """Estima largura da célula com formatação R$ sem separador de milhar."""
+    """Estima largura da célula com formatação R$ #.##0,00."""
     try:
         numero = float(valor)
     except (TypeError, ValueError):
         return len(str(valor))
-    texto = f"R$ {numero:.2f}".replace(".", ",")
+    texto = "R$ " + _us_para_br_numero(f"{numero:,.2f}")
     return len(texto)
 
 
@@ -250,7 +254,7 @@ def aplicar_formato_planilha_orcamento(
 
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=5, max_col=6):
         for cell in row:
-            cell.number_format = 'R$ #0.00'
+            cell.number_format = 'R$ #.##0,00'
 
     ws.column_dimensions["A"].width = 7.24
     ws.column_dimensions["B"].width = 70

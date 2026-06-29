@@ -130,23 +130,30 @@ def _configurar_botao_colorido(style, nome, *, background, active, pressed, padd
     )
 
 
+def _us_para_br_numero(texto_us: str) -> str:
+    """Converte número em texto US (1,234.56) para BR (1.234,56)."""
+    return texto_us.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def formatar_moeda_br(valor) -> str:
-    """Formata valor em reais sem separador de milhar (ex.: R$ 11321,57)."""
+    """Formata valor em reais com separador de milhar (ex.: R$ 3.056.524,10)."""
     try:
-        return f"R$ {float(valor):.2f}".replace(".", ",")
+        numero = float(valor)
     except (TypeError, ValueError):
         return str(valor)
+    return "R$ " + _us_para_br_numero(f"{numero:,.2f}")
 
 
 def formatar_decimal_br(valor, casas: int = 4) -> str:
-    """Formata decimal com vírgula, sem separador de milhar."""
+    """Formata decimal/quantidade com ponto nos milhares e vírgula decimal."""
     try:
         v = float(valor)
-        if casas <= 0 or v == int(v):
-            return str(int(v))
-        return f"{v:.{casas}f}".rstrip("0").rstrip(".").replace(".", ",")
     except (TypeError, ValueError):
         return str(valor)
+    if casas <= 0 or v == int(v):
+        return _us_para_br_numero(f"{int(v):,}")
+    texto_us = f"{v:,.{casas}f}".rstrip("0").rstrip(".")
+    return _us_para_br_numero(texto_us)
 
 
 def configurar_estilos_ttk(root):

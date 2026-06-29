@@ -15,12 +15,14 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from core.composicoes_proprias import custo_composicao_propria_item
 from core.formatador_sinapi import Modelo, formatar_planilha
 from core.formatador_sinapi.comum import (
+    FORMATO_MOEDA,
+    ROTULO_A_ORCAR,
+    eh_rotulo_a_orcar,
     indice_linha,
     planilha_ativa,
     sanitizar_nome_arquivo,
 )
 from core.orcamento_customizado import TIPO_COMPOSICAO_PROPRIA, TIPO_SINAPI
-from core.formatador_sinapi.comum import ROTULO_A_ORCAR, eh_rotulo_a_orcar
 from core.planilha_sintetica import gerar_planilha_sintetica
 from core.sinapi_busca import obter_item_sinapi
 
@@ -76,6 +78,27 @@ def _ajustar_largura_coluna_moeda(planilha, coluna: str, largura_minima: float =
         else:
             max_length = max(max_length, len(str(cell.value)))
     planilha.column_dimensions[coluna].width = max_length + 2
+
+
+def _aplicar_formato_moeda_celula(celula) -> None:
+    """Garante valor numérico e formatação monetária padrão do escritório."""
+    valor = celula.value
+    if eh_rotulo_a_orcar(valor) or valor in (None, ""):
+        return
+    if isinstance(valor, str):
+        texto = valor.strip()
+        if not texto:
+            return
+        try:
+            if "," in texto and texto.count(",") == 1:
+                valor = float(texto.replace(".", "").replace(",", "."))
+            else:
+                valor = float(texto)
+        except ValueError:
+            return
+    if isinstance(valor, (int, float)):
+        celula.value = round(float(valor), 2)
+        celula.number_format = FORMATO_MOEDA
 
 
 def sincronizar_precos_sinapi(orcamento, sinapi, estado: str) -> None:
@@ -160,8 +183,8 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
                     "Código SINAPI": "",
                     "Descrição do item": grupo["nome"].strip().upper(),
                     "Unid.": "",
-                    "Qtd.": "",
-                    "Valor Unit.": "",
+                    "Qtd.": None,
+                    "Valor Unit.": None,
                     "Total s/ BDI": ROTULO_A_ORCAR,
                 }
             )
@@ -175,8 +198,8 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
                 "Código SINAPI": "",
                 "Descrição do item": grupo["nome"].strip().upper(),
                 "Unid.": "",
-                "Qtd.": "",
-                "Valor Unit.": "",
+                "Qtd.": None,
+                "Valor Unit.": None,
                 "Total s/ BDI": subtotal_grupo,
             }
         )
@@ -192,8 +215,8 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
             "Código SINAPI": "",
             "Descrição do item": "Total sem BDI",
             "Unid.": "",
-            "Qtd.": "",
-            "Valor Unit.": "",
+            "Qtd.": None,
+            "Valor Unit.": None,
             "Total s/ BDI": total_sem_bdi,
         }
     )
@@ -202,8 +225,8 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
             "Código SINAPI": "",
             "Descrição do item": f"Total do BDI ({formatar_bdi_planilha(bdi_percent)}%)",
             "Unid.": "",
-            "Qtd.": "",
-            "Valor Unit.": "",
+            "Qtd.": None,
+            "Valor Unit.": None,
             "Total s/ BDI": valor_bdi,
         }
     )
@@ -212,13 +235,15 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
             "Código SINAPI": "",
             "Descrição do item": "TOTAL GERAL",
             "Unid.": "",
-            "Qtd.": "",
-            "Valor Unit.": "",
+            "Qtd.": None,
+            "Valor Unit.": None,
             "Total s/ BDI": total_final,
         }
     )
 
     df = pd.DataFrame(linhas, columns=COLUNAS_PLANILHA)
+    df["Qtd."] = pd.to_numeric(df["Qtd."], errors="coerce")
+    df["Valor Unit."] = pd.to_numeric(df["Valor Unit."], errors="coerce")
 
     def _normalizar_total_coluna(valor):
         if eh_rotulo_a_orcar(valor):
@@ -273,7 +298,7 @@ def aplicar_formato_planilha_orcamento(
 
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=5, max_col=6):
         for cell in row:
-            cell.number_format = 'R$ #.##0,00'
+            _aplicar_formato_moeda_celula(cell)
 
     ws.column_dimensions["A"].width = 7.24
     ws.column_dimensions["B"].width = 70

@@ -245,6 +245,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         incluir_composicoes_proprias=False,
         catalogo_composicoes=None,
         on_confirmar_propria=None,
+        texto_item_substituindo=None,
     ):
         super().__init__(parent)
         self.ctx = ctx
@@ -252,6 +253,8 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.on_confirmar_propria = on_confirmar_propria
         self.incluir_composicoes_proprias = incluir_composicoes_proprias
         self.catalogo_composicoes = list(catalogo_composicoes or [])
+        self.texto_item_substituindo = (texto_item_substituindo or "").strip() or None
+        self.label_item_substituindo = None
         self._job_busca = None
         self.mostrar_quantidade = mostrar_quantidade
         self.texto_confirmar = texto_confirmar
@@ -369,14 +372,55 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
-        painel_detalhe = tk.Frame(
-            painel, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
+        if self.texto_item_substituindo:
+            painel_atual = tk.LabelFrame(
+                painel, text="Item a substituir", bg="#ececec", padx=6, pady=4
+            )
+            painel_atual.pack(fill="x", pady=(0, 6))
+            frame_atual = tk.Frame(
+                painel_atual,
+                bg="#e8ecf0",
+                highlightbackground="#cccccc",
+                highlightthickness=1,
+            )
+            frame_atual.pack(fill="x")
+            self.label_item_substituindo = tk.Label(
+                frame_atual,
+                text=self.texto_item_substituindo,
+                font=("Arial", 9),
+                fg="#333333",
+                bg="#e8ecf0",
+                justify="left",
+                anchor="w",
+                padx=10,
+                pady=8,
+            )
+            self.label_item_substituindo.pack(fill="x")
+
+        titulo_detalhe = (
+            "Novo item selecionado" if self.texto_item_substituindo else "Detalhes"
+        )
+        painel_detalhe = tk.LabelFrame(
+            painel, text=titulo_detalhe, bg="#ececec", padx=6, pady=4
         )
         painel_detalhe.pack(fill="x", pady=(0, 8))
 
-        self.label_detalhe = tk.Label(
+        texto_detalhe_inicial = (
+            "Selecione o novo item na lista para comparar."
+            if self.texto_item_substituindo
+            else "Selecione um item na lista para ver os detalhes."
+        )
+        frame_detalhe = tk.Frame(
             painel_detalhe,
-            text="Selecione um item na lista para ver os detalhes.",
+            bg="#f5fafc",
+            highlightbackground="#cccccc",
+            highlightthickness=1,
+        )
+        frame_detalhe.pack(fill="x")
+
+        self.label_detalhe = tk.Label(
+            frame_detalhe,
+            text=texto_detalhe_inicial,
             font=("Arial", 9),
             fg="#444444",
             bg="#f5fafc",
@@ -444,7 +488,10 @@ class DialogoBuscaSinapi(tk.Toplevel):
         if largura < 200 or largura == self._ultima_largura_wrap:
             return
         self._ultima_largura_wrap = largura
-        self.label_detalhe.config(wraplength=max(280, largura - 48))
+        wrap = max(280, largura - 48)
+        self.label_detalhe.config(wraplength=wrap)
+        if self.label_item_substituindo is not None:
+            self.label_item_substituindo.config(wraplength=wrap)
 
     def _ao_selecionar_item(self, _event=None):
         selecionado = self.tree.selection()
@@ -1796,6 +1843,30 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ao_confirmar,
         )
 
+    def _texto_item_para_substituicao(self, item):
+        estado = self._estado_selecionado()
+        catalogo = listar_composicoes_catalogo()
+        if item["tipo"] == TIPO_SINAPI:
+            tipo_rotulo = rotulo_tipo_sinapi(item, self.ctx.sinapi) or "—"
+            estado_item = item.get("estado") or estado or "—"
+            return (
+                f"Código: {item['codigo']}  ·  {tipo_rotulo}  ·  Estado: {estado_item}  ·  "
+                f"Unidade: {item['unidade']}  ·  Custo: {_formatar_moeda(item['custo_unitario'])}\n"
+                f"{item['descricao']}"
+            )
+        if item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
+            custo_unit, _ = custo_composicao_propria_item(
+                item, catalogo, self.ctx.sinapi, estado
+            )
+            codigo = item.get("codigo", "") or "—"
+            custo_fmt = _formatar_moeda(custo_unit) if estado else "—"
+            return (
+                f"Composição própria  ·  Código: {codigo}  ·  "
+                f"Unidade: {item.get('unidade', '')}  ·  Custo: {custo_fmt}\n"
+                f"{item.get('nome', '')}"
+            )
+        return rotulo_item(item)
+
     def _editar_item_sinapi(self, meta=None):
         from_duplo_clique = meta is not None
         meta = meta or self._meta_selecionada()
@@ -1816,6 +1887,9 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             return
 
         item_id = meta["id"]
+        _grupo, item = self.orcamento.obter_item(item_id)
+        if item is None:
+            return
         catalogo = listar_composicoes_catalogo()
 
         def ao_substituir_sinapi(codigo, descricao, unidade, custo, _quantidade, estado, tipo_sinapi=""):
@@ -1868,6 +1942,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             incluir_composicoes_proprias=bool(catalogo),
             catalogo_composicoes=catalogo,
             on_confirmar_propria=ao_substituir_propria,
+            texto_item_substituindo=self._texto_item_para_substituicao(item),
         )
 
     def _exportar_planilha(self):

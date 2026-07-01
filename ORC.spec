@@ -45,6 +45,8 @@ a = Analysis(
         'core.orcamento_customizado',
         'core.composicoes_proprias',
         'core.composicoes_proprias_storage',
+        'core.etapas_predefinidas',
+        'core.etapas_predefinidas_storage',
         'core.orcamento_storage',
     ],
     hookspath=[],

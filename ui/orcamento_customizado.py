@@ -232,6 +232,96 @@ class DialogoTrocarOrdemEtapa(tk.Toplevel):
         self.destroy()
 
 
+ETAPA_EM_BRANCO = "— Etapa em branco —"
+
+
+class DialogoNovaEtapa(tk.Toplevel):
+    def __init__(self, parent, modelos, on_confirmar):
+        super().__init__(parent)
+        preparar_toplevel(self)
+        self.on_confirmar = on_confirmar
+        self._modelos_por_nome = {m["nome"]: m for m in modelos}
+        self.title("Nova etapa")
+        aplicar_icone_janela(self)
+        self.configure(bg="#ececec")
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+
+        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel.pack(fill="both", expand=True)
+
+        tk.Label(
+            painel,
+            text="Nome da etapa:",
+            bg="#ececec",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        self.var_nome = tk.StringVar()
+        entrada_nome = ttk.Entry(painel, textvariable=self.var_nome, width=44)
+        entrada_nome.pack(fill="x", pady=(0, 12))
+
+        tk.Label(
+            painel,
+            text="Modelo (opcional):",
+            bg="#ececec",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        opcoes = [ETAPA_EM_BRANCO] + [m["nome"] for m in modelos]
+        self.var_modelo = tk.StringVar(value=ETAPA_EM_BRANCO)
+        self.combo_modelo = ttk.Combobox(
+            painel,
+            textvariable=self.var_modelo,
+            values=opcoes,
+            state="readonly",
+            width=42,
+        )
+        self.combo_modelo.pack(fill="x", pady=(0, 8))
+        self.combo_modelo.bind("<<ComboboxSelected>>", self._ao_mudar_modelo)
+
+        botoes = ttk.Frame(painel)
+        botoes.pack(fill="x")
+        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
+            side="right", padx=(6, 0)
+        )
+        ttk.Button(botoes, text="Criar", command=self._confirmar, style="Add.TButton").pack(
+            side="right"
+        )
+
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.bind("<Return>", lambda _e: self._confirmar())
+        self.update_idletasks()
+        centralizar_janela(self, parent)
+        entrada_nome.focus_set()
+
+    def _ao_mudar_modelo(self, _event=None):
+        modelo = self.var_modelo.get().strip()
+        if modelo and modelo != ETAPA_EM_BRANCO:
+            self.var_nome.set(modelo)
+
+    def _confirmar(self):
+        nome = self.var_nome.get().strip()
+        if not nome:
+            messagebox.showwarning(
+                "Nova etapa",
+                "Informe o nome da etapa.",
+                parent=self,
+            )
+            return
+
+        modelo = self.var_modelo.get().strip()
+        etapa_id = None
+        if modelo and modelo != ETAPA_EM_BRANCO:
+            etapa = self._modelos_por_nome.get(modelo)
+            if etapa is not None:
+                etapa_id = etapa["id"]
+
+        if self.on_confirmar(nome, etapa_id):
+            self.destroy()
+
+
 class DialogoBuscaSinapi(tk.Toplevel):
     def __init__(
         self,
@@ -725,15 +815,28 @@ class DialogoBuscaSinapi(tk.Toplevel):
 
 
 class DialogoBuscaComposicaoPropria(tk.Toplevel):
-    def __init__(self, parent, ctx, catalogo, estado_inicial, on_confirmar):
+    def __init__(
+        self,
+        parent,
+        ctx,
+        catalogo,
+        estado_inicial,
+        on_confirmar,
+        *,
+        mostrar_quantidade=True,
+        titulo="Inserir composição própria",
+        texto_confirmar="Inserir",
+    ):
         super().__init__(parent)
         preparar_toplevel(self)
         self.ctx = ctx
         self.catalogo = catalogo
         self.on_confirmar = on_confirmar
+        self.mostrar_quantidade = mostrar_quantidade
+        self.texto_confirmar = texto_confirmar
         self._ultima_largura_wrap = 0
 
-        self.title("Inserir composição própria")
+        self.title(titulo)
         self.geometry("900x620")
         self.minsize(640, 420)
         aplicar_icone_janela(self)
@@ -780,13 +883,16 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
             row=1, column=1, padx=4, pady=3, sticky="ew"
         )
 
-        tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(
-            row=1, column=2, padx=(14, 4), pady=3, sticky="w"
-        )
-        self.var_quantidade = tk.StringVar(value="1")
-        ttk.Entry(linha_filtros, textvariable=self.var_quantidade, width=10).grid(
-            row=1, column=3, padx=4, pady=3, sticky="w"
-        )
+        if self.mostrar_quantidade:
+            tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(
+                row=1, column=2, padx=(14, 4), pady=3, sticky="w"
+            )
+            self.var_quantidade = tk.StringVar(value="1")
+            ttk.Entry(linha_filtros, textvariable=self.var_quantidade, width=10).grid(
+                row=1, column=3, padx=4, pady=3, sticky="w"
+            )
+        else:
+            self.var_quantidade = tk.StringVar(value="1")
         linha_filtros.columnconfigure(1, weight=1)
 
         painel_resultados = tk.LabelFrame(
@@ -837,7 +943,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         ).pack(side="right")
         ttk.Button(
             botoes_acao,
-            text="Inserir",
+            text=self.texto_confirmar,
             command=self._confirmar,
             style="Add.TButton",
         ).pack(side="right", padx=(0, 8))
@@ -1567,19 +1673,55 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self.var_codigo_rapido.set("")
 
     def _novo_grupo(self):
-        nome = perguntar_texto(
-            self.winfo_toplevel(),
-            "Nova etapa",
-            "Nome da etapa (ex.: Serviços preliminares):",
-        )
-        if not nome or not nome.strip():
-            return
-        try:
-            grupo_id = self.orcamento.adicionar_grupo(nome)
-        except ValueError as exc:
-            messagebox.showwarning("Grupo", str(exc), parent=self.winfo_toplevel())
-            return
-        self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+        from core.etapas_predefinidas import aplicar_etapa_no_orcamento
+        from core.etapas_predefinidas_storage import listar as listar_etapas_predefinidas
+        from core.etapas_predefinidas_storage import obter_por_id as obter_etapa_predefinida
+
+        modelos = listar_etapas_predefinidas()
+        catalogo = listar_composicoes_catalogo()
+
+        def ao_confirmar(nome, etapa_id):
+            avisos = []
+            try:
+                if etapa_id:
+                    etapa = obter_etapa_predefinida(etapa_id)
+                    if etapa is None:
+                        messagebox.showwarning(
+                            "Nova etapa",
+                            "O modelo selecionado não foi encontrado.",
+                            parent=self.winfo_toplevel(),
+                        )
+                        return False
+                    estado = self._estado_selecionado()
+                    grupo_id, avisos = aplicar_etapa_no_orcamento(
+                        self.orcamento,
+                        etapa,
+                        self.ctx.sinapi,
+                        estado,
+                        catalogo,
+                        nome_override=nome,
+                    )
+                    if estado:
+                        self._sincronizar_precos_sinapi(estado)
+                else:
+                    grupo_id = self.orcamento.adicionar_grupo(nome)
+            except ValueError as exc:
+                messagebox.showwarning(
+                    "Nova etapa", str(exc), parent=self.winfo_toplevel()
+                )
+                return False
+
+            if avisos:
+                messagebox.showwarning(
+                    "Nova etapa",
+                    "Etapa criada com avisos:\n\n" + "\n".join(avisos),
+                    parent=self.winfo_toplevel(),
+                )
+
+            self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+            return True
+
+        DialogoNovaEtapa(self.winfo_toplevel(), modelos, ao_confirmar)
 
     def _adicionar_composicao_propria(self):
         grupo_id = self._grupo_id_selecionado()

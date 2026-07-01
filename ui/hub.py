@@ -88,6 +88,15 @@ class HubFrame(tk.Frame):
             coluna=1,
             linha=1,
         )
+        self._criar_cartao(
+            cartoes,
+            titulo="Configurar\nEtapas pré-definidas",
+            descricao="Configure modelos de Etapas que já virão com itens SINAPI e composições próprias",
+            modulo="etapas_predefinidas",
+            habilitado=True,
+            coluna=2,
+            linha=1,
+        )
 
     def _criar_cartao(
         self,

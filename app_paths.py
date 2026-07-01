@@ -82,3 +82,7 @@ def orcamentos_customizados_path() -> Path:
 
 def composicoes_proprias_path() -> Path:
     return dados_usuario_dir() / "composicoes_proprias.json"
+
+
+def etapas_predefinidas_path() -> Path:
+    return dados_usuario_dir() / "etapas_predefinidas.json"

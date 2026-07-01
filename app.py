@@ -11,6 +11,7 @@ from core.app_state import (
 from ui.area_privativa import criar_area_privativa
 from ui.composicoes_proprias import ComposicoesPropriasFrame
 from ui.consulta_sinapi import ConsultaSinapiFrame
+from ui.etapas_predefinidas import EtapasPredefinidasFrame
 from ui.hub import HubFrame
 from ui.orcamento_customizado import OrcamentoCustomizadoFrame
 from ui.widgets import centralizar_janela_principal, configurar_estilos_ttk
@@ -21,6 +22,7 @@ TITULOS_JANELA = {
     "consulta_sinapi": "ORC — Consulta SINAPI",
     "orcamento_customizado": "ORC — Orçamento Customizado",
     "composicoes_proprias": "ORC — Composições Próprias",
+    "etapas_predefinidas": "ORC — Etapas pré-definidas",
 }
 
 
@@ -131,6 +133,12 @@ class OrcApp:
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),
             )
+        elif nome == "etapas_predefinidas":
+            self._frames[nome] = EtapasPredefinidasFrame(
+                self.area_conteudo,
+                self.ctx,
+                on_voltar=lambda: self.mostrar_modulo("hub"),
+            )
 
     def _ao_selecionar_modulo_hub(self, modulo):
         if modulo == "area_comum":
@@ -144,7 +152,12 @@ class OrcApp:
         ):
             self._frames["area_privativa"].desativar_scroll()
 
-        modulos_expandidos = ("consulta_sinapi", "orcamento_customizado", "composicoes_proprias")
+        modulos_expandidos = (
+            "consulta_sinapi",
+            "orcamento_customizado",
+            "composicoes_proprias",
+            "etapas_predefinidas",
+        )
         saindo_modulo_expandido = (
             self._modulo_atual in modulos_expandidos
             and nome not in modulos_expandidos
@@ -182,7 +195,12 @@ class OrcApp:
         elif nome == "area_privativa":
             self._frames[nome].ativar_scroll()
             self._frames[nome].focar()
-        elif nome in ("consulta_sinapi", "orcamento_customizado", "composicoes_proprias"):
+        elif nome in (
+            "consulta_sinapi",
+            "orcamento_customizado",
+            "composicoes_proprias",
+            "etapas_predefinidas",
+        ):
             self._frames[nome].focar()
 
     def executar(self):

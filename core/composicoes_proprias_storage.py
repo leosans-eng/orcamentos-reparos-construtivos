@@ -12,6 +12,7 @@ from core.composicoes_proprias import (
 )
 
 VERSAO_ARQUIVO = 1
+ESTADO_PREVIA_PADRAO = "SP"
 
 
 def _composicao_exemplo():
@@ -95,6 +96,23 @@ def salvar(dados):
     caminho.parent.mkdir(parents=True, exist_ok=True)
     with open(caminho, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
+
+
+def obter_estado_previa_custos(dados=None):
+    if dados is None:
+        dados = carregar()
+    estado = str(dados.get("estado_previa_custos", "")).strip()
+    return estado or ESTADO_PREVIA_PADRAO
+
+
+def salvar_estado_previa_custos(estado, dados=None):
+    estado = str(estado or "").strip()
+    if not estado:
+        return
+    if dados is None:
+        dados = carregar()
+    dados["estado_previa_custos"] = estado
+    salvar(dados)
 
 
 def listar(dados=None):

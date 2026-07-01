@@ -10,12 +10,15 @@ from core.composicoes_proprias import (
     verificar_componentes_depreciados,
 )
 from core.composicoes_proprias_storage import (
+    ESTADO_PREVIA_PADRAO,
     atualizar,
     carregar,
     criar,
     excluir,
     listar,
+    obter_estado_previa_custos,
     obter_por_id,
+    salvar_estado_previa_custos,
 )
 from ui.orcamento_customizado import DialogoBuscaSinapi
 from ui.widgets import (
@@ -234,8 +237,8 @@ class ComposicoesPropriasFrame(tk.Frame):
             linha_topo, values=valores_combo_estado(estados), width=14, state="readonly"
         )
         self.combo_estado.pack(side="left", padx=(4, 12))
-        self.combo_estado.set(PLACEHOLDER_ESTADO)
-        self.combo_estado.bind("<<ComboboxSelected>>", self._atualizar_listas)
+        self._aplicar_estado_previa_inicial(estados)
+        self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado_previa)
 
         painel = tk.PanedWindow(conteudo, orient=tk.HORIZONTAL, sashwidth=6, bg="#cccccc")
         painel.pack(fill="both", expand=True)
@@ -361,13 +364,28 @@ class ComposicoesPropriasFrame(tk.Frame):
     def _estado_selecionado(self):
         return estado_do_combo(self.combo_estado.get())
 
+    def _aplicar_estado_previa_inicial(self, estados):
+        preferido = obter_estado_previa_custos(self._dados)
+        for candidato in (preferido, ESTADO_PREVIA_PADRAO):
+            if candidato in estados:
+                self.combo_estado.set(candidato)
+                return
+        self.combo_estado.set(PLACEHOLDER_ESTADO)
+
+    def _ao_mudar_estado_previa(self, _event=None):
+        estado = self._estado_selecionado()
+        if estado:
+            salvar_estado_previa_custos(estado, self._dados)
+            self._dados = carregar()
+        self._atualizar_listas()
+
     def _ao_atualizar_sinapi(self):
         if self.label_referencia is not None:
             self.label_referencia.config(text=self._texto_referencia())
         estados = self.ctx.obter_estados()
         self.combo_estado["values"] = valores_combo_estado(estados)
         if self.combo_estado.get() not in self.combo_estado["values"]:
-            self.combo_estado.set(PLACEHOLDER_ESTADO)
+            self._aplicar_estado_previa_inicial(estados)
         self._atualizar_listas()
 
     def _atualizar_listas(self, _event=None):

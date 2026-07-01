@@ -118,6 +118,86 @@ class DialogoComponenteMercado(tk.Toplevel):
         self.destroy()
 
 
+class DialogoNovaComposicao(tk.Toplevel):
+    def __init__(self, parent, on_confirmar):
+        super().__init__(parent)
+        self.on_confirmar = on_confirmar
+        self.title("Nova composição")
+        aplicar_icone_janela(self)
+        self.configure(bg="#ececec")
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+
+        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel.pack(fill="both", expand=True)
+
+        campos = [
+            ("Código da composição:", "codigo", ""),
+            ("Nome da composição:", "nome", ""),
+            ("Unidade de medida:", "unidade", "un"),
+        ]
+        self.vars = {}
+        self._entradas = {}
+        for indice, (rotulo, chave, valor_inicial) in enumerate(campos):
+            linha = tk.Frame(painel, bg="#ececec")
+            linha.pack(fill="x", pady=3)
+            tk.Label(linha, text=rotulo, width=22, anchor="w", bg="#ececec").pack(side="left")
+            var = tk.StringVar(value=valor_inicial)
+            self.vars[chave] = var
+            entrada = ttk.Entry(linha, textvariable=var, width=36)
+            entrada.pack(side="left", fill="x", expand=True)
+            self._entradas[chave] = entrada
+            if indice == 0:
+                self._entrada_inicial = entrada
+
+        botoes = ttk.Frame(painel)
+        botoes.pack(fill="x", pady=(12, 0))
+        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
+            side="right", padx=(6, 0)
+        )
+        ttk.Button(botoes, text="Criar", command=self._confirmar, style="Add.TButton").pack(
+            side="right"
+        )
+
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.bind("<Return>", lambda _e: self._confirmar())
+        self.update_idletasks()
+        centralizar_janela(self, parent)
+        self._entrada_inicial.focus_set()
+
+    def _confirmar(self):
+        codigo = self.vars["codigo"].get().strip()
+        nome = self.vars["nome"].get().strip()
+        unidade = self.vars["unidade"].get().strip()
+        if not codigo:
+            messagebox.showwarning(
+                "Nova composição",
+                "Informe o código da composição.",
+                parent=self,
+            )
+            self._entradas["codigo"].focus_set()
+            return
+        if not nome:
+            messagebox.showwarning(
+                "Nova composição",
+                "Informe o nome da composição.",
+                parent=self,
+            )
+            self._entradas["nome"].focus_set()
+            return
+        if not unidade:
+            messagebox.showwarning(
+                "Nova composição",
+                "Informe a unidade de medida.",
+                parent=self,
+            )
+            self._entradas["unidade"].focus_set()
+            return
+        if self.on_confirmar(codigo, nome, unidade):
+            self.destroy()
+
+
 class ComposicoesPropriasFrame(tk.Frame):
     def __init__(self, parent, ctx, on_voltar):
         super().__init__(parent, bg="#ececec")
@@ -382,35 +462,22 @@ class ComposicoesPropriasFrame(tk.Frame):
             )
 
     def _nova_composicao(self):
-        codigo = perguntar_texto(
-            self.winfo_toplevel(), "Nova composição", "Código da composição:"
-        )
-        if not codigo or not codigo.strip():
-            return
-        nome = perguntar_texto(
-            self.winfo_toplevel(), "Nova composição", "Nome da composição:"
-        )
-        if not nome or not nome.strip():
-            return
-        unidade = perguntar_texto(
-            self.winfo_toplevel(),
-            "Nova composição",
-            "Unidade de medida:",
-            valor_inicial="un",
-        )
-        if not unidade or not unidade.strip():
-            return
-        try:
-            novo_id = criar(codigo, nome, unidade, dados=self._dados)
-        except ValueError as exc:
-            messagebox.showwarning("Nova composição", str(exc), parent=self.winfo_toplevel())
-            return
-        self._dados = carregar()
-        self._composicao_editando_id = novo_id
-        self._atualizar_listas()
-        if self.tree_composicoes.exists(novo_id):
-            self.tree_composicoes.selection_set(novo_id)
-            self.tree_composicoes.focus(novo_id)
+        def ao_confirmar(codigo, nome, unidade):
+            try:
+                novo_id = criar(codigo, nome, unidade, dados=self._dados)
+            except ValueError as exc:
+                messagebox.showwarning("Nova composição", str(exc), parent=dialogo)
+                dialogo._entradas["codigo"].focus_set()
+                return False
+            self._dados = carregar()
+            self._composicao_editando_id = novo_id
+            self._atualizar_listas()
+            if self.tree_composicoes.exists(novo_id):
+                self.tree_composicoes.selection_set(novo_id)
+                self.tree_composicoes.focus(novo_id)
+            return True
+
+        dialogo = DialogoNovaComposicao(self.winfo_toplevel(), ao_confirmar)
 
     def _salvar_composicao(self):
         comp = self._composicao_em_edicao()

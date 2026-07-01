@@ -40,12 +40,14 @@ class GradeOrcamento(tk.Frame):
         on_duplo_clique_qtd=None,
         on_duplo_clique_codigo=None,
         on_duplo_clique_descricao_grupo=None,
+        on_duplo_clique_item_grupo=None,
         on_tecla_delete=None,
     ):
         super().__init__(parent, bg="#ececec")
         self.on_duplo_clique_qtd = on_duplo_clique_qtd
         self.on_duplo_clique_codigo = on_duplo_clique_codigo
         self.on_duplo_clique_descricao_grupo = on_duplo_clique_descricao_grupo
+        self.on_duplo_clique_item_grupo = on_duplo_clique_item_grupo
         self.on_tecla_delete = on_tecla_delete
         self._linhas = []
         self._selecao_metas: list[dict] = []
@@ -257,7 +259,24 @@ class GradeOrcamento(tk.Frame):
                 )
                 lbl.grid(row=0, column=col, sticky="nsew", padx=(0, 1))
                 lbl.bind("<Double-1>", lambda _e, m=meta: self._duplo_clique_codigo(m))
-            elif chave == "item" and estilo != "grupo":
+            elif chave == "item" and estilo == "grupo":
+                lbl = tk.Label(
+                    frame,
+                    text=texto,
+                    font=fonte,
+                    fg=cor_texto,
+                    bg=cor_fundo,
+                    anchor=anchor,
+                    padx=4,
+                    pady=5,
+                    cursor="hand2",
+                )
+                lbl.grid(row=0, column=col, sticky="nsew", padx=(0, 1))
+                lbl.bind(
+                    "<Double-1>",
+                    lambda _e, m=meta: self._duplo_clique_item_grupo(m),
+                )
+            elif chave == "item":
                 lbl = tk.Label(
                     frame,
                     text=texto,
@@ -336,6 +355,10 @@ class GradeOrcamento(tk.Frame):
     def _duplo_clique_descricao_grupo(self, meta):
         if self.on_duplo_clique_descricao_grupo and meta.get("tipo") == TIPO_GRUPO:
             self.on_duplo_clique_descricao_grupo(meta.get("id"))
+
+    def _duplo_clique_item_grupo(self, meta):
+        if self.on_duplo_clique_item_grupo and meta.get("tipo") == TIPO_GRUPO:
+            self.on_duplo_clique_item_grupo(meta.get("id"))
 
     def _meta_coincide(self, a, b):
         return a.get("tipo") == b.get("tipo") and a.get("id") == b.get("id")

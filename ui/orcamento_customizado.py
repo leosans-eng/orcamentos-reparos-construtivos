@@ -1165,24 +1165,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             command=self._novo_grupo,
             style="Add.Compact.TButton",
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_etapas_1,
-            text="Etapa ↑",
-            command=lambda: self._mover_grupo(-1),
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_etapas_1,
-            text="Etapa ↓",
-            command=lambda: self._mover_grupo(1),
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_etapas_1,
-            text="Trocar ordem da etapa",
-            command=self._trocar_ordem_etapa,
-            style="Compact.TButton",
-        ).pack(side="left")
 
         linha_etapas_2 = tk.Frame(frame_etapas, bg="#ececec")
         linha_etapas_2.pack(fill="x")
@@ -1248,7 +1230,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         painel_grade = tk.LabelFrame(
             conteudo,
             text=(
-                "Estrutura do orçamento  ·  Para alterar itens editáveis, clique duas vezes  ·  "
+                "Estrutura do orçamento  ·  Duplo clique: nº da etapa (reordenar), "
+                "descrição da etapa (renomear), código/qtd. do item (editar)  ·  "
                 "Ctrl/Shift+clique: seleção múltipla  ·  Delete: remover"
             ),
             bg="#ececec",
@@ -1262,6 +1245,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             on_duplo_clique_qtd=self._dialogo_editar_quantidade,
             on_duplo_clique_codigo=self._editar_item_sinapi,
             on_duplo_clique_descricao_grupo=self._renomear_grupo,
+            on_duplo_clique_item_grupo=self._trocar_ordem_etapa,
             on_tecla_delete=lambda _e: self._remover_selecionado(silencioso=True),
         )
         self.grade.pack(fill="both", expand=True)
@@ -1803,34 +1787,17 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             return
         self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
 
-    def _mover_grupo(self, delta):
-        meta = self._meta_selecionada()
-        if not meta or meta["tipo"] != TIPO_GRUPO:
-            messagebox.showinfo(
-                "Mover etapa",
-                "Selecione a linha da etapa (cabeçalho do grupo) para mover.",
-                parent=self.winfo_toplevel(),
-            )
-            return
-        try:
-            if not self.orcamento.mover_grupo(meta["id"], delta):
+    def _trocar_ordem_etapa(self, grupo_id=None):
+        if not grupo_id:
+            meta = self._meta_selecionada()
+            if not meta or meta["tipo"] != TIPO_GRUPO:
+                messagebox.showinfo(
+                    "Trocar ordem da etapa",
+                    "Selecione a linha da etapa (cabeçalho do grupo) para reordenar.",
+                    parent=self.winfo_toplevel(),
+                )
                 return
-        except ValueError as exc:
-            messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
-            return
-        self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": meta["id"]})
-
-    def _trocar_ordem_etapa(self):
-        meta = self._meta_selecionada()
-        if not meta or meta["tipo"] != TIPO_GRUPO:
-            messagebox.showinfo(
-                "Trocar ordem da etapa",
-                "Selecione a linha da etapa (cabeçalho do grupo) para reordenar.",
-                parent=self.winfo_toplevel(),
-            )
-            return
-
-        grupo_id = meta["id"]
+            grupo_id = meta["id"]
         grupo = self.orcamento.obter_grupo(grupo_id)
         if grupo is None:
             return

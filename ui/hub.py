@@ -73,7 +73,7 @@ class HubFrame(tk.Frame):
         self._criar_cartao(
             cartoes,
             titulo="Orçamento Customizado",
-            descricao="Monte seu orçamento com grupos e itens escolhidos por você",
+            descricao="Montar orçamento com Etapas e Itens personalizados",
             modulo="orcamento_customizado",
             habilitado=True,
             coluna=0,

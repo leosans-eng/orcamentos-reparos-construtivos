@@ -154,20 +154,6 @@ class OrcamentoCustomizado:
             raise ValueError("Informe o nome do grupo.")
         grupo["nome"] = nome.strip()
 
-    def mover_grupo(self, grupo_id, delta):
-        indices = [i for i, grupo in enumerate(self.grupos) if grupo["id"] == grupo_id]
-        if not indices:
-            raise ValueError("Grupo não encontrado.")
-        indice = indices[0]
-        novo_indice = indice + delta
-        if novo_indice < 0 or novo_indice >= len(self.grupos):
-            return False
-        self.grupos[indice], self.grupos[novo_indice] = (
-            self.grupos[novo_indice],
-            self.grupos[indice],
-        )
-        return True
-
     def mover_grupo_para_posicao(self, grupo_id, posicao):
         """Move etapa para a posição informada (1 = primeira etapa)."""
         total = len(self.grupos)

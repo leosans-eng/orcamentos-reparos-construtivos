@@ -9,6 +9,7 @@ from ui.widgets import (
     aplicar_hover_cartao,
     aplicar_icone_janela,
     centralizar_janela,
+    preparar_toplevel,
 )
 
 LARGURA_CARTAO = 180
@@ -33,6 +34,7 @@ def _carregar_imagem_modelo(caminho, largura_alvo=LARGURA_CARTAO - 28):
 class DialogoSelecionarModeloPlanilha(tk.Toplevel):
     def __init__(self, parent, on_selecionar=None):
         super().__init__(parent)
+        preparar_toplevel(self)
         self.on_selecionar = on_selecionar
         self._imagens = []
 

@@ -18,7 +18,7 @@ from tkinter import messagebox, ttk
 import certifi
 import tkinter as tk
 
-from ui.widgets import aplicar_icone_janela
+from ui.widgets import aplicar_icone_janela, centralizar_janela, preparar_toplevel
 
 VERSION_JSON_URL = (
     "https://raw.githubusercontent.com/leosans-eng/"
@@ -168,6 +168,7 @@ def download_file(
 class UpdateDialog(tk.Toplevel):
     def __init__(self, root: tk.Tk, info: dict, app_version: str):
         super().__init__(root)
+        preparar_toplevel(self)
         self.root = root
         self.info = info
         self.app_version = app_version
@@ -224,16 +225,7 @@ class UpdateDialog(tk.Toplevel):
         self.after(200, self.start_download)
 
     def _center_on_parent(self, parent: tk.Tk) -> None:
-        parent.update_idletasks()
-        px = parent.winfo_rootx()
-        py = parent.winfo_rooty()
-        pw = parent.winfo_width()
-        ph = parent.winfo_height()
-        width = self.winfo_width()
-        height = self.winfo_height()
-        x = px + max(0, (pw - width) // 2)
-        y = py + max(0, (ph - height) // 2)
-        self.geometry(f"+{x}+{y}")
+        centralizar_janela(self, parent)
 
     def close_dialog(self) -> None:
         self._cancelled = True

@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from ui.widgets import aplicar_icone_janela, centralizar_janela
+from ui.widgets import aplicar_icone_janela, centralizar_janela, preparar_toplevel
 
 try:
     import windnd
@@ -14,6 +14,7 @@ except ImportError:
 class DialogoImportarI9(tk.Toplevel):
     def __init__(self, parent, on_importar=None):
         super().__init__(parent)
+        preparar_toplevel(self)
         self.on_importar = on_importar
         self._importando = False
 

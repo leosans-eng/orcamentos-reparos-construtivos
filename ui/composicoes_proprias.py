@@ -31,6 +31,7 @@ from ui.widgets import (
     formatar_decimal_br,
     formatar_moeda_br,
     perguntar_texto,
+    preparar_toplevel,
     valores_combo_estado,
 )
 
@@ -48,6 +49,7 @@ def _formatar_quantidade(valor):
 class DialogoComponenteMercado(tk.Toplevel):
     def __init__(self, parent, on_confirmar):
         super().__init__(parent)
+        preparar_toplevel(self)
         self.on_confirmar = on_confirmar
         self.title("Componente de mercado")
         aplicar_icone_janela(self)
@@ -124,6 +126,7 @@ class DialogoComponenteMercado(tk.Toplevel):
 class DialogoNovaComposicao(tk.Toplevel):
     def __init__(self, parent, on_confirmar):
         super().__init__(parent)
+        preparar_toplevel(self)
         self.on_confirmar = on_confirmar
         self.title("Nova composição")
         aplicar_icone_janela(self)

@@ -1,3 +1,5 @@
+import ctypes
+import sys
 import tkinter as tk
 from tkinter import ttk
 
@@ -35,6 +37,112 @@ def aplicar_icone_janela(janela):
         pass
 
 
+def preparar_toplevel(janela):
+    """Oculta o Toplevel até centralizar_janela exibi-lo na posição correta."""
+    try:
+        janela.withdraw()
+    except tk.TclError:
+        pass
+
+
+def _obter_area_util_tela(janela, parent=None):
+    """Retorna (x, y, largura, altura) da área visível do monitor (sem barra de tarefas)."""
+    referencia = janela
+    if parent is not None:
+        try:
+            if parent.winfo_exists():
+                referencia = parent
+        except tk.TclError:
+            pass
+
+    if sys.platform == "win32":
+        try:
+            class RECT(ctypes.Structure):
+                _fields_ = [
+                    ("left", ctypes.c_long),
+                    ("top", ctypes.c_long),
+                    ("right", ctypes.c_long),
+                    ("bottom", ctypes.c_long),
+                ]
+
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", ctypes.c_ulong),
+                    ("rcMonitor", RECT),
+                    ("rcWork", RECT),
+                    ("dwFlags", ctypes.c_ulong),
+                ]
+
+            user32 = ctypes.windll.user32
+            hwnd = int(referencia.winfo_id())
+            monitor = user32.MonitorFromWindow(hwnd, 2)
+            info = MONITORINFO()
+            info.cbSize = ctypes.sizeof(MONITORINFO)
+            if user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                area = info.rcWork
+                return (
+                    area.left,
+                    area.top,
+                    area.right - area.left,
+                    area.bottom - area.top,
+                )
+        except (AttributeError, OSError, tk.TclError, TypeError, ValueError):
+            pass
+
+    try:
+        return (
+            referencia.winfo_vrootx(),
+            referencia.winfo_vrooty(),
+            referencia.winfo_vrootwidth(),
+            referencia.winfo_vrootheight(),
+        )
+    except tk.TclError:
+        pass
+
+    return 0, 0, janela.winfo_screenwidth(), janela.winfo_screenheight()
+
+
+def _medir_dimensoes_janela(janela):
+    """Obtém largura/altura reais após o layout, sem flash visível na tela."""
+    janela.update_idletasks()
+    alpha_oculto = False
+    try:
+        janela.attributes("-alpha", 0.0)
+        alpha_oculto = True
+    except tk.TclError:
+        janela.geometry("-20000-20000")
+
+    try:
+        janela.deiconify()
+    except tk.TclError:
+        pass
+    janela.update_idletasks()
+
+    largura = janela.winfo_width()
+    altura = janela.winfo_height()
+    if largura <= 1:
+        largura = janela.winfo_reqwidth()
+    if altura <= 1:
+        altura = janela.winfo_reqheight()
+
+    return largura, altura, alpha_oculto
+
+
+def centralizar_janela(janela, parent=None):
+    largura, altura, alpha_oculto = _medir_dimensoes_janela(janela)
+
+    area_x, area_y, area_largura, area_altura = _obter_area_util_tela(janela, parent)
+    x = area_x + max(0, (area_largura - largura) // 2)
+    y = area_y + max(0, (area_altura - altura) // 2)
+    janela.geometry(f"+{x}+{y}")
+    janela.update_idletasks()
+    if alpha_oculto:
+        try:
+            janela.attributes("-alpha", 1.0)
+        except tk.TclError:
+            pass
+
+
 def perguntar_texto(
     parent,
     titulo,
@@ -45,6 +153,7 @@ def perguntar_texto(
     """Diálogo de entrada de texto com ícone do ORC (substitui simpledialog.askstring)."""
     resultado: list[str | None] = [None]
     dialog = tk.Toplevel(parent)
+    preparar_toplevel(dialog)
     dialog.title(titulo)
     aplicar_icone_janela(dialog)
     dialog.transient(parent)
@@ -94,24 +203,12 @@ def perguntar_texto(
     return resultado[0]
 
 
-def centralizar_janela(janela, parent=None):
-    janela.update_idletasks()
-    largura = janela.winfo_width()
-    altura = janela.winfo_height()
-    if parent is not None and parent.winfo_exists():
-        x = parent.winfo_rootx() + (parent.winfo_width() - largura) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - altura) // 2
-    else:
-        x = (janela.winfo_screenwidth() - largura) // 2
-        y = (janela.winfo_screenheight() - altura) // 2
-    janela.geometry(f"+{max(0, x)}+{max(0, y)}")
-
-
 def centralizar_janela_principal(janela, largura, altura):
     janela.update_idletasks()
-    x = (janela.winfo_screenwidth() - largura) // 2
-    y = (janela.winfo_screenheight() - altura) // 2
-    janela.geometry(f"{largura}x{altura}+{max(0, x)}+{max(0, y)}")
+    area_x, area_y, area_largura, area_altura = _obter_area_util_tela(janela)
+    x = area_x + max(0, (area_largura - largura) // 2)
+    y = area_y + max(0, (area_altura - altura) // 2)
+    janela.geometry(f"{largura}x{altura}+{x}+{y}")
 
 
 def _configurar_botao_colorido(style, nome, *, background, active, pressed, padding):
@@ -243,6 +340,7 @@ def confirmar_exclusao_com_espera(
 ):
     """Diálogo de exclusão com contagem regressiva antes de habilitar a confirmação."""
     dialog = tk.Toplevel(parent)
+    preparar_toplevel(dialog)
     dialog.title(titulo)
     aplicar_icone_janela(dialog)
     dialog.transient(parent)

@@ -51,6 +51,7 @@ from ui.widgets import (
     PLACEHOLDER_ESTADO,
     aplicar_icone_janela,
     centralizar_janela,
+    preparar_toplevel,
     confirmar_exclusao_com_espera,
     criar_barra_modulo,
     estado_do_combo,
@@ -86,6 +87,7 @@ def _formatar_bdi(valor):
 class DialogoEditarQuantidade(tk.Toplevel):
     def __init__(self, parent, descricao_item, quantidade_atual, on_confirmar):
         super().__init__(parent)
+        preparar_toplevel(self)
         self.on_confirmar = on_confirmar
         self.title("Editar quantidade")
         aplicar_icone_janela(self)
@@ -155,6 +157,7 @@ class DialogoEditarQuantidade(tk.Toplevel):
 class DialogoTrocarOrdemEtapa(tk.Toplevel):
     def __init__(self, parent, nome_etapa, posicao_atual, opcoes_posicao, on_confirmar):
         super().__init__(parent)
+        preparar_toplevel(self)
         self.on_confirmar = on_confirmar
         self.title("Trocar ordem da etapa")
         aplicar_icone_janela(self)
@@ -248,6 +251,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         texto_item_substituindo=None,
     ):
         super().__init__(parent)
+        preparar_toplevel(self)
         self.ctx = ctx
         self.on_confirmar = on_confirmar
         self.on_confirmar_propria = on_confirmar_propria
@@ -723,6 +727,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
 class DialogoBuscaComposicaoPropria(tk.Toplevel):
     def __init__(self, parent, ctx, catalogo, estado_inicial, on_confirmar):
         super().__init__(parent)
+        preparar_toplevel(self)
         self.ctx = ctx
         self.catalogo = catalogo
         self.on_confirmar = on_confirmar

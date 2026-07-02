@@ -16,7 +16,7 @@ from core.etapas_predefinidas_storage import (
     listar,
     obter_por_id,
 )
-from ui.icones import criar_botao_ttk_com_icone
+from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
 from ui.orcamento_customizado import DialogoBuscaComposicaoPropria, DialogoBuscaSinapi
 from ui.widgets import (
     aplicar_icone_janela,
@@ -153,11 +153,13 @@ class EtapasPredefinidasFrame(tk.Frame):
             estilo="Add.Compact.TButton",
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_bt_etapas,
-            text="Excluir",
+            texto="Excluir",
+            nome_icone="trash-outline",
             command=self._excluir_etapa,
-            style="Delete.Compact.TButton",
+            estilo="Delete.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left")
 
         direita = tk.LabelFrame(painel, text="Edição da etapa", bg="#ececec", padx=8, pady=8)
@@ -174,8 +176,13 @@ class EtapasPredefinidasFrame(tk.Frame):
             side="left", fill="x", expand=True
         )
 
-        ttk.Button(
-            form, text="Salvar alterações", command=self._salvar_etapa, style="Save.TButton"
+        criar_botao_ttk_com_icone(
+            form,
+            texto="Salvar alterações",
+            nome_icone="save-outline",
+            command=self._salvar_etapa,
+            estilo="Save.TButton",
+            refs=self._icones_botoes,
         ).pack(anchor="e", pady=(6, 0))
 
         painel_itens = tk.LabelFrame(
@@ -204,23 +211,25 @@ class EtapasPredefinidasFrame(tk.Frame):
 
         linha_bt_itens = tk.Frame(direita, bg="#ececec")
         linha_bt_itens.pack(fill="x", pady=(8, 0))
-        ttk.Button(
+        criar_botao_inserir_prominente(
             linha_bt_itens,
-            text="Adicionar item SINAPI",
+            texto="Adicionar item SINAPI",
             command=self._adicionar_sinapi,
-            style="Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        criar_botao_inserir_prominente(
             linha_bt_itens,
-            text="Adicionar composição própria",
+            texto="Adicionar composição própria",
             command=self._adicionar_propria,
-            style="Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_bt_itens,
-            text="Remover item",
+            texto="Remover item",
+            nome_icone="remove-circle-outline",
             command=self._remover_item,
-            style="Delete.Compact.TButton",
+            estilo="Delete.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left")
 
         tk.Label(

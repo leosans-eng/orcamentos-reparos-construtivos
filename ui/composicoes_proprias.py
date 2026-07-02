@@ -20,7 +20,7 @@ from core.composicoes_proprias_storage import (
     obter_por_id,
     salvar_estado_previa_custos,
 )
-from ui.icones import criar_botao_ttk_com_icone
+from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
 from ui.orcamento_customizado import DialogoBuscaSinapi
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
@@ -295,8 +295,13 @@ class ComposicoesPropriasFrame(tk.Frame):
             estilo="Add.Compact.TButton",
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_bt_comp, text="Excluir", command=self._excluir_composicao, style="Delete.Compact.TButton"
+        criar_botao_ttk_com_icone(
+            linha_bt_comp,
+            texto="Excluir",
+            nome_icone="trash-outline",
+            command=self._excluir_composicao,
+            estilo="Delete.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left")
 
         direita = tk.LabelFrame(painel, text="Edição da composição", bg="#ececec", padx=8, pady=8)
@@ -319,8 +324,13 @@ class ComposicoesPropriasFrame(tk.Frame):
             tk.Label(linha, text=rotulo, width=10, anchor="w", bg="#ececec").pack(side="left")
             ttk.Entry(linha, textvariable=var, width=48).pack(side="left", fill="x", expand=True)
 
-        ttk.Button(
-            form, text="Salvar alterações", command=self._salvar_composicao, style="Save.TButton"
+        criar_botao_ttk_com_icone(
+            form,
+            texto="Salvar alterações",
+            nome_icone="save-outline",
+            command=self._salvar_composicao,
+            estilo="Save.TButton",
+            refs=self._icones_botoes,
         ).pack(anchor="e", pady=(6, 0))
 
         painel_comp = tk.LabelFrame(
@@ -350,23 +360,25 @@ class ComposicoesPropriasFrame(tk.Frame):
 
         linha_bt_cmp = tk.Frame(direita, bg="#ececec")
         linha_bt_cmp.pack(fill="x", pady=(8, 0))
-        ttk.Button(
+        criar_botao_inserir_prominente(
             linha_bt_cmp,
-            text="Adicionar componente SINAPI",
+            texto="Adicionar componente SINAPI",
             command=self._adicionar_sinapi,
-            style="Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        criar_botao_inserir_prominente(
             linha_bt_cmp,
-            text="Adicionar componente mercado",
+            texto="Adicionar componente mercado",
             command=self._adicionar_mercado,
-            style="Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_bt_cmp,
-            text="Remover componente",
+            texto="Remover componente",
+            nome_icone="remove-circle-outline",
             command=self._remover_componente,
-            style="Delete.Compact.TButton",
+            estilo="Delete.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left")
 
         self._atualizar_lista_composicoes()

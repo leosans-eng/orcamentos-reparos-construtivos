@@ -13,6 +13,7 @@ datas = [
     ('assets/icons/attach-outline.svg', 'assets/icons'),
     ('assets/icons/construct-outline.svg', 'assets/icons'),
     ('assets/icons/remove-circle-outline.svg', 'assets/icons'),
+    ('assets/icons/save-outline.svg', 'assets/icons'),
     ('assets/icons/trash-outline.svg', 'assets/icons'),
     ('assets/modelos/modelo1.png', 'assets/modelos'),
     ('assets/modelos/modelo2.png', 'assets/modelos'),

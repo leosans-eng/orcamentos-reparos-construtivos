@@ -1163,7 +1163,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             padx=8,
             pady=6,
         )
-        frame_etapas.pack(side="left", fill="x", expand=True)
+        frame_etapas.pack(side="left")
 
         linha_etapas_1 = tk.Frame(frame_etapas, bg="#ececec")
         linha_etapas_1.pack(fill="x", pady=(0, 4))
@@ -1206,7 +1206,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             padx=8,
             pady=6,
         )
-        frame_inserir.pack(side="right", padx=(12, 0))
+        frame_inserir.pack(side="left", padx=(12, 0))
+
+        self.frame_area_reservada = tk.Frame(linha_acoes, bg="#ececec")
+        self.frame_area_reservada.pack(side="left", fill="x", expand=True)
 
         linha_inserir_1 = tk.Frame(frame_inserir, bg="#ececec")
         linha_inserir_1.pack(fill="x", pady=(0, 4))

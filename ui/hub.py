@@ -1,5 +1,7 @@
 import tkinter as tk
+import tkinter.font as tkfont
 
+from ui.icones import criar_icone_svg
 from ui.widgets import (
     COR_BORDA_PADRAO,
     COR_FUNDO_CARTAO,
@@ -9,12 +11,14 @@ from ui.widgets import (
 
 LARGURA_CARTAO = 240
 ALTURA_CARTAO = 148
+FONTE_TITULO_CARTAO = ("Arial", 12, "bold")
 
 
 class HubFrame(tk.Frame):
     def __init__(self, parent, on_selecionar_modulo):
         super().__init__(parent, bg="#ececec")
         self.on_selecionar_modulo = on_selecionar_modulo
+        self._cache_icones = {}
         self._montar()
 
     def _montar(self):
@@ -63,12 +67,13 @@ class HubFrame(tk.Frame):
         )
         self._criar_cartao(
             cartoes,
-            titulo="Consulta SINAPI 🔍",
+            titulo="Consulta SINAPI",
             descricao="Pesquisar composições e preços da base",
             modulo="consulta_sinapi",
             habilitado=True,
             coluna=2,
             linha=0,
+            icone_titulo="search-outline",
         )
         self._criar_cartao(
             cartoes,
@@ -87,6 +92,7 @@ class HubFrame(tk.Frame):
             habilitado=True,
             coluna=1,
             linha=1,
+            icone_titulo="cog-outline",
         )
         self._criar_cartao(
             cartoes,
@@ -96,6 +102,7 @@ class HubFrame(tk.Frame):
             habilitado=True,
             coluna=2,
             linha=1,
+            icone_titulo="cog-outline",
         )
 
     def _criar_cartao(
@@ -108,6 +115,7 @@ class HubFrame(tk.Frame):
         coluna,
         linha=0,
         aviso=None,
+        icone_titulo=None,
     ):
         largura = LARGURA_CARTAO
         altura = ALTURA_CARTAO
@@ -132,17 +140,24 @@ class HubFrame(tk.Frame):
 
         filhos = []
 
-        lbl_titulo = tk.Label(
-            cartao,
-            text=titulo,
-            font=("Arial", 12, "bold"),
-            fg=cor_titulo,
-            bg=cor_fundo,
-            wraplength=largura - 28,
-            justify="center",
-        )
-        lbl_titulo.grid(row=0, column=0, pady=(16, 4), sticky="n")
-        filhos.append(lbl_titulo)
+        if icone_titulo:
+            filhos.extend(
+                self._montar_titulo_com_icone(
+                    cartao, titulo, cor_fundo, cor_titulo, icone_titulo
+                )
+            )
+        else:
+            lbl_titulo = tk.Label(
+                cartao,
+                text=titulo,
+                font=FONTE_TITULO_CARTAO,
+                fg=cor_titulo,
+                bg=cor_fundo,
+                wraplength=largura - 28,
+                justify="center",
+            )
+            lbl_titulo.grid(row=0, column=0, pady=(16, 4), sticky="n")
+            filhos.append(lbl_titulo)
 
         lbl_desc = tk.Label(
             cartao,
@@ -177,3 +192,63 @@ class HubFrame(tk.Frame):
                 filho.bind("<Button-1>", ao_clicar)
 
             aplicar_hover_cartao(cartao, filhos)
+
+    def _icone_svg(self, nome: str, cor: str) -> tk.PhotoImage:
+        fonte_titulo = tkfont.Font(font=FONTE_TITULO_CARTAO)
+        altura = fonte_titulo.metrics("ascent")
+        chave = (nome, altura, cor)
+        if chave not in self._cache_icones:
+            self._cache_icones[chave] = criar_icone_svg(
+                self,
+                nome,
+                altura=altura,
+                cor=cor,
+            )
+        return self._cache_icones[chave]
+
+    def _montar_titulo_com_icone(
+        self, cartao, titulo, cor_fundo, cor_titulo, nome_icone
+    ):
+        filhos = []
+        texto_primeira_linha = titulo.split("\n", 1)[0].strip()
+        fonte_titulo = tkfont.Font(font=FONTE_TITULO_CARTAO)
+
+        titulo_container = tk.Frame(cartao, bg=cor_fundo)
+        titulo_container.grid(row=0, column=0, padx=14, pady=(16, 2), sticky="ew")
+        filhos.append(titulo_container)
+
+        icone = self._icone_svg(nome_icone, cor_titulo)
+        largura_icone = icone.width() + 4
+
+        lbl_titulo = tk.Label(
+            titulo_container,
+            text=titulo,
+            font=FONTE_TITULO_CARTAO,
+            fg=cor_titulo,
+            bg=cor_fundo,
+            justify="center",
+            wraplength=LARGURA_CARTAO - 28,
+        )
+        lbl_titulo.pack(anchor="center")
+        filhos.append(lbl_titulo)
+
+        lbl_icone = tk.Label(titulo_container, image=icone, bg=cor_fundo)
+        filhos.append(lbl_icone)
+
+        def posicionar_icone(_event=None):
+            lbl_titulo.update_idletasks()
+            largura_primeira_linha = fonte_titulo.measure(texto_primeira_linha)
+            x_titulo = lbl_titulo.winfo_x()
+            y_titulo = lbl_titulo.winfo_y()
+            largura_titulo = lbl_titulo.winfo_width()
+            x_icone = (
+                x_titulo
+                + (largura_titulo - largura_primeira_linha) // 2
+                - largura_icone
+            )
+            lbl_icone.place(x=max(0, x_icone), y=y_titulo, anchor="nw")
+
+        lbl_titulo.bind("<Configure>", posicionar_icone, add="+")
+        titulo_container.after_idle(posicionar_icone)
+
+        return filhos

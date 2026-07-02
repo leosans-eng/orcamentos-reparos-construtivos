@@ -427,14 +427,15 @@ def aplicar_hover_cartao(
         cartao.configure(highlightbackground=cor_borda, bg=cor_fundo)
         for w in widgets:
             try:
-                if isinstance(w, tk.Label):
+                if isinstance(w, (tk.Label, tk.Frame)):
                     opts = {"bg": cor_fundo}
-                    try:
-                        cor_fg = w.cget("fg")
-                    except tk.TclError:
-                        cor_fg = ""
-                    if cor_fg in (COR_TITULO_PADRAO, COR_TITULO_HOVER, cor_borda_normal):
-                        opts["fg"] = COR_TITULO_HOVER if estilo_hover else COR_TITULO_PADRAO
+                    if isinstance(w, tk.Label):
+                        try:
+                            cor_fg = w.cget("fg")
+                        except tk.TclError:
+                            cor_fg = ""
+                        if cor_fg in (COR_TITULO_PADRAO, COR_TITULO_HOVER, cor_borda_normal):
+                            opts["fg"] = COR_TITULO_HOVER if estilo_hover else COR_TITULO_PADRAO
                     w.configure(**opts)
             except tk.TclError:
                 pass

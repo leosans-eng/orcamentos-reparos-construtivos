@@ -6,6 +6,8 @@ datas = [
     ('icone.ico', '.'),
     ('assets/icons/excel24.png', 'assets/icons'),
     ('assets/icons/excel-preto.png', 'assets/icons'),
+    ('assets/icons/cog-outline.svg', 'assets/icons'),
+    ('assets/icons/search-outline.svg', 'assets/icons'),
     ('assets/modelos/modelo1.png', 'assets/modelos'),
     ('assets/modelos/modelo2.png', 'assets/modelos'),
     ('assets/modelos/modelo3.png', 'assets/modelos'),
@@ -15,6 +17,7 @@ datas = [
 ]
 datas += collect_data_files('certifi')
 datas += collect_data_files('docx')
+datas += collect_data_files('tksvg')
 
 
 a = Analysis(
@@ -28,6 +31,7 @@ a = Analysis(
         'certifi',
         'num2words',
         'docx',
+        'tksvg',
         'windnd',
         'core.formatador_sinapi',
         'core.formatador_sinapi.modelo1',

@@ -1,5 +1,7 @@
 import tkinter as tk
+from tkinter import ttk
 
+from ui.dialogo_configuracoes import abrir_dialogo_configuracoes
 from ui.icones import criar_icone_svg
 from ui.widgets import (
     COR_BORDA_PADRAO,
@@ -15,10 +17,12 @@ ALTURA_ICONE_CARTAO = 20
 
 
 class HubFrame(tk.Frame):
-    def __init__(self, parent, on_selecionar_modulo):
+    def __init__(self, parent, ctx, on_selecionar_modulo):
         super().__init__(parent, bg="#ececec")
+        self.ctx = ctx
         self.on_selecionar_modulo = on_selecionar_modulo
         self._cache_icones = {}
+        self._refs_icones = []
         self._montar()
 
     def _montar(self):
@@ -107,6 +111,31 @@ class HubFrame(tk.Frame):
             linha=1,
             icone_titulo="cog-outline",
         )
+
+        self._montar_botao_configuracoes()
+
+    def _montar_botao_configuracoes(self):
+        icone = criar_icone_svg(
+            self,
+            "settings-outline",
+            altura=16,
+            cor="#006699",
+        )
+        self._refs_icones.append(icone)
+
+        btn = ttk.Button(
+            self,
+            text="Configurações",
+            image=icone,
+            compound="left",
+            command=self._abrir_configuracoes,
+            style="Compact.TButton",
+        )
+        btn.place(relx=1.0, rely=1.0, anchor="se", x=-14, y=-10)
+
+    def _abrir_configuracoes(self):
+        janela = self.winfo_toplevel()
+        abrir_dialogo_configuracoes(janela, self.ctx)
 
     def _criar_cartao(
         self,

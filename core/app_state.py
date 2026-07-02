@@ -7,7 +7,9 @@ from typing import Any, Callable
 from sinapi.atualizador_sinapi import (
     baixar_e_extrair,
     buscar_atualizacoes,
+    carregar_status,
     limpar_versoes_antigas,
+    salvar_status,
 )
 from sinapi.extrair_sinapi import processar_arquivo
 
@@ -53,6 +55,9 @@ class AppContext:
         self.label_rodape: tk.Label | None = None
         self.label_nome_csv_rodape: tk.Label | None = None
         self.status_sinapi: tk.StringVar | None = None
+        self.status_servidor_sinapi: tk.StringVar | None = None
+        self.http_servidor_sinapi: tk.StringVar | None = None
+        self._sinapi_verificando = False
 
     def _carregar_dados_json(self):
         with open(vicios_construtivos_path(), "r", encoding="utf-8") as f:
@@ -167,24 +172,59 @@ class AppContext:
     def obter_estados(self):
         return obter_estados_da_sinapi(self.sinapi)
 
-    def iniciar_verificacao_sinapi(self):
+    def aplicar_status_servidor(self, status: str, http_codigo: str = "—"):
+        if self.status_servidor_sinapi is not None:
+            self.status_servidor_sinapi.set(status)
+        if self.http_servidor_sinapi is not None:
+            self.http_servidor_sinapi.set(http_codigo or "—")
+
+    def carregar_status_servidor_persistido(self):
+        dados = carregar_status()
+        status = dados.get("status_servidor")
+        http = dados.get("http_codigo", "—")
+        if not status:
+            if self.sinapi_referencia_rotulo == "BASE AUSENTE":
+                status = "Crítico"
+            else:
+                status = "—"
+        self.aplicar_status_servidor(str(status), str(http))
+
+    def iniciar_verificacao_sinapi(self, *, silencioso: bool = False):
+        if self._sinapi_verificando:
+            return False
+        self._sinapi_verificando = True
         thread = threading.Thread(
             target=self._verificar_atualizacao_sinapi,
+            args=(silencioso,),
             daemon=True,
         )
         thread.start()
+        return True
 
-    def _verificar_atualizacao_sinapi(self):
+    def _verificar_atualizacao_sinapi(self, silencioso: bool = False):
         janela = self.janela
         status = self.status_sinapi
         if janela is None or status is None:
+            self._sinapi_verificando = False
             return
 
         try:
+            janela.after(
+                0,
+                lambda: self.aplicar_status_servidor("Verificando...", "—"),
+            )
             status.set("SINAPI: verificando...")
             janela.after(0, self.atualizar_rodape)
 
-            atualizacoes, aviso = buscar_atualizacoes()
+            atualizacoes, aviso, info_status = buscar_atualizacoes()
+            if not atualizacoes:
+                janela.after(
+                    0,
+                    lambda: self.aplicar_status_servidor(
+                        info_status.get("status_servidor", "—"),
+                        info_status.get("http_codigo", "—"),
+                    ),
+                )
 
             if aviso == "nao_encontrada":
                 status.set(
@@ -223,14 +263,25 @@ class AppContext:
 
             limpar_versoes_antigas()
             self.recarregar_sinapi_em_memoria()
-            janela.after(0, self._concluir_atualizacao_sinapi)
+            janela.after(
+                0,
+                lambda h=info_status.get("http_codigo", "—"): self._concluir_atualizacao_sinapi(
+                    silencioso, h
+                ),
+            )
 
         except Exception as e:
             print("Erro atualização SINAPI:", e)
             status.set("Erro atualização SINAPI")
             janela.after(0, self.atualizar_rodape)
+            janela.after(
+                0,
+                lambda: self.aplicar_status_servidor("Erro", "—"),
+            )
+        finally:
+            self._sinapi_verificando = False
 
-    def _concluir_atualizacao_sinapi(self):
+    def _concluir_atualizacao_sinapi(self, silencioso: bool = False, http_codigo: str = "—"):
         from tkinter import messagebox
 
         status = self.status_sinapi
@@ -241,21 +292,31 @@ class AppContext:
 
         if self.sinapi_referencia_rotulo == "BASE AUSENTE" or not self.obter_estados():
             status.set("Erro ao carregar base SINAPI")
+            self.aplicar_status_servidor("Crítico", "—")
             self.atualizar_rodape()
-            messagebox.showerror(
-                "SINAPI",
-                (
-                    "O download foi concluído, mas a base não pôde ser "
-                    "carregada na interface.\n\n"
-                    "Verifique o arquivo em sinapi/sinapi_processado."
-                ),
-            )
+            if not silencioso:
+                messagebox.showerror(
+                    "SINAPI",
+                    (
+                        "O download foi concluído, mas a base não pôde ser "
+                        "carregada na interface.\n\n"
+                        "Verifique o arquivo em sinapi/sinapi_processado."
+                    ),
+                )
             return
 
+        self.aplicar_status_servidor("Atualizado", http_codigo)
+        salvar_status({
+            **carregar_status(),
+            "status_servidor": "Atualizado",
+        })
         status.set(
             f"SINAPI atualizada para {self.sinapi_referencia_rotulo}"
         )
         self.atualizar_rodape()
+
+        if silencioso:
+            return
 
         messagebox.showinfo(
             "SINAPI Atualizada",

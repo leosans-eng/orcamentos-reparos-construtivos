@@ -95,6 +95,43 @@ def salvar_status(dados):
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
+
+def carregar_status():
+    if not STATUS_FILE.is_file():
+        return {}
+    try:
+        with open(STATUS_FILE, encoding="utf-8") as f:
+            dados = json.load(f)
+        return dados if isinstance(dados, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def calcular_status_servidor(ultima_local, ultima_disponivel, aviso):
+    """
+    Classifica o status exibido nas configurações:
+      Atualizado — base local alinhada com a mais recente no servidor
+      Erro       — usa base local; servidor sem SINAPI na janela ou indisponível
+      Crítico    — nenhuma base local utilizável
+    """
+    if ultima_local is None:
+        if aviso == "nao_encontrada":
+            return "Crítico"
+        if ultima_disponivel in (None, "rede"):
+            return "Crítico"
+        return "Atualizado"
+
+    if aviso == "nao_encontrada":
+        return "Crítico"
+
+    if ultima_disponivel in (None, "rede"):
+        return "Erro"
+
+    if ultima_disponivel <= ultima_local:
+        return "Atualizado"
+
+    return "Atualizado"
+
 # ============================ #
 # DESCOBRE ÚLTIMA VERSÃO LOCAL #
 # ============================ #
@@ -236,7 +273,8 @@ def sinapi_existe(ano, mes):
     """
     Verifica se o ZIP da SINAPI existe para o mês informado.
 
-    Retorna True, False ou None (falha transitória de rede/servidor).
+    Retorna (resultado, http_codigo), onde resultado é True, False ou None
+    (falha transitória de rede/servidor).
     """
 
     url = gerar_url(ano, mes)
@@ -251,37 +289,38 @@ def sinapi_existe(ano, mes):
             allow_redirects=True,
         )
 
+        http_codigo = _formatar_codigos_resposta(response)
+
         print(
-            f"  HTTP {_formatar_codigos_resposta(response)} "
+            f"  HTTP {http_codigo} "
             f"({ano}_{mes:02d})"
         )
 
         resultado = _resposta_indica_zip(response)
 
         if resultado is not None:
-            return resultado
+            return resultado, http_codigo
+
+        return None, http_codigo
 
     except requests.TooManyRedirects as e:
 
-        codigos = _codigos_de_excecao(e)
-        if codigos:
-            print(
-                f"  HTTP {codigos} ({ano}_{mes:02d}) "
-                f"— limite de redirects"
-            )
-        else:
-            print(
-                f"  HTTP limite de redirects excedido ({ano}_{mes:02d})"
-            )
-        return False
+        codigos = _codigos_de_excecao(e) or "limite de redirects"
+        print(
+            f"  HTTP {codigos} ({ano}_{mes:02d}) "
+            f"— limite de redirects"
+        )
+        return False, codigos
 
     except requests.RequestException as e:
 
         codigos = _codigos_de_excecao(e)
         sufixo = f" — HTTP {codigos}" if codigos else ""
         print(f"Erro verificando {ano}_{mes:02d}: {e}{sufixo}")
+        if codigos:
+            return None, codigos
 
-    return None
+    return None, "—"
 
 
 # ========================================= #
@@ -294,10 +333,9 @@ def encontrar_ultima_sinapi_disponivel(
     """
     Procura a SINAPI mais recente nos últimos `meses_retroativos` meses.
 
-    Retorna:
-      (ano, mes) -> versão encontrada
-      None       -> nenhuma versão na janela consultada
-      "rede"     -> falha de rede/servidor em todos os meses verificados
+    Retorna dict com:
+      versao       -> (ano, mes), None ou "rede"
+      http_codigo  -> códigos HTTP da última consulta relevante
     """
 
     agora = datetime.now()
@@ -306,18 +344,20 @@ def encontrar_ultima_sinapi_disponivel(
     mes = agora.month
 
     houve_falha_transitoria = False
+    ultimo_http = "—"
 
     for _ in range(meses_retroativos):
 
         print(f"Verificando {ano}_{mes:02d}...")
 
-        resultado = sinapi_existe(ano, mes)
+        resultado, http_codigo = sinapi_existe(ano, mes)
+        ultimo_http = http_codigo
 
         if resultado is True:
 
             print(f"Encontrada {ano}_{mes:02d}")
 
-            return (ano, mes)
+            return {"versao": (ano, mes), "http_codigo": http_codigo}
 
         if resultado is False:
 
@@ -334,9 +374,9 @@ def encontrar_ultima_sinapi_disponivel(
         ano, mes = retroceder_mes(ano, mes)
 
     if houve_falha_transitoria:
-        return "rede"
+        return {"versao": "rede", "http_codigo": ultimo_http}
 
-    return None
+    return {"versao": None, "http_codigo": ultimo_http}
 
 # =================== #
 # BAIXA E EXTRAI XLSX #
@@ -401,17 +441,29 @@ def baixar_e_extrair(ano, mes):
 
 def buscar_atualizacoes():
     """
-    Retorna (atualizacoes, aviso).
+    Retorna (atualizacoes, aviso, info_status).
 
     aviso pode ser:
       None                 -> operação normal
       "servidor_indisponivel" -> não foi possível consultar a Caixa
       "nao_encontrada"     -> nem servidor nem pasta local têm base utilizável
+
+    info_status contém status_servidor e http_codigo para a interface.
     """
 
     ultima_local = obter_ultima_versao_local()
 
-    ultima_disponivel = encontrar_ultima_sinapi_disponivel()
+    consulta = encontrar_ultima_sinapi_disponivel()
+    ultima_disponivel = consulta["versao"]
+    http_codigo = consulta.get("http_codigo") or "—"
+
+    def _montar_info(aviso):
+        return {
+            "status_servidor": calcular_status_servidor(
+                ultima_local, ultima_disponivel, aviso
+            ),
+            "http_codigo": http_codigo,
+        }
 
     if ultima_disponivel == "rede":
 
@@ -420,6 +472,11 @@ def buscar_atualizacoes():
             f"(janela de {MESES_RETROATIVOS_BUSCA} meses)."
         )
 
+        aviso = "servidor_indisponivel"
+        if ultima_local is None:
+            aviso = "nao_encontrada"
+
+        info = _montar_info(aviso)
         salvar_status({
             "ultima_verificacao": datetime.now().isoformat(),
             "ultima_versao_local": (
@@ -429,12 +486,13 @@ def buscar_atualizacoes():
             ),
             "novas_versoes": [],
             "erro": "servidor_indisponivel",
+            **info,
         })
 
         if ultima_local is None:
-            return [], "nao_encontrada"
+            return [], "nao_encontrada", info
 
-        return [], "servidor_indisponivel"
+        return [], "servidor_indisponivel", info
 
     if ultima_disponivel is None:
 
@@ -443,6 +501,8 @@ def buscar_atualizacoes():
             f"nos últimos {MESES_RETROATIVOS_BUSCA} meses."
         )
 
+        aviso = "nao_encontrada" if ultima_local is None else None
+        info = _montar_info(aviso)
         salvar_status({
             "ultima_verificacao": datetime.now().isoformat(),
             "ultima_versao_local": (
@@ -452,12 +512,13 @@ def buscar_atualizacoes():
             ),
             "novas_versoes": [],
             "erro": "nao_encontrada_servidor",
+            **info,
         })
 
         if ultima_local is None:
-            return [], "nao_encontrada"
+            return [], "nao_encontrada", info
 
-        return [], None
+        return [], None, info
 
     # primeira execução sem CSV
 
@@ -465,15 +526,17 @@ def buscar_atualizacoes():
 
         print("Nenhuma versão local encontrada.")
 
+        info = _montar_info(None)
         salvar_status({
             "ultima_verificacao": datetime.now().isoformat(),
             "ultima_versao_local": None,
             "novas_versoes": [
                 f"{ultima_disponivel[0]}_{ultima_disponivel[1]:02d}"
-            ]
+            ],
+            **info,
         })
 
-        return [ultima_disponivel], None
+        return [ultima_disponivel], None, info
 
     # já está atualizado
 
@@ -481,18 +544,21 @@ def buscar_atualizacoes():
 
         print("SINAPI já está atualizada.")
 
+        info = _montar_info(None)
         salvar_status({
             "ultima_verificacao": datetime.now().isoformat(),
             "ultima_versao_local": (
                 f"{ultima_local[0]}_{ultima_local[1]:02d}"
             ),
-            "novas_versoes": []
+            "novas_versoes": [],
+            **info,
         })
 
-        return [], None
+        return [], None, info
 
     # existe versão nova
 
+    info = _montar_info(None)
     salvar_status({
         "ultima_verificacao": datetime.now().isoformat(),
         "ultima_versao_local": (
@@ -500,10 +566,11 @@ def buscar_atualizacoes():
         ),
         "novas_versoes": [
             f"{ultima_disponivel[0]}_{ultima_disponivel[1]:02d}"
-        ]
+        ],
+        **info,
     })
 
-    return [ultima_disponivel], None
+    return [ultima_disponivel], None, info
 
 # ====================== #
 # REMOVE VERSÕES ANTIGAS #
@@ -592,7 +659,7 @@ if __name__ == "__main__":
         obter_ultima_versao_local()
     )
 
-    atualizacoes, aviso = buscar_atualizacoes()
+    atualizacoes, aviso, _info = buscar_atualizacoes()
 
     print("\nAtualizações encontradas:")
     print(atualizacoes)

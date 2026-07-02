@@ -47,6 +47,9 @@ class OrcApp:
             self.janela.iconbitmap(icone)
 
         self.ctx.status_sinapi = tk.StringVar(value="SINAPI: verificando...")
+        self.ctx.status_servidor_sinapi = tk.StringVar(value="—")
+        self.ctx.http_servidor_sinapi = tk.StringVar(value="—")
+        self.ctx.carregar_status_servidor_persistido()
 
         self._montar_rodape()
 
@@ -105,6 +108,7 @@ class OrcApp:
     def _criar_hub(self):
         self._frames["hub"] = HubFrame(
             self.area_conteudo,
+            self.ctx,
             on_selecionar_modulo=self._ao_selecionar_modulo_hub,
         )
 

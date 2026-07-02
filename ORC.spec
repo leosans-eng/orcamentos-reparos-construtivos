@@ -12,6 +12,8 @@ datas = [
     ('assets/icons/add-circle.svg', 'assets/icons'),
     ('assets/icons/attach-outline.svg', 'assets/icons'),
     ('assets/icons/construct-outline.svg', 'assets/icons'),
+    ('assets/icons/settings-outline.svg', 'assets/icons'),
+    ('assets/icons/sync-outline.svg', 'assets/icons'),
     ('assets/icons/remove-circle-outline.svg', 'assets/icons'),
     ('assets/icons/save-outline.svg', 'assets/icons'),
     ('assets/icons/trash-outline.svg', 'assets/icons'),

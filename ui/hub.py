@@ -195,7 +195,7 @@ class HubFrame(tk.Frame):
 
     def _icone_svg(self, nome: str, cor: str) -> tk.PhotoImage:
         fonte_titulo = tkfont.Font(font=FONTE_TITULO_CARTAO)
-        altura = fonte_titulo.metrics("ascent")
+        altura = fonte_titulo.metrics("ascent") + fonte_titulo.metrics("descent")
         chave = (nome, altura, cor)
         if chave not in self._cache_icones:
             self._cache_icones[chave] = criar_icone_svg(

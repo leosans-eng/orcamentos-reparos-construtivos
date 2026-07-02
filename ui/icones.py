@@ -100,7 +100,7 @@ def criar_botao_inserir_prominente(
         font=fonte,
         bg="#fafafa",
         fg=_COR_VERDE_INSERIR,
-        activebackground="#f3f8f4",
+        activebackground="#f8f3f3",
         activeforeground="#1b5e20",
         relief="solid",
         bd=1,
@@ -108,7 +108,7 @@ def criar_botao_inserir_prominente(
         highlightbackground=_COR_VERDE_INSERIR,
         highlightcolor=_COR_VERDE_INSERIR,
         padx=9,
-        pady=4,
+        pady=3,
         cursor="hand2",
     )
 

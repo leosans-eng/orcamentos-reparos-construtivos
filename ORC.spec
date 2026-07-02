@@ -9,6 +9,7 @@ datas = [
     ('assets/icons/cog-outline.svg', 'assets/icons'),
     ('assets/icons/search-outline.svg', 'assets/icons'),
     ('assets/icons/add-circle-outline.svg', 'assets/icons'),
+    ('assets/icons/add-circle.svg', 'assets/icons'),
     ('assets/icons/attach-outline.svg', 'assets/icons'),
     ('assets/icons/construct-outline.svg', 'assets/icons'),
     ('assets/icons/remove-circle-outline.svg', 'assets/icons'),

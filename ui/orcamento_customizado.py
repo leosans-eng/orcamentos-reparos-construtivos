@@ -47,7 +47,7 @@ from core.sinapi_busca import (
 from ui.dialogo_importar_i9 import DialogoImportarI9
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
-from ui.icones import criar_botao_ttk_com_icone
+from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
     aplicar_icone_janela,
@@ -1210,20 +1210,16 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         linha_inserir_1 = tk.Frame(frame_inserir, bg="#ececec")
         linha_inserir_1.pack(fill="x", pady=(0, 4))
-        criar_botao_ttk_com_icone(
+        criar_botao_inserir_prominente(
             linha_inserir_1,
             texto="Inserir item SINAPI",
-            nome_icone="add-circle-outline",
             command=self._abrir_busca_sinapi,
-            estilo="Add.Prominent.TButton",
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 6))
-        criar_botao_ttk_com_icone(
+        criar_botao_inserir_prominente(
             linha_inserir_1,
             texto="Inserir composição PRÓPRIA",
-            nome_icone="add-circle-outline",
             command=self._adicionar_composicao_propria,
-            estilo="Add.Prominent.TButton",
             refs=self._icones_botoes,
         ).pack(side="left")
 

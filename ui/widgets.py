@@ -288,7 +288,6 @@ def configurar_estilos_ttk(root):
     for nome, bg, active, pressed, padding in (
         ("Add.TButton", "#2e7d32", "#43a047", "#1b5e20", (8, 3)),
         ("Add.Compact.TButton", "#2e7d32", "#43a047", "#1b5e20", (4, 1)),
-        ("Add.Prominent.TButton", "#2e7d32", "#43a047", "#1b5e20", (9, 4)),
         ("Delete.TButton", "#c62828", "#e53935", "#b71c1c", (8, 3)),
         ("Delete.Compact.TButton", "#c62828", "#e53935", "#b71c1c", (4, 1)),
         ("Edit.TButton", "#1565c0", "#1976d2", "#0d47a1", (8, 3)),
@@ -300,8 +299,6 @@ def configurar_estilos_ttk(root):
         _configurar_botao_colorido(
             style, nome, background=bg, active=active, pressed=pressed, padding=padding
         )
-
-    style.configure("Add.Prominent.TButton", font=("Arial", 9, "bold"))
 
     style.configure(
         "Secondary.TButton",

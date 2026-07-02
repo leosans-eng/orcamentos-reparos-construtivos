@@ -35,10 +35,15 @@ def criar_icone_svg(
     return SvgImage(master=master, data=svg_texto, scaletoheight=altura)
 
 
-def altura_icone_botao_compact(master: tk.Misc, estilo: str = "Compact.TButton") -> int:
-    """Altura do ícone alinhada à fonte do botão, sem aumentar a altura do botão."""
+def altura_icone_botao(master: tk.Misc, estilo: str = "Compact.TButton") -> int:
+    """Altura do ícone alinhada à fonte do botão."""
     fonte = tkfont.Font(font=ttk.Style(master).lookup(estilo, "font"))
     return max(12, fonte.metrics("ascent") + fonte.metrics("descent"))
+
+
+def altura_icone_botao_compact(master: tk.Misc, estilo: str = "Compact.TButton") -> int:
+    """Compatível com botões compactos."""
+    return altura_icone_botao(master, estilo)
 
 
 def criar_botao_ttk_com_icone(
@@ -48,11 +53,13 @@ def criar_botao_ttk_com_icone(
     nome_icone: str,
     command,
     estilo: str = "Compact.TButton",
-    cor_icone: str = "#000000",
+    cor_icone: str | None = None,
     refs: list | None = None,
 ) -> ttk.Button:
     """Cria ttk.Button com ícone SVG à esquerda (compound=left)."""
-    altura = altura_icone_botao_compact(parent, estilo)
+    if cor_icone is None:
+        cor_icone = "#000000"
+    altura = altura_icone_botao(parent, estilo)
     icone = criar_icone_svg(parent, nome_icone, altura=altura, cor=cor_icone)
     if refs is not None:
         refs.append(icone)
@@ -63,6 +70,46 @@ def criar_botao_ttk_com_icone(
         compound="left",
         command=command,
         style=estilo,
+    )
+
+
+_COR_VERDE_INSERIR = "#2e7d32"
+
+
+def criar_botao_inserir_prominente(
+    parent: tk.Misc,
+    *,
+    texto: str,
+    command,
+    refs: list | None = None,
+) -> tk.Button:
+    """Botão 'Inserir' proeminente: fundo claro, borda verde e ícone preenchido."""
+    fonte = tkfont.Font(family="Arial", size=9)
+    altura_icone = max(12, fonte.metrics("ascent") + fonte.metrics("descent"))
+    icone = criar_icone_svg(
+        parent, "add-circle", altura=altura_icone, cor=_COR_VERDE_INSERIR
+    )
+    if refs is not None:
+        refs.append(icone)
+    return tk.Button(
+        parent,
+        text=texto,
+        image=icone,
+        compound="left",
+        command=command,
+        font=fonte,
+        bg="#fafafa",
+        fg=_COR_VERDE_INSERIR,
+        activebackground="#f3f8f4",
+        activeforeground="#1b5e20",
+        relief="solid",
+        bd=1,
+        highlightthickness=1,
+        highlightbackground=_COR_VERDE_INSERIR,
+        highlightcolor=_COR_VERDE_INSERIR,
+        padx=9,
+        pady=4,
+        cursor="hand2",
     )
 
 

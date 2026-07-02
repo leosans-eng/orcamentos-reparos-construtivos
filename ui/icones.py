@@ -23,7 +23,7 @@ def criar_icone_svg(
 ) -> tk.PhotoImage:
     """Rasteriza um SVG de assets/icons/{nome}.svg na altura indicada (px)."""
     if SvgImage is None:
-        raise ImportError("Pacote 'tksvg' não instalado. Execute: pip install tksvg")
+        raise ImportError("Pacote 'tksvg' não instalado.")
 
     caminho = asset_path("icons", f"{nome}.svg")
     if caminho is None:
@@ -38,7 +38,7 @@ def criar_icone_svg(
 def altura_icone_botao_compact(master: tk.Misc, estilo: str = "Compact.TButton") -> int:
     """Altura do ícone alinhada à fonte do botão, sem aumentar a altura do botão."""
     fonte = tkfont.Font(font=ttk.Style(master).lookup(estilo, "font"))
-    return max(11, fonte.metrics("ascent") - 2)
+    return max(12, fonte.metrics("ascent") + fonte.metrics("descent"))
 
 
 def criar_botao_ttk_com_icone(

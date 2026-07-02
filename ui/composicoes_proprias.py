@@ -20,6 +20,7 @@ from core.composicoes_proprias_storage import (
     obter_por_id,
     salvar_estado_previa_custos,
 )
+from ui.icones import criar_botao_ttk_com_icone
 from ui.orcamento_customizado import DialogoBuscaSinapi
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
@@ -211,6 +212,7 @@ class ComposicoesPropriasFrame(tk.Frame):
         self.on_voltar = on_voltar
         self._dados = carregar()
         self._composicao_editando_id = None
+        self._icones_botoes = []
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -285,8 +287,13 @@ class ComposicoesPropriasFrame(tk.Frame):
 
         linha_bt_comp = tk.Frame(esquerda, bg="#ececec")
         linha_bt_comp.pack(fill="x", pady=(6, 0))
-        ttk.Button(
-            linha_bt_comp, text="Nova composição", command=self._nova_composicao, style="Add.Compact.TButton"
+        criar_botao_ttk_com_icone(
+            linha_bt_comp,
+            texto="Nova composição",
+            nome_icone="add-circle-outline",
+            command=self._nova_composicao,
+            estilo="Add.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_bt_comp, text="Excluir", command=self._excluir_composicao, style="Delete.Compact.TButton"

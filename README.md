@@ -4,7 +4,7 @@ Aplicativo desktop para elaboração de orçamentos de reparos de vícios constr
 
 Desenvolvido em **Python** com interface **Tkinter**, voltado ao uso em perícias e laudos de vícios construtivos.
 
-**Versão atual: 1.1.0**
+**Versão atual: 1.2.0**
 
 ## Funcionalidades
 
@@ -19,6 +19,7 @@ Tela inicial com acesso aos módulos:
 | **Consulta SINAPI** | Disponível | Pesquisa de composições e preços da base |
 | **Orçamento Customizado** | Disponível | Montagem livre do orçamento com etapas e itens |
 | **Composições Próprias** | Disponível | Cadastro de composições com insumos SINAPI ou de mercado |
+| **Etapas pré-definidas** | Disponível | Modelos de etapas com itens SINAPI e composições próprias |
 
 ### Área Privativa
 
@@ -33,7 +34,7 @@ Tela inicial com acesso aos módulos:
 
 - Múltiplos orçamentos salvos localmente (criar, renomear, excluir e alternar entre eles)
 - Estrutura em **etapas** (grupos) com itens **SINAPI** ou **composições próprias**
-- Inserção por busca, por código rápido ou a partir do catálogo de composições
+- Inserção por busca, por código rápido, a partir do catálogo de composições ou de **etapas pré-definidas**
 - Reordenação de etapas e itens; edição de quantidades e custos
 - **BDI** configurável e seleção de **estado** de referência para preços
 - **Importação** de planilhas sintéticas exportadas pelo sistema **i9**
@@ -50,6 +51,12 @@ Tela inicial com acesso aos módulos:
 - Prévia de custo por estado (UF) selecionado
 - Composições cadastradas ficam disponíveis no módulo **Orçamento Customizado**
 
+### Etapas pré-definidas
+
+- Cadastro de modelos de etapa com itens **SINAPI** e **composições próprias** já incluídos
+- Modelos reutilizáveis no **Orçamento Customizado** (inserção rápida de etapas completas)
+- Persistência local junto aos demais dados do usuário
+
 ### Consulta SINAPI
 
 - Busca por insumo ou composição com debounce
@@ -64,6 +71,10 @@ Na inicialização, o app verifica no site da Caixa se há uma referência SINAP
 
 O app consulta o arquivo [`version.json`](version.json) no repositório GitHub e oferece download do instalador quando há uma versão mais nova.
 
+### Configurações
+
+No hub, o botão **Configurações** abre um diálogo para **reverificar a base SINAPI** manualmente e acompanhar o status do servidor (HTTP e situação da última consulta).
+
 ## Requisitos
 
 - **Windows** 10 ou superior
@@ -74,7 +85,7 @@ O app consulta o arquivo [`version.json`](version.json) no repositório GitHub e
 
 Baixe o instalador mais recente na [página de releases](https://github.com/leosans-eng/orcamento-reparos-construtivos/releases) ou pelo link em `version.json`.
 
-Execute `ORC_Instalador_1.1.0.exe` e siga o assistente. O app será instalado em `C:\ORC` por padrão.
+Execute `ORC_Instalador_1.2.0.exe` (ou o instalador indicado em `version.json`) e siga o assistente. O app será instalado em `C:\ORC` por padrão.
 
 ## Desenvolvimento
 
@@ -99,11 +110,11 @@ pip install -r requirements.txt
 python app.py
 ```
 
-> **Nota:** na primeira execução, o app tentará baixar a base SINAPI. Se não houver conexão, coloque manualmente um CSV processado em `sinapi/sinapi_processado/` ou um arquivo `sinapi_precos.csv` na raiz do projeto como fallback.
+> **Nota:** na primeira execução, o app tentará baixar a base SINAPI. Se não houver conexão, coloque manualmente um CSV processado em `sinapi/sinapi_processado/` ou um arquivo `sinapi_precos.csv` na raiz do projeto como fallback. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`.
 
 ## Dados do usuário
 
-Orçamentos customizados e composições próprias são gravados fora do pacote de instalação:
+Orçamentos customizados, composições próprias e etapas pré-definidas são gravados fora do pacote de instalação:
 
 | Ambiente | Pasta |
 |----------|-------|
@@ -114,6 +125,7 @@ Orçamentos customizados e composições próprias são gravados fora do pacote 
 |---------|----------|
 | `orcamentos_customizados.json` | Orçamentos salvos do módulo customizado |
 | `composicoes_proprias.json` | Catálogo de composições próprias |
+| `etapas_predefinidas.json` | Modelos de etapas pré-definidas |
 
 ## Estrutura do projeto
 
@@ -126,24 +138,31 @@ orcamento-reparos-construtivos/
 ├── version.json                    # Versão e link do instalador (publicado no GitHub)
 ├── assets/                         # Ícones e modelos de planilha/Word para exportação
 ├── core/
-│   ├── app_state.py                # Estado global, callbacks SINAPI, rodapé
+│   ├── app_state.py                # Estado global, APP_VERSION, callbacks SINAPI, rodapé
 │   ├── sinapi_loader.py            # Carregamento e recarga da base SINAPI
 │   ├── sinapi_busca.py             # Pesquisa na base SINAPI
 │   ├── orcamento_customizado.py    # Modelo de dados do orçamento customizado
 │   ├── orcamento_storage.py        # Persistência dos orçamentos salvos
 │   ├── composicoes_proprias.py     # Modelo de composições e componentes
 │   ├── composicoes_proprias_storage.py
+│   ├── etapas_predefinidas.py      # Modelo de etapas pré-definidas
+│   ├── etapas_predefinidas_storage.py
 │   ├── exportacao_planilha_orcamento.py
 │   ├── importacao_i9.py            # Importação de planilhas do sistema i9
 │   ├── planilha_sintetica.py
 │   └── formatador_sinapi/          # Formatação dos modelos de exportação (1–4)
+├── docs/
+│   └── SISTEMA-ATUALIZACAO.md      # Documentação técnica do atualizador
 ├── ui/
 │   ├── hub.py                      # Tela inicial com cartões dos módulos
 │   ├── area_privativa.py           # Módulo de orçamento (área privativa)
 │   ├── orcamento_customizado.py    # Módulo de orçamento livre
 │   ├── composicoes_proprias.py     # Cadastro de composições próprias
+│   ├── etapas_predefinidas.py      # Cadastro de etapas pré-definidas
 │   ├── consulta_sinapi.py          # Módulo de consulta SINAPI
+│   ├── dialogo_configuracoes.py    # Diálogo de configurações (SINAPI)
 │   ├── grade_orcamento.py          # Grade hierárquica etapas/itens
+│   ├── icones.py                   # Ícones SVG (tksvg) para botões e cartões
 │   ├── dialogo_importar_i9.py
 │   ├── dialogo_selecionar_modelo_planilha.py
 │   └── widgets.py                  # Componentes visuais reutilizáveis
@@ -187,14 +206,24 @@ Após publicar uma nova versão, atualize `version.json` no GitHub com a versão
 
 A referência SINAPI em uso aparece no rodapé da interface (ex.: `03/2026`).
 
-## Novidades da versão 1.1.0
+## Novidades da versão 1.2.0
 
-- **Orçamento Customizado** — montagem livre de orçamentos com etapas, itens SINAPI e composições próprias
-- **Composições Próprias** — cadastro de composições com componentes SINAPI ou de mercado
-- **Exportação avançada** — quatro modelos de planilha Excel, incluindo documentos Word nos modelos 1 e 3
-- **Importação i9** — carregamento de planilhas sintéticas do sistema i9
-- **Persistência de dados** — orçamentos e composições salvos em `%LOCALAPPDATA%\ORC` (instalador) ou `dados_usuario/` (dev)
-- Hub ampliado com novos cartões e módulos em tela cheia
+- Corrigido bug onde os valores de uma planilha importada do i9 não eram atualizados automaticamente até que o Estado fosse trocado. Agora, assim que a planilha é importada, a atualização já é feita automaticamente.
+- Composições próprias deprecadas agora são mantidas ao importar do i9, para facilitar a edição do item e manter seu quantitativo. O aviso pop-up ainda aparece.
+- Correção de vírgulas em separadores de milhares para números com casas decimais (Diversos ajustes para evitar possíveis erros futuros).
+- Botões 'Editar item' e 'Editar nome da etapa' foram removidos, pois agora é possível dar duas cliques em um item ou etapa para abrir a caixa de edição.
+- Cores na tabela de Orçamento Customizado ajustadas para maiores contrastes.
+- Correção de orçamentos gerados pularem as linhas vazias (Etapas sem itens). São etapas que devem aparecer normalmente na tabela gerada com "A ORÇAR" escrito no lugar do valor. - Correção de Modelos 1 e 3 não seguirem o número da Estrutura do orçamento, sempre começava com 0.
+- Novo botão 'Trocar ordem da etapa'.
+- Ajustes na interface de 'Nova composição' para facilitar a inserção de dados.
+- A prévia de custos na configuração de composições próprias agora é, por padrão, SP. Mantém o estado usado por último pelo usuário.
+- Ao editar um item para sua substituição em 'Orçamento Customizado', aparecerá um rodapé de comparação entre o antigo e o novo, para facilitar a diferenciação.
+- Corrigido bug visual de 'flash' na tela antes de abrir alguma caixa de preenchimento ou janela de busca da SINAPI.
+- Nova função de configurar etapas pré-definidas que já vem com itens da SINAPI. Pode ser acessada pelo Hub.
+- 3 botões de reordenar etapas removidos. Agora essa ação pode ser feita ao dar um duplo clique no número do item.
+- Acrescenta diversos ícones para facilitar a identificação das opções e criar memória muscular.
+- "Inserir itens" agora fica no centro da tela.
+- Criado menu de Configurações. Atualmente, a única opção é a de verificar novamente alguma atualização da SINAPI, essencial para momentos de instabilidade do servidor da Caixa.
 
 ## Autor
 

@@ -16,6 +16,7 @@ from core.etapas_predefinidas_storage import (
     listar,
     obter_por_id,
 )
+from ui.icones import criar_botao_ttk_com_icone
 from ui.orcamento_customizado import DialogoBuscaComposicaoPropria, DialogoBuscaSinapi
 from ui.widgets import (
     aplicar_icone_janela,
@@ -85,6 +86,7 @@ class EtapasPredefinidasFrame(tk.Frame):
         self.on_voltar = on_voltar
         self._dados = carregar()
         self._etapa_editando_id = None
+        self._icones_botoes = []
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -143,11 +145,13 @@ class EtapasPredefinidasFrame(tk.Frame):
 
         linha_bt_etapas = tk.Frame(esquerda, bg="#ececec")
         linha_bt_etapas.pack(fill="x", pady=(6, 0))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_bt_etapas,
-            text="Nova etapa",
+            texto="Nova etapa",
+            nome_icone="add-circle-outline",
             command=self._nova_etapa,
-            style="Add.Compact.TButton",
+            estilo="Add.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_bt_etapas,

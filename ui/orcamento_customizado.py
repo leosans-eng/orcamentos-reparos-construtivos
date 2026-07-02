@@ -47,6 +47,7 @@ from core.sinapi_busca import (
 from ui.dialogo_importar_i9 import DialogoImportarI9
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
+from ui.icones import criar_botao_ttk_com_icone
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
     aplicar_icone_janela,
@@ -1068,6 +1069,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._mapa_combo_ids = {}
         self._trocando_orcamento = False
         self._icone_excel_export = None
+        self._icones_botoes = []
         self.orcamento = self._carregar_orcamento_ativo()
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
@@ -1102,11 +1104,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.combo_orcamento.pack(side="left", padx=(4, 8))
         self.combo_orcamento.bind("<<ComboboxSelected>>", self._ao_trocar_orcamento)
 
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_salvo,
-            text="Adicionar orçamento",
+            texto="Adicionar orçamento",
+            nome_icone="add-circle-outline",
             command=self._adicionar_orcamento,
-            style="Add.Compact.TButton",
+            estilo="Add.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_salvo,
@@ -1114,17 +1118,21 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             command=self._renomear_orcamento,
             style="Edit.Compact.TButton",
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_salvo,
-            text="Excluir orçamento",
+            texto="Excluir orçamento",
+            nome_icone="trash-outline",
             command=self._excluir_orcamento,
-            style="Delete.Compact.TButton",
+            estilo="Delete.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_salvo,
-            text="Importar i9",
+            texto="Importar i9",
+            nome_icone="attach-outline",
             command=self._importar_i9,
-            style="Compact.TButton",
+            estilo="Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 12))
 
         frame_direita = tk.Frame(linha_salvo, bg="#ececec")
@@ -1159,20 +1167,24 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         linha_etapas_1 = tk.Frame(frame_etapas, bg="#ececec")
         linha_etapas_1.pack(fill="x", pady=(0, 4))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_etapas_1,
-            text="Nova etapa",
+            texto="Nova etapa",
+            nome_icone="add-circle-outline",
             command=self._novo_grupo,
-            style="Add.Compact.TButton",
+            estilo="Add.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
 
         linha_etapas_2 = tk.Frame(frame_etapas, bg="#ececec")
         linha_etapas_2.pack(fill="x")
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_etapas_2,
-            text="Remover etapa/item",
+            texto="Remover etapa/item",
+            nome_icone="remove-circle-outline",
             command=self._remover_selecionado,
-            style="Delete.Compact.TButton",
+            estilo="Delete.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_etapas_2,

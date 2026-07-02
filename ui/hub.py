@@ -54,6 +54,7 @@ class HubFrame(tk.Frame):
             habilitado=True,
             coluna=0,
             linha=0,
+            icone_titulo="construct-outline",
         )
         self._criar_cartao(
             cartoes,
@@ -64,6 +65,7 @@ class HubFrame(tk.Frame):
             coluna=1,
             linha=0,
             aviso="Em breve",
+            icone_titulo="construct-outline",
         )
         self._criar_cartao(
             cartoes,
@@ -77,12 +79,13 @@ class HubFrame(tk.Frame):
         )
         self._criar_cartao(
             cartoes,
-            titulo="Orçamento Customizado",
+            titulo="Orçamento\nCustomizado",
             descricao="Montar orçamento com Etapas e Itens personalizados",
             modulo="orcamento_customizado",
             habilitado=True,
             coluna=0,
             linha=1,
+            icone_titulo="construct-outline",
         )
         self._criar_cartao(
             cartoes,

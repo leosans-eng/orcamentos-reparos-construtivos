@@ -1210,17 +1210,21 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         linha_inserir_1 = tk.Frame(frame_inserir, bg="#ececec")
         linha_inserir_1.pack(fill="x", pady=(0, 4))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_inserir_1,
-            text="Inserir item SINAPI",
+            texto="Inserir item SINAPI",
+            nome_icone="add-circle-outline",
             command=self._abrir_busca_sinapi,
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
+            estilo="Add.Prominent.TButton",
+            refs=self._icones_botoes,
+        ).pack(side="left", padx=(0, 6))
+        criar_botao_ttk_com_icone(
             linha_inserir_1,
-            text="Inserir composição PRÓPRIA",
+            texto="Inserir composição PRÓPRIA",
+            nome_icone="add-circle-outline",
             command=self._adicionar_composicao_propria,
-            style="Compact.TButton",
+            estilo="Add.Prominent.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left")
 
         linha_inserir_2 = tk.Frame(frame_inserir, bg="#ececec")

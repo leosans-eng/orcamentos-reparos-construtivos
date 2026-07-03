@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
 from core.api_client import reiniciar_cliente
 from core.api_config import carregar_config, salvar_config
@@ -123,14 +123,6 @@ class DialogoLogin(tk.Toplevel):
 
 
 def garantir_login(parent) -> bool:
-    while True:
-        dialogo = DialogoLogin(parent)
-        parent.wait_window(dialogo)
-        if dialogo.resultado:
-            return True
-        if not messagebox.askyesno(
-            "ORC — Login",
-            "É necessário login para usar o sistema.\nDeseja tentar novamente?",
-            parent=parent,
-        ):
-            return False
+    dialogo = DialogoLogin(parent)
+    parent.wait_window(dialogo)
+    return dialogo.resultado

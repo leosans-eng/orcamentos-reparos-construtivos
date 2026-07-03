@@ -16,13 +16,18 @@ from core.etapas_predefinidas_storage import (
     listar,
     obter_por_id,
 )
-from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
+from ui.icones import (
+    criar_botao_inserir_prominente,
+    criar_botao_ttk_com_icone,
+    criar_botao_ttk_so_icone,
+)
 from ui.orcamento_customizado import DialogoBuscaComposicaoPropria, DialogoBuscaSinapi
 from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
     confirmar_exclusao_com_espera,
     criar_barra_modulo,
+    vincular_tooltip,
 )
 
 
@@ -99,15 +104,16 @@ class EtapasPredefinidasFrame(tk.Frame):
         return f"Referência SINAPI: {ref}"
 
     def _montar_botao_recarregar_cabecalho(self, parent):
-        criar_botao_ttk_com_icone(
+        btn = criar_botao_ttk_so_icone(
             parent,
-            texto="Recarregar",
             nome_icone="sync-outline",
             command=self.recarregar_catalogo,
             estilo="Compact.TButton",
             cor_icone="#006699",
             refs=self._icones_botoes,
-        ).pack(side="right", padx=(0, 10))
+        )
+        btn.pack(side="left", padx=(0, 8))
+        vincular_tooltip(btn, "Atualizar página")
 
     def _recarregar_da_api(self, *, avisar_erro=True):
         try:
@@ -136,7 +142,7 @@ class EtapasPredefinidasFrame(tk.Frame):
             "Etapas pré-definidas",
             self.on_voltar,
             texto_referencia=self._texto_referencia(),
-            montar_acoes_antes_referencia=self._montar_botao_recarregar_cabecalho,
+            montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
         )
 
         conteudo = tk.Frame(self, bg="#ececec")

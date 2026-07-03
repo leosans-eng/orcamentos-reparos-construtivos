@@ -500,6 +500,39 @@ def criar_botao_voltar(parent, command, bg_parent="#ececec"):
     return btn
 
 
+def vincular_tooltip(widget, texto: str):
+    """Exibe texto ao passar o mouse (tooltip simples)."""
+    estado = {"janela": None}
+
+    def _mostrar(_event):
+        if estado["janela"] is not None:
+            return
+        x = widget.winfo_rootx() + widget.winfo_width() // 2
+        y = widget.winfo_rooty() + widget.winfo_height() + 4
+        janela = tk.Toplevel(widget)
+        janela.wm_overrideredirect(True)
+        janela.wm_geometry(f"+{x}+{y}")
+        tk.Label(
+            janela,
+            text=texto,
+            background="#ffffe0",
+            relief="solid",
+            borderwidth=1,
+            font=("Arial", 9),
+            padx=6,
+            pady=3,
+        ).pack()
+        estado["janela"] = janela
+
+    def _esconder(_event):
+        if estado["janela"] is not None:
+            estado["janela"].destroy()
+            estado["janela"] = None
+
+    widget.bind("<Enter>", _mostrar)
+    widget.bind("<Leave>", _esconder)
+
+
 def criar_barra_modulo(
     parent,
     titulo,
@@ -507,6 +540,8 @@ def criar_barra_modulo(
     *,
     texto_referencia=None,
     montar_acoes_antes_referencia=None,
+    montar_acoes_apos_titulo=None,
+    montar_acoes_antes_titulo=None,
     bg="#ececec",
 ):
     """Barra superior: Voltar ao início, título da página e referência opcional na mesma linha."""
@@ -515,13 +550,19 @@ def criar_barra_modulo(
 
     criar_botao_voltar(barra, on_voltar, bg_parent=bg).pack(side="left")
 
+    if montar_acoes_antes_titulo is not None:
+        montar_acoes_antes_titulo(barra)
+
     tk.Label(
         barra,
         text=titulo,
         font=("Arial", 14, "bold"),
         fg=COR_TITULO_PADRAO,
         bg=bg,
-    ).pack(side="left", padx=(12, 8))
+    ).pack(side="left", padx=(12, 4))
+
+    if montar_acoes_apos_titulo is not None:
+        montar_acoes_apos_titulo(barra)
 
     label_referencia = None
     if texto_referencia is not None or montar_acoes_antes_referencia is not None:

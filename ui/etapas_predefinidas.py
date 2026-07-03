@@ -84,9 +84,11 @@ class EtapasPredefinidasFrame(tk.Frame):
         super().__init__(parent, bg="#ececec")
         self.ctx = ctx
         self.on_voltar = on_voltar
-        self._dados = carregar()
+        self._dados = {"versao": 1, "etapas": []}
         self._etapa_editando_id = None
         self._icones_botoes = []
+        self._atualizando_lista = False
+        self._suprimir_selecao = False
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -96,12 +98,45 @@ class EtapasPredefinidasFrame(tk.Frame):
             return "Base não carregada"
         return f"Referência SINAPI: {ref}"
 
+    def _montar_botao_recarregar_cabecalho(self, parent):
+        criar_botao_ttk_com_icone(
+            parent,
+            texto="Recarregar",
+            nome_icone="sync-outline",
+            command=self.recarregar_catalogo,
+            estilo="Compact.TButton",
+            cor_icone="#006699",
+            refs=self._icones_botoes,
+        ).pack(side="right", padx=(0, 10))
+
+    def _recarregar_da_api(self, *, avisar_erro=True):
+        try:
+            self._dados = carregar()
+        except ValueError as exc:
+            if avisar_erro:
+                messagebox.showwarning(
+                    "Recarregar",
+                    str(exc),
+                    parent=self.winfo_toplevel(),
+                )
+            return False
+        return True
+
+    def recarregar_catalogo(self):
+        if not self._recarregar_da_api():
+            return
+        self._atualizar_lista_etapas()
+
+    def _liberar_supressao_selecao(self):
+        self._suprimir_selecao = False
+
     def _montar(self):
         self.label_referencia = criar_barra_modulo(
             self,
             "Etapas pré-definidas",
             self.on_voltar,
             texto_referencia=self._texto_referencia(),
+            montar_acoes_antes_referencia=self._montar_botao_recarregar_cabecalho,
         )
 
         conteudo = tk.Frame(self, bg="#ececec")
@@ -241,8 +276,6 @@ class EtapasPredefinidasFrame(tk.Frame):
             anchor="w",
         ).pack(fill="x", pady=(8, 0))
 
-        self._atualizar_lista_etapas()
-
     def _ao_atualizar_sinapi(self):
         if self.label_referencia is not None:
             self.label_referencia.config(text=self._texto_referencia())
@@ -255,31 +288,40 @@ class EtapasPredefinidasFrame(tk.Frame):
         return [e for e in etapas if texto in str(e.get("nome", "")).lower()]
 
     def _atualizar_lista_etapas(self):
-        selecionado = self._etapa_editando_id
-        self.tree_etapas.delete(*self.tree_etapas.get_children())
-        primeiro_id = None
-        for etapa in self._filtrar_etapas():
-            etapa_id = etapa["id"]
-            if primeiro_id is None:
-                primeiro_id = etapa_id
-            self.tree_etapas.insert(
-                "",
-                "end",
-                iid=etapa_id,
-                values=(etapa.get("nome", ""), len(etapa.get("itens", []))),
-            )
-        if selecionado and self.tree_etapas.exists(selecionado):
-            self.tree_etapas.selection_set(selecionado)
-            self.tree_etapas.focus(selecionado)
-        elif primeiro_id:
-            self.tree_etapas.selection_set(primeiro_id)
-            self._carregar_etapa_na_edicao(primeiro_id)
-        else:
-            self._etapa_editando_id = None
-            self.var_nome.set("")
-            self._atualizar_itens()
+        self._suprimir_selecao = True
+        self._atualizando_lista = True
+        try:
+            selecionado = self._etapa_editando_id
+            self.tree_etapas.delete(*self.tree_etapas.get_children())
+            primeiro_id = None
+            for etapa in self._filtrar_etapas():
+                etapa_id = etapa["id"]
+                if primeiro_id is None:
+                    primeiro_id = etapa_id
+                self.tree_etapas.insert(
+                    "",
+                    "end",
+                    iid=etapa_id,
+                    values=(etapa.get("nome", ""), len(etapa.get("itens", []))),
+                )
+            if selecionado and self.tree_etapas.exists(selecionado):
+                self.tree_etapas.selection_set(selecionado)
+                self.tree_etapas.focus(selecionado)
+                self._carregar_etapa_na_edicao(selecionado)
+            elif primeiro_id:
+                self.tree_etapas.selection_set(primeiro_id)
+                self._carregar_etapa_na_edicao(primeiro_id)
+            else:
+                self._etapa_editando_id = None
+                self.var_nome.set("")
+                self._atualizar_itens()
+        finally:
+            self._atualizando_lista = False
+            self.after_idle(self._liberar_supressao_selecao)
 
     def _ao_selecionar_etapa(self, _event=None):
+        if self._atualizando_lista or self._suprimir_selecao:
+            return
         selecionado = self.tree_etapas.selection()
         if not selecionado:
             return
@@ -357,8 +399,7 @@ class EtapasPredefinidasFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Salvar", str(exc), parent=self.winfo_toplevel())
             if "Recarregue" in str(exc):
-                self._dados = carregar()
-                self._atualizar_lista_etapas()
+                self.recarregar_catalogo()
             return
         self._dados = carregar()
         self._atualizar_lista_etapas()
@@ -493,4 +534,4 @@ class EtapasPredefinidasFrame(tk.Frame):
         self._atualizar_lista_etapas()
 
     def focar(self):
-        pass
+        self.recarregar_catalogo()

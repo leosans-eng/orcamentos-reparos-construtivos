@@ -535,6 +535,9 @@ class ComposicoesPropriasFrame(tk.Frame):
             atualizar(comp, self._dados)
         except ValueError as exc:
             messagebox.showwarning("Salvar", str(exc), parent=self.winfo_toplevel())
+            if "Recarregue" in str(exc):
+                self._dados = carregar()
+                self._atualizar_listas()
             return
         self._dados = carregar()
         self._atualizar_listas()

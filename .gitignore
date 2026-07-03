@@ -17,3 +17,5 @@ sinapi/status.json
 *status.json
 docs/
 dados_usuario/
+api/orc_dev.db
+api/.env

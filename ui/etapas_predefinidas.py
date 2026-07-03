@@ -356,6 +356,9 @@ class EtapasPredefinidasFrame(tk.Frame):
             atualizar(etapa, self._dados)
         except ValueError as exc:
             messagebox.showwarning("Salvar", str(exc), parent=self.winfo_toplevel())
+            if "Recarregue" in str(exc):
+                self._dados = carregar()
+                self._atualizar_lista_etapas()
             return
         self._dados = carregar()
         self._atualizar_lista_etapas()

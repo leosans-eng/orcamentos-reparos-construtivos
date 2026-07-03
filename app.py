@@ -14,6 +14,7 @@ from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.etapas_predefinidas import EtapasPredefinidasFrame
 from ui.hub import HubFrame
 from ui.orcamento_customizado import OrcamentoCustomizadoFrame
+from ui.dialogo_login import garantir_login
 from ui.widgets import centralizar_janela_principal, configurar_estilos_ttk
 
 TITULOS_JANELA = {
@@ -212,4 +213,10 @@ class OrcApp:
 
 
 if __name__ == "__main__":
+    _root_login = tk.Tk()
+    _root_login.withdraw()
+    if not garantir_login(_root_login):
+        _root_login.destroy()
+        raise SystemExit(0)
+    _root_login.destroy()
     OrcApp().executar()

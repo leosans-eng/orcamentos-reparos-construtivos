@@ -21,7 +21,7 @@ from core.sinapi_loader import (
     recarregar_sinapi,
 )
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0-alpha"
 
 LARGURA_JANELA_PADRAO = 990
 ALTURA_JANELA_PADRAO = 660

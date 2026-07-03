@@ -75,6 +75,12 @@ O app consulta o arquivo [`version.json`](version.json) no repositório GitHub e
 
 No hub, o botão **Configurações** abre um diálogo para **reverificar a base SINAPI** manualmente e acompanhar o status do servidor (HTTP e situação da última consulta).
 
+### API compartilhada (Fase 1)
+
+Composições próprias e etapas pré-definidas são lidas e gravadas via **API FastAPI** (dados compartilhados entre todos os usuários). Na abertura do app é solicitado **login** (usuário e senha).
+
+Para desenvolvimento e deploy da API, consulte [`api/README.md`](api/README.md).
+
 ## Requisitos
 
 - **Windows** 10 ou superior

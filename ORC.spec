@@ -65,6 +65,8 @@ a = Analysis(
         'core.api_config',
         'core.api_exceptions',
         'ui.dialogo_login',
+        'ui.recarga_catalogo',
+        'core.precarga_catalogos',
     ],
     hookspath=[],
     hooksconfig={},

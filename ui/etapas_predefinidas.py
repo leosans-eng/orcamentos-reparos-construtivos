@@ -14,6 +14,7 @@ from core.etapas_predefinidas_storage import (
     criar,
     excluir,
     listar,
+    obter_cache_catalogo,
     obter_por_id,
 )
 from ui.icones import (
@@ -22,6 +23,7 @@ from ui.icones import (
     criar_botao_ttk_so_icone,
 )
 from ui.orcamento_customizado import DialogoBuscaComposicaoPropria, DialogoBuscaSinapi
+from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
@@ -94,6 +96,13 @@ class EtapasPredefinidasFrame(tk.Frame):
         self._icones_botoes = []
         self._atualizando_lista = False
         self._suprimir_selecao = False
+        self._recarregador = RecarregadorCatalogo(
+            self,
+            obter_cache=obter_cache_catalogo,
+            carregar_rede=carregar,
+            ao_aplicar=self._aplicar_dados_catalogo,
+            ao_erro=self._ao_erro_recarga_catalogo,
+        )
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -115,23 +124,20 @@ class EtapasPredefinidasFrame(tk.Frame):
         btn.pack(side="left", padx=(0, 8))
         vincular_tooltip(btn, "Atualizar página")
 
-    def _recarregar_da_api(self, *, avisar_erro=True):
-        try:
-            self._dados = carregar()
-        except ValueError as exc:
-            if avisar_erro:
-                messagebox.showwarning(
-                    "Recarregar",
-                    str(exc),
-                    parent=self.winfo_toplevel(),
-                )
-            return False
-        return True
+    def _ao_erro_recarga_catalogo(self, mensagem: str, avisar_erro: bool):
+        if avisar_erro:
+            messagebox.showwarning(
+                "Recarregar",
+                mensagem,
+                parent=self.winfo_toplevel(),
+            )
 
-    def recarregar_catalogo(self):
-        if not self._recarregar_da_api():
-            return
+    def _aplicar_dados_catalogo(self, dados: dict):
+        self._dados = dados
         self._atualizar_lista_etapas()
+
+    def recarregar_catalogo(self, *, forcar_rede: bool = True):
+        self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=True)
 
     def _liberar_supressao_selecao(self):
         self._suprimir_selecao = False
@@ -540,4 +546,4 @@ class EtapasPredefinidasFrame(tk.Frame):
         self._atualizar_lista_etapas()
 
     def focar(self):
-        self.recarregar_catalogo()
+        self.recarregar_catalogo(forcar_rede=False)

@@ -16,6 +16,7 @@ from core.composicoes_proprias_storage import (
     criar,
     excluir,
     listar,
+    obter_cache_catalogo,
     obter_estado_previa_custos,
     obter_por_id,
     salvar_estado_previa_custos,
@@ -26,6 +27,7 @@ from ui.icones import (
     criar_botao_ttk_so_icone,
 )
 from ui.orcamento_customizado import DialogoBuscaSinapi
+from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
     aplicar_icone_janela,
@@ -224,6 +226,13 @@ class ComposicoesPropriasFrame(tk.Frame):
         self._icones_botoes = []
         self._atualizando_lista = False
         self._suprimir_selecao = False
+        self._recarregador = RecarregadorCatalogo(
+            self,
+            obter_cache=obter_cache_catalogo,
+            carregar_rede=carregar,
+            ao_aplicar=self._aplicar_dados_catalogo,
+            ao_erro=self._ao_erro_recarga_catalogo,
+        )
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -245,23 +254,20 @@ class ComposicoesPropriasFrame(tk.Frame):
         btn.pack(side="left", padx=(0, 8))
         vincular_tooltip(btn, "Atualizar página")
 
-    def _recarregar_da_api(self, *, avisar_erro=True):
-        try:
-            self._dados = carregar()
-        except ValueError as exc:
-            if avisar_erro:
-                messagebox.showwarning(
-                    "Recarregar",
-                    str(exc),
-                    parent=self.winfo_toplevel(),
-                )
-            return False
-        return True
+    def _ao_erro_recarga_catalogo(self, mensagem: str, avisar_erro: bool):
+        if avisar_erro:
+            messagebox.showwarning(
+                "Recarregar",
+                mensagem,
+                parent=self.winfo_toplevel(),
+            )
 
-    def recarregar_catalogo(self):
-        if not self._recarregar_da_api():
-            return
-        self._atualizar_listas()
+    def _aplicar_dados_catalogo(self, dados: dict):
+        self._dados = dados
+        self._atualizar_listas(calcular_custos_lista=False)
+
+    def recarregar_catalogo(self, *, forcar_rede: bool = True):
+        self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=True)
 
     def _liberar_supressao_selecao(self):
         self._suprimir_selecao = False
@@ -426,7 +432,7 @@ class ComposicoesPropriasFrame(tk.Frame):
             refs=self._icones_botoes,
         ).pack(side="left")
 
-    def _atualizar_lista_composicoes(self):
+    def _atualizar_lista_composicoes(self, *, calcular_custos=True):
         self._suprimir_selecao = True
         self._atualizando_lista = True
         try:
@@ -435,10 +441,16 @@ class ComposicoesPropriasFrame(tk.Frame):
             estado = self._estado_selecionado()
             primeiro_id = None
             for comp in self._filtrar_composicoes():
-                custo, _ = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
                 iid = comp["id"]
                 if primeiro_id is None:
                     primeiro_id = iid
+                if calcular_custos and estado:
+                    custo, _ = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
+                    custo_txt = _formatar_moeda(custo)
+                elif calcular_custos:
+                    custo_txt = "—"
+                else:
+                    custo_txt = "…"
                 self.tree_composicoes.insert(
                     "",
                     "end",
@@ -447,7 +459,7 @@ class ComposicoesPropriasFrame(tk.Frame):
                         comp.get("codigo", ""),
                         comp.get("nome", ""),
                         comp.get("unidade", ""),
-                        _formatar_moeda(custo) if estado else "—",
+                        custo_txt,
                     ),
                 )
             if selecionado and self.tree_composicoes.exists(selecionado):
@@ -460,6 +472,24 @@ class ComposicoesPropriasFrame(tk.Frame):
         finally:
             self._atualizando_lista = False
             self.after_idle(self._liberar_supressao_selecao)
+        if not calcular_custos:
+            self.after_idle(self._completar_custos_lista_composicoes)
+
+    def _completar_custos_lista_composicoes(self):
+        estado = self._estado_selecionado()
+        for iid in self.tree_composicoes.get_children():
+            comp = obter_por_id(iid, self._dados)
+            if comp is None:
+                continue
+            if estado:
+                custo, _ = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
+                custo_txt = _formatar_moeda(custo)
+            else:
+                custo_txt = "—"
+            valores = list(self.tree_composicoes.item(iid, "values"))
+            if len(valores) >= 4:
+                valores[3] = custo_txt
+                self.tree_composicoes.item(iid, values=valores)
 
     def _ao_selecionar_composicao(self, _event=None):
         if self._atualizando_lista or self._suprimir_selecao:
@@ -496,8 +526,8 @@ class ComposicoesPropriasFrame(tk.Frame):
             self._aplicar_estado_previa_inicial(estados)
         self._atualizar_listas()
 
-    def _atualizar_listas(self, _event=None):
-        self._atualizar_lista_composicoes()
+    def _atualizar_listas(self, _event=None, *, calcular_custos_lista=True):
+        self._atualizar_lista_composicoes(calcular_custos=calcular_custos_lista)
         self._atualizar_componentes()
 
     def _filtrar_composicoes(self):
@@ -719,4 +749,4 @@ class ComposicoesPropriasFrame(tk.Frame):
         self._atualizar_listas()
 
     def focar(self):
-        self.recarregar_catalogo()
+        self.recarregar_catalogo(forcar_rede=False)

@@ -8,6 +8,7 @@ from core.app_state import (
     LARGURA_JANELA_PADRAO,
     AppContext,
 )
+from core.precarga_catalogos import iniciar_precarga_catalogos
 from ui.area_privativa import criar_area_privativa
 from ui.composicoes_proprias import ComposicoesPropriasFrame
 from ui.consulta_sinapi import ConsultaSinapiFrame
@@ -219,4 +220,5 @@ if __name__ == "__main__":
         _root_login.destroy()
         raise SystemExit(0)
     _root_login.destroy()
+    iniciar_precarga_catalogos()
     OrcApp().executar()

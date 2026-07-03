@@ -28,6 +28,12 @@ def _aplicar_catalogo(dados: dict) -> dict:
     return _catalogo_cache
 
 
+def obter_cache_catalogo():
+    if _catalogo_cache is None:
+        return None
+    return deepcopy(_catalogo_cache)
+
+
 def carregar():
     try:
         dados = get_client().get_composicoes_catalogo()

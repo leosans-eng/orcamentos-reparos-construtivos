@@ -468,7 +468,7 @@ class EtapasPredefinidasFrame(tk.Frame):
         DialogoBuscaSinapi(
             self.winfo_toplevel(),
             self.ctx,
-            "",
+            "SP",
             ao_escolher,
             titulo="Adicionar item SINAPI",
             mostrar_quantidade=False,

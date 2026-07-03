@@ -4,92 +4,155 @@ from tkinter import ttk
 from core.api_client import reiniciar_cliente
 from core.api_config import carregar_config, salvar_config
 from core.api_exceptions import ApiError, ApiIndisponivelError
-from ui.widgets import aplicar_icone_janela, centralizar_janela, preparar_toplevel
+from ui.widgets import (
+    COR_BORDA_PADRAO,
+    COR_FUNDO_CARTAO,
+    COR_TITULO_PADRAO,
+    aplicar_icone_janela,
+    centralizar_janela,
+    configurar_estilos_ttk,
+    preparar_toplevel,
+)
 
 URL_PADRAO = "http://localhost:8000"
+COR_FUNDO = "#ececec"
+COR_ROTULO = "#555555"
+COR_ERRO = "#c62828"
 
 
 class DialogoLogin(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         preparar_toplevel(self)
+        configurar_estilos_ttk(self)
         self.resultado = False
 
         config = carregar_config()
         self.title("ORC — Login")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=COR_FUNDO)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
+        painel = tk.Frame(self, bg=COR_FUNDO, padx=28, pady=22)
         painel.pack(fill="both", expand=True)
 
-        tk.Label(
+        cartao = tk.Frame(
             painel,
-            text="Conectar ao servidor",
-            font=("Arial", 12, "bold"),
-            fg="#333333",
-            bg="#ececec",
-        ).pack(anchor="w", pady=(0, 4))
-
-        tk.Label(
-            painel,
-            text="Composições e etapas pré-definidas são compartilhadas pela API.",
-            font=("Arial", 9),
-            fg="#555555",
-            bg="#ececec",
-            wraplength=360,
-            justify="left",
-        ).pack(anchor="w", pady=(0, 14))
-
-        form = tk.Frame(painel, bg="#ffffff", highlightbackground="#cccccc", highlightthickness=1)
-        form.pack(fill="x", pady=(0, 12))
-        inner = tk.Frame(form, bg="#ffffff", padx=14, pady=12)
-        inner.pack(fill="x")
-
-        tk.Label(inner, text="URL da API", bg="#ffffff", fg="#555555", font=("Arial", 9)).grid(
-            row=0, column=0, sticky="w", pady=(0, 4)
+            bg=COR_FUNDO_CARTAO,
+            highlightbackground=COR_BORDA_PADRAO,
+            highlightthickness=2,
         )
-        self.var_url = tk.StringVar(value=config.get("base_url", URL_PADRAO))
-        ttk.Entry(inner, textvariable=self.var_url, width=42).grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        cartao.pack(fill="x")
+        inner = tk.Frame(cartao, bg=COR_FUNDO_CARTAO, padx=18, pady=16)
+        inner.pack(fill="x")
         inner.columnconfigure(0, weight=1)
 
-        tk.Label(inner, text="Usuário", bg="#ffffff", fg="#555555", font=("Arial", 9)).grid(
-            row=2, column=0, sticky="w", pady=(0, 4)
-        )
-        self.var_usuario = tk.StringVar()
-        ttk.Entry(inner, textvariable=self.var_usuario, width=28).grid(row=3, column=0, sticky="w", pady=(0, 10))
+        self.var_url = tk.StringVar(value=config.get("base_url", URL_PADRAO))
+        self.var_usuario = tk.StringVar(value=config.get("usuario", ""))
+        self.var_senha = tk.StringVar(value=config.get("senha", ""))
+        self.var_salvar_usuario = tk.BooleanVar(value=bool(config.get("salvar_usuario")))
+        self.var_salvar_senha = tk.BooleanVar(value=bool(config.get("salvar_senha")))
 
-        tk.Label(inner, text="Senha", bg="#ffffff", fg="#555555", font=("Arial", 9)).grid(
-            row=4, column=0, sticky="w", pady=(0, 4)
+        self._campo(inner, "URL da API:", self.var_url, linha=0, largura=40)
+        self._campo(inner, "Usuário:", self.var_usuario, linha=2, largura=28)
+        entrada_senha = self._campo(
+            inner,
+            "Senha:",
+            self.var_senha,
+            linha=4,
+            largura=28,
+            mostrar="•",
         )
-        self.var_senha = tk.StringVar()
-        entrada_senha = ttk.Entry(inner, textvariable=self.var_senha, width=28, show="•")
-        entrada_senha.grid(row=5, column=0, sticky="w")
         entrada_senha.bind("<Return>", lambda _e: self._entrar())
+
+        opcoes = tk.Frame(inner, bg=COR_FUNDO_CARTAO)
+        opcoes.grid(row=6, column=0, sticky="w", pady=(10, 0))
+
+        chk_usuario = tk.Checkbutton(
+            opcoes,
+            text="Salvar usuário",
+            variable=self.var_salvar_usuario,
+            command=self._ao_alterar_salvar_usuario,
+            bg=COR_FUNDO_CARTAO,
+            activebackground=COR_FUNDO_CARTAO,
+            fg=COR_ROTULO,
+            activeforeground=COR_ROTULO,
+            selectcolor=COR_FUNDO_CARTAO,
+            font=("Arial", 9),
+            anchor="w",
+        )
+        chk_usuario.pack(anchor="w")
+
+        chk_senha = tk.Checkbutton(
+            opcoes,
+            text="Salvar senha",
+            variable=self.var_salvar_senha,
+            command=self._ao_alterar_salvar_senha,
+            bg=COR_FUNDO_CARTAO,
+            activebackground=COR_FUNDO_CARTAO,
+            fg=COR_ROTULO,
+            activeforeground=COR_ROTULO,
+            selectcolor=COR_FUNDO_CARTAO,
+            font=("Arial", 9),
+            anchor="w",
+        )
+        chk_senha.pack(anchor="w", pady=(2, 0))
 
         self._lbl_erro = tk.Label(
             painel,
             text="",
             font=("Arial", 9),
-            fg="#c62828",
-            bg="#ececec",
-            wraplength=360,
-            justify="left",
+            fg=COR_ERRO,
+            bg=COR_FUNDO,
+            wraplength=380,
+            justify="center",
+            height=2,
         )
-        self._lbl_erro.pack(anchor="w", pady=(0, 8))
+        self._lbl_erro.pack(fill="x", pady=(12, 8))
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Sair", command=self._cancelar, style="Delete.TButton").pack(side="right")
-        ttk.Button(botoes, text="Entrar", command=self._entrar).pack(side="right", padx=(0, 8))
+        ttk.Button(botoes, text="Sair", command=self._cancelar, style="Delete.TButton").pack(
+            side="right"
+        )
+        ttk.Button(botoes, text="Entrar", command=self._entrar, style="Add.TButton").pack(
+            side="right", padx=(0, 8)
+        )
 
         self.bind("<Escape>", lambda _e: self._cancelar())
         self.protocol("WM_DELETE_WINDOW", self._cancelar)
         self.update_idletasks()
         centralizar_janela(self, parent)
+
+        if self.var_usuario.get().strip() and not self.var_senha.get():
+            entrada_senha.focus_set()
+        elif not self.var_usuario.get().strip():
+            self.focus_set()
+
+    def _campo(self, parent, rotulo, variavel, *, linha, largura, mostrar=None):
+        tk.Label(
+            parent,
+            text=rotulo,
+            bg=COR_FUNDO_CARTAO,
+            fg=COR_ROTULO,
+            font=("Arial", 9),
+        ).grid(row=linha, column=0, sticky="w", pady=(0 if linha == 0 else 8, 4))
+        kwargs = {"textvariable": variavel, "width": largura}
+        if mostrar is not None:
+            kwargs["show"] = mostrar
+        entrada = ttk.Entry(parent, **kwargs)
+        entrada.grid(row=linha + 1, column=0, sticky="ew")
+        return entrada
+
+    def _ao_alterar_salvar_usuario(self):
+        if not self.var_salvar_usuario.get():
+            self.var_salvar_senha.set(False)
+
+    def _ao_alterar_salvar_senha(self):
+        if self.var_salvar_senha.get():
+            self.var_salvar_usuario.set(True)
 
     def _cancelar(self):
         self.resultado = False
@@ -106,16 +169,26 @@ class DialogoLogin(tk.Toplevel):
             self._lbl_erro.config(text="Informe a senha.")
             return
 
-        salvar_config(url)
+        self._lbl_erro.config(text="Conectando…", fg=COR_TITULO_PADRAO)
+        self.update_idletasks()
+
+        salvar_config(
+            url,
+            salvar_usuario=self.var_salvar_usuario.get(),
+            salvar_senha=self.var_salvar_senha.get(),
+            usuario=usuario,
+            senha=senha,
+        )
         cliente = reiniciar_cliente(base_url=url)
         try:
             if not cliente.health():
                 raise ApiIndisponivelError(
-                    f"A API em {url} não respondeu. Verifique se o servidor está em execução."
+                    f"A API em {url} não respondeu.\n"
+                    "Verifique se o servidor está em execução e se a URL está correta."
                 )
             cliente.login(usuario, senha)
         except ApiError as exc:
-            self._lbl_erro.config(text=exc.mensagem)
+            self._lbl_erro.config(text=exc.mensagem, fg=COR_ERRO)
             return
 
         self.resultado = True

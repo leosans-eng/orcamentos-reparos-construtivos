@@ -6,7 +6,7 @@ from typing import Any
 
 import requests
 
-from core.api_config import carregar_config, carregar_sessao, salvar_sessao
+from core.api_config import carregar_config, carregar_sessao, limpar_sessao, salvar_sessao
 from core.api_exceptions import (
     ApiError,
     ApiIndisponivelError,
@@ -52,9 +52,30 @@ class OrcApiClient:
             ) from exc
         return response
 
+    def _mensagem_erro(self, response: requests.Response, padrao: str) -> str:
+        try:
+            corpo = response.json()
+            if isinstance(corpo, dict) and corpo.get("detail") is not None:
+                detalhe = corpo["detail"]
+                if isinstance(detalhe, str):
+                    return detalhe
+                if isinstance(detalhe, dict) and detalhe.get("mensagem"):
+                    return str(detalhe["mensagem"])
+        except ValueError:
+            pass
+        return padrao
+
     def _tratar_resposta(self, response: requests.Response) -> Any:
         if response.status_code == 401:
-            raise ApiNaoAutenticadoError("Sessão expirada. Faça login novamente.", 401)
+            raise ApiNaoAutenticadoError(
+                self._mensagem_erro(response, "Sessão expirada. Faça login novamente."),
+                401,
+            )
+        if response.status_code == 403:
+            raise ApiError(
+                self._mensagem_erro(response, "Acesso negado."),
+                403,
+            )
         if response.status_code == 409:
             try:
                 detalhe = response.json()
@@ -71,14 +92,10 @@ class OrcApiClient:
                 versao_atual=payload.get("versao_atual"),
             )
         if response.status_code >= 400:
-            mensagem = response.text
-            try:
-                corpo = response.json()
-                if isinstance(corpo, dict):
-                    mensagem = str(corpo.get("detail", mensagem))
-            except ValueError:
-                pass
-            raise ApiError(mensagem, response.status_code)
+            raise ApiError(
+                self._mensagem_erro(response, response.text or "Erro na API."),
+                response.status_code,
+            )
         if response.status_code == 204:
             return None
         if not response.content:
@@ -104,6 +121,23 @@ class OrcApiClient:
         self.username = dados.get("username", username)
         salvar_sessao(token, self.username or username)
         return token
+
+    def logout(self) -> None:
+        self.access_token = None
+        self.username = None
+        limpar_sessao()
+
+    def trocar_senha(self, senha_atual: str, senha_nova: str) -> dict:
+        response = self._request(
+            "POST",
+            "/api/auth/change-password",
+            json={"senha_atual": senha_atual, "senha_nova": senha_nova},
+        )
+        return self._tratar_resposta(response)
+
+    def listar_usuarios(self) -> list:
+        response = self._request("GET", "/api/auth/users")
+        return self._tratar_resposta(response)
 
     def get_composicoes_catalogo(self) -> dict:
         response = self._request("GET", "/api/composicoes/catalogo")

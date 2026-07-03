@@ -33,6 +33,7 @@ class OrcApp:
         self.ctx = AppContext()
         self._modulo_atual = None
         self._frames = {}
+        self.pediu_logout = False
 
         self.janela = tk.Tk()
         self.ctx.janela = self.janela
@@ -112,7 +113,19 @@ class OrcApp:
             self.area_conteudo,
             self.ctx,
             on_selecionar_modulo=self._ao_selecionar_modulo_hub,
+            on_logout=self._logout,
         )
+
+    def _logout(self):
+        from core.api_client import get_client
+        from core.composicoes_proprias_storage import limpar_cache as limpar_cache_composicoes
+        from core.etapas_predefinidas_storage import limpar_cache as limpar_cache_etapas
+
+        get_client().logout()
+        limpar_cache_composicoes()
+        limpar_cache_etapas()
+        self.pediu_logout = True
+        self.janela.destroy()
 
     def _criar_modulo(self, nome):
         if nome == "area_privativa":
@@ -214,11 +227,15 @@ class OrcApp:
 
 
 if __name__ == "__main__":
-    _root_login = tk.Tk()
-    _root_login.withdraw()
-    if not garantir_login(_root_login):
+    while True:
+        _root_login = tk.Tk()
+        _root_login.withdraw()
+        if not garantir_login(_root_login):
+            _root_login.destroy()
+            raise SystemExit(0)
         _root_login.destroy()
-        raise SystemExit(0)
-    _root_login.destroy()
-    iniciar_precarga_catalogos()
-    OrcApp().executar()
+        iniciar_precarga_catalogos()
+        app = OrcApp()
+        app.executar()
+        if not app.pediu_logout:
+            break

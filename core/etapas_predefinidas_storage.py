@@ -18,9 +18,13 @@ def _tratar_erro_api(exc: ApiError) -> None:
     raise ValueError(exc.mensagem) from exc
 
 
-def _invalidar_cache():
+def limpar_cache():
     global _catalogo_cache
     _catalogo_cache = None
+
+
+def _invalidar_cache():
+    limpar_cache()
 
 
 def _aplicar_catalogo(dados: dict) -> dict:

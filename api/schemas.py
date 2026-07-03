@@ -25,6 +25,19 @@ class UserCreateRequest(BaseModel):
     permissions: dict[str, Any] = Field(default_factory=dict)
 
 
+class ChangePasswordRequest(BaseModel):
+    senha_atual: str
+    senha_nova: str = Field(min_length=6, max_length=128)
+
+
+class AdminResetPasswordRequest(BaseModel):
+    senha_nova: str = Field(min_length=6, max_length=128)
+
+
+class UserActiveRequest(BaseModel):
+    is_active: bool
+
+
 class UserPublic(BaseModel):
     id: UUID
     username: str

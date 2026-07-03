@@ -62,11 +62,24 @@ A documentação interativa fica em: http://localhost:8000/docs
 
 Na primeira execução, o banco é populado automaticamente a partir de `dados_usuario/composicoes_proprias.json` e `dados_usuario/etapas_predefinidas.json`.
 
-## Criar novos usuários
+## Administração de usuários (somente admin)
 
-Com token de admin (via `/docs` ou login):
+Abra http://localhost:8000/docs, faça login em **POST `/api/auth/login`** com o `admin` e clique em **Authorize** colando o `access_token`.
 
-`POST /api/auth/users` com `{"username": "maria", "password": "senha-segura"}`
+| Ação | Endpoint | Corpo de exemplo |
+|------|----------|------------------|
+| Listar usuários | `GET /api/auth/users` | — |
+| Criar usuário | `POST /api/auth/users` | `{"username": "maria", "password": "senha-segura"}` |
+| Redefinir senha (esqueceu) | `POST /api/auth/users/{id}/reset-password` | `{"senha_nova": "nova-senha"}` |
+| Desativar acesso | `PATCH /api/auth/users/{id}/active` | `{"is_active": false}` |
+| Reativar acesso | `PATCH /api/auth/users/{id}/active` | `{"is_active": true}` |
+| Excluir usuário | `DELETE /api/auth/users/{id}` | — |
+
+O `{id}` é o UUID do usuário, obtido em **GET `/api/auth/users`**.
+
+**Senhas:** o sistema nunca guarda a senha em texto legível. Se alguém esquecer, o admin **define uma senha nova** (reset); não há como “recuperar” a antiga.
+
+**Desativar vs excluir:** desativar bloqueia o login e mantém o cadastro; excluir remove o usuário do banco.
 
 ## Produção (servidor da TI)
 

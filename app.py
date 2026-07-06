@@ -14,7 +14,7 @@ from ui.composicoes_proprias import ComposicoesPropriasFrame
 from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.etapas_predefinidas import EtapasPredefinidasFrame
 from ui.hub import HubFrame
-from ui.orcamento_customizado import OrcamentoCustomizadoFrame
+from ui.orcamento_customizado_modulo import OrcamentoCustomizadoModulo
 from ui.dialogo_login import garantir_login
 from ui.widgets import centralizar_janela_principal, configurar_estilos_ttk
 
@@ -141,7 +141,7 @@ class OrcApp:
                 on_voltar=lambda: self.mostrar_modulo("hub"),
             )
         elif nome == "orcamento_customizado":
-            self._frames[nome] = OrcamentoCustomizadoFrame(
+            self._frames[nome] = OrcamentoCustomizadoModulo(
                 self.area_conteudo,
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),

@@ -8,7 +8,6 @@ from core.exportacao_planilha_orcamento import (
     exportar_orcamento_customizado_modelo_formatado,
 )
 from core.composicoes_proprias_storage import listar as listar_composicoes_catalogo
-from core.importacao_i9 import importar_planilha_i9
 from core.orcamento_customizado import (
     BDI_PADRAO,
     TIPO_COMPOSICAO_PROPRIA,
@@ -25,13 +24,9 @@ from core.orcamento_customizado import (
 from core.orcamento_storage import (
     atualizar_orcamento_na_lista,
     carregar_arquivo,
-    criar_orcamento,
     dict_para_orcamento,
-    excluir_orcamento,
-    listar_nomes,
     obter_orcamento_dict,
     renomear_orcamento,
-    salvar_arquivo,
 )
 from core.sinapi_busca import (
     TIPO_COMPOSICAO,
@@ -44,7 +39,6 @@ from core.sinapi_busca import (
     pesquisar_sinapi,
     tipo_sinapi_para_filtro,
 )
-from ui.dialogo_importar_i9 import DialogoImportarI9
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
 from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
@@ -53,7 +47,6 @@ from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
     preparar_toplevel,
-    confirmar_exclusao_com_espera,
     criar_barra_modulo,
     estado_do_combo,
     perguntar_texto,
@@ -1061,16 +1054,16 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
 
 
 class OrcamentoCustomizadoFrame(tk.Frame):
-    def __init__(self, parent, ctx, on_voltar):
+    def __init__(self, parent, ctx, on_voltar, *, orcamento_id=None):
         super().__init__(parent, bg="#ececec")
         self.ctx = ctx
         self.on_voltar = on_voltar
         self._dados_arquivo = carregar_arquivo()
-        self._mapa_combo_ids = {}
+        self._orcamento_id = orcamento_id
         self._trocando_orcamento = False
         self._icone_excel_export = None
         self._icones_botoes = []
-        self.orcamento = self._carregar_orcamento_ativo()
+        self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -1078,64 +1071,34 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.label_referencia = criar_barra_modulo(
             self,
             "Orçamento Customizado",
-            self.on_voltar,
+            self._voltar_para_selecao,
             texto_referencia=self._texto_referencia(),
         )
 
         conteudo = tk.Frame(self, bg="#ececec")
         conteudo.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
-        linha_orc = tk.LabelFrame(
-            conteudo,
-            text="Orçamento salvo",
+        linha_cabecalho = tk.Frame(conteudo, bg="#ececec")
+        linha_cabecalho.pack(fill="x", padx=4, pady=(0, 8))
+
+        self.label_nome_orcamento = tk.Label(
+            linha_cabecalho,
+            text="",
             bg="#ececec",
-            padx=8,
-            pady=6,
+            fg="#006699",
+            font=("Arial", 11, "bold"),
+            anchor="w",
         )
-        linha_orc.pack(fill="x", padx=4, pady=(0, 8))
+        self.label_nome_orcamento.pack(side="left")
 
-        linha_salvo = tk.Frame(linha_orc, bg="#ececec")
-        linha_salvo.pack(fill="x")
-
-        tk.Label(linha_salvo, text="Selecionar:", bg="#ececec").pack(side="left")
-        self.combo_orcamento = ttk.Combobox(
-            linha_salvo, width=50, state="readonly"
-        )
-        self.combo_orcamento.pack(side="left", padx=(4, 8))
-        self.combo_orcamento.bind("<<ComboboxSelected>>", self._ao_trocar_orcamento)
-
-        criar_botao_ttk_com_icone(
-            linha_salvo,
-            texto="Adicionar orçamento",
-            nome_icone="add-circle-outline",
-            command=self._adicionar_orcamento,
-            estilo="Add.Compact.TButton",
-            refs=self._icones_botoes,
-        ).pack(side="left", padx=(0, 4))
         ttk.Button(
-            linha_salvo,
+            linha_cabecalho,
             text="Editar nome do orçamento",
             command=self._renomear_orcamento,
             style="Edit.Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        criar_botao_ttk_com_icone(
-            linha_salvo,
-            texto="Excluir orçamento",
-            nome_icone="trash-outline",
-            command=self._excluir_orcamento,
-            estilo="Delete.Compact.TButton",
-            refs=self._icones_botoes,
-        ).pack(side="left", padx=(0, 4))
-        criar_botao_ttk_com_icone(
-            linha_salvo,
-            texto="Importar i9",
-            nome_icone="attach-outline",
-            command=self._importar_i9,
-            estilo="Compact.TButton",
-            refs=self._icones_botoes,
-        ).pack(side="left", padx=(0, 12))
+        ).pack(side="left", padx=(8, 16))
 
-        frame_direita = tk.Frame(linha_salvo, bg="#ececec")
+        frame_direita = tk.Frame(linha_cabecalho, bg="#ececec")
         frame_direita.pack(side="right")
 
         tk.Label(frame_direita, text="BDI (%):", bg="#ececec").pack(side="left")
@@ -1312,47 +1275,38 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         self.label_total.pack(side="left")
 
-        self._atualizar_combo_orcamentos()
         self._aplicar_orcamento_na_interface()
         self._atualizar_grade()
 
-    def _carregar_orcamento_ativo(self):
-        orc_id = self._dados_arquivo.get("orcamento_ativo_id")
-        dados = obter_orcamento_dict(self._dados_arquivo, orc_id)
-        if dados is None:
-            dados = self._dados_arquivo["orcamentos"][0]
-        return dict_para_orcamento(dados)
+    def definir_orcamento(self, orcamento_id):
+        if orcamento_id and orcamento_id != getattr(self.orcamento, "id", None):
+            self._persistir_orcamento_atual()
+        self._orcamento_id = orcamento_id
+        self._dados_arquivo = carregar_arquivo()
+        self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
+        self._aplicar_orcamento_na_interface()
+        self._atualizar_grade()
 
-    def _atualizar_combo_orcamentos(self):
-        nomes = listar_nomes(self._dados_arquivo)
-        self._mapa_combo_ids = {}
-        valores = []
-        contagem = {}
-        for _oid, nome in nomes:
-            contagem[nome] = contagem.get(nome, 0) + 1
-        for oid, nome in nomes:
-            rotulo = nome if contagem[nome] == 1 else f"{nome} ({oid[:8]})"
-            self._mapa_combo_ids[rotulo] = oid
-            valores.append(rotulo)
-        self.combo_orcamento["values"] = valores
-        rotulo_atual = self._rotulo_orcamento(self.orcamento.id, self.orcamento.nome)
-        if rotulo_atual in valores:
-            self.combo_orcamento.set(rotulo_atual)
-        elif valores:
-            self.combo_orcamento.set(valores[0])
+    def _voltar_para_selecao(self):
+        self._persistir_orcamento_atual()
+        self.on_voltar()
 
-    def _rotulo_orcamento(self, orcamento_id, nome):
-        nomes = listar_nomes(self._dados_arquivo)
-        contagem = {}
-        for _oid, n in nomes:
-            contagem[n] = contagem.get(n, 0) + 1
-        if contagem.get(nome, 0) == 1:
-            return nome
-        return f"{nome} ({orcamento_id[:8]})"
+    def _carregar_orcamento_por_id(self, orcamento_id):
+        dados = carregar_arquivo()
+        registro = obter_orcamento_dict(dados, orcamento_id)
+        if registro is None:
+            raise ValueError(f"Orçamento não encontrado: {orcamento_id}")
+        self._dados_arquivo = dados
+        return dict_para_orcamento(registro)
+
+    def _atualizar_rotulo_nome(self):
+        nome = self.orcamento.nome or "Sem nome"
+        self.label_nome_orcamento.config(text=nome)
 
     def _aplicar_orcamento_na_interface(self):
         self._trocando_orcamento = True
         try:
+            self._atualizar_rotulo_nome()
             estado = self.orcamento.estado_referencia
             if estado and estado in self.ctx.obter_estados():
                 self.combo_estado.set(estado)
@@ -1369,40 +1323,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self.orcamento.definir_bdi(self._parse_bdi(self.var_bdi.get()))
         except ValueError:
             pass
-        self._dados_arquivo = atualizar_orcamento_na_lista(self._dados_arquivo, self.orcamento)
-        salvar_arquivo(self._dados_arquivo)
-        self._atualizar_combo_orcamentos()
-
-    def _ao_trocar_orcamento(self, _event=None):
-        if self._trocando_orcamento:
-            return
-        nome = self.combo_orcamento.get().strip()
-        novo_id = self._mapa_combo_ids.get(nome)
-        if not novo_id or novo_id == self.orcamento.id:
-            return
-        self._persistir_orcamento_atual()
-        self._dados_arquivo["orcamento_ativo_id"] = novo_id
-        self.orcamento = self._carregar_orcamento_ativo()
-        self._aplicar_orcamento_na_interface()
-        self._atualizar_grade()
-
-    def _adicionar_orcamento(self):
-        nome = perguntar_texto(
-            self.winfo_toplevel(),
-            "Adicionar orçamento",
-            "Nome do novo orçamento:",
-        )
-        if not nome or not nome.strip():
-            return
-        self._persistir_orcamento_atual()
-        novo_id = criar_orcamento(self._dados_arquivo, nome)
-        self._dados_arquivo = carregar_arquivo()
-        self._dados_arquivo["orcamento_ativo_id"] = novo_id
-        salvar_arquivo(self._dados_arquivo)
-        self.orcamento = self._carregar_orcamento_ativo()
-        self._atualizar_combo_orcamentos()
-        self._aplicar_orcamento_na_interface()
-        self._atualizar_grade()
+        try:
+            self._dados_arquivo = atualizar_orcamento_na_lista(self.orcamento)
+        except ValueError:
+            pass
 
     def _renomear_orcamento(self):
         nome = perguntar_texto(
@@ -1414,86 +1338,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if not nome or not nome.strip():
             return
         try:
-            renomear_orcamento(self._dados_arquivo, self.orcamento.id, nome)
+            renomear_orcamento(self.orcamento.id, nome)
             self.orcamento.definir_nome(nome)
             self._dados_arquivo = carregar_arquivo()
-            self._atualizar_combo_orcamentos()
-            self.combo_orcamento.set(self._rotulo_orcamento(self.orcamento.id, nome.strip()))
+            self._atualizar_rotulo_nome()
         except ValueError as exc:
             messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
-
-    def _excluir_orcamento(self):
-        if not confirmar_exclusao_com_espera(
-            self.winfo_toplevel(),
-            "Excluir orçamento",
-            f"Excluir o orçamento \"{self.orcamento.nome}\"?\nEsta ação não pode ser desfeita.",
-            "Excluir orçamento",
-        ):
-            return
-        try:
-            novo_id = excluir_orcamento(self._dados_arquivo, self.orcamento.id)
-            self._dados_arquivo = carregar_arquivo()
-            self._dados_arquivo["orcamento_ativo_id"] = novo_id
-            self.orcamento = self._carregar_orcamento_ativo()
-            self._atualizar_combo_orcamentos()
-            self._aplicar_orcamento_na_interface()
-            self._atualizar_grade()
-        except ValueError as exc:
-            messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
-
-    def _importar_i9(self):
-        def ao_importar(caminho):
-            try:
-                resultado = importar_planilha_i9(
-                    caminho,
-                    listar_composicoes_catalogo(),
-                    self.ctx.sinapi,
-                )
-            except (OSError, ValueError) as exc:
-                messagebox.showerror(
-                    "Importar i9",
-                    str(exc),
-                    parent=self.winfo_toplevel(),
-                )
-                raise
-
-            self._persistir_orcamento_atual()
-            self._dados_arquivo = atualizar_orcamento_na_lista(
-                self._dados_arquivo, resultado.orcamento
-            )
-            salvar_arquivo(self._dados_arquivo)
-            self.orcamento = dict_para_orcamento(
-                obter_orcamento_dict(self._dados_arquivo, resultado.orcamento.id)
-            )
-            self._atualizar_combo_orcamentos()
-            self.combo_orcamento.set(
-                self._rotulo_orcamento(self.orcamento.id, self.orcamento.nome)
-            )
-            self._aplicar_orcamento_na_interface()
-            self._atualizar_grade()
-
-            resumo = (
-                f"Orçamento \"{self.orcamento.nome}\" importado com sucesso.\n"
-                f"{resultado.grupos_importados} etapa(s) e "
-                f"{resultado.itens_importados} item(ns) adicionados."
-            )
-            if resultado.avisos:
-                avisos = "\n".join(f"• {aviso}" for aviso in resultado.avisos[:8])
-                if len(resultado.avisos) > 8:
-                    avisos += f"\n• ... e mais {len(resultado.avisos) - 8} aviso(s)."
-                messagebox.showwarning(
-                    "Importar i9",
-                    f"{resumo}\n\nAvisos:\n{avisos}",
-                    parent=self.winfo_toplevel(),
-                )
-            else:
-                messagebox.showinfo(
-                    "Importar i9",
-                    resumo,
-                    parent=self.winfo_toplevel(),
-                )
-
-        DialogoImportarI9(self.winfo_toplevel(), on_importar=ao_importar)
 
     def _texto_referencia(self):
         ref = self.ctx.sinapi_referencia_rotulo

@@ -1,4 +1,4 @@
-"""Ponto de entrada da API ORC — Fase 1."""
+"""Ponto de entrada da API ORC — Fases 1 e 3."""
 
 from contextlib import asynccontextmanager
 import logging
@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.database import Base, SessionLocal, engine
-from api.routers import auth, composicoes, etapas
+from api.routers import auth, composicoes, etapas, orcamentos
 from api.seed import garantir_dados_iniciais
 
 logging.basicConfig(level=logging.INFO)
@@ -28,8 +28,11 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="ORC API",
-    description="API compartilhada do sistema ORC — Fase 1 (composições e etapas).",
-    version="0.1.0",
+    description=(
+        "API compartilhada do sistema ORC — Fase 1 (composições e etapas) "
+        "e Fase 3 (orçamentos customizados)."
+    ),
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -44,6 +47,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(composicoes.router, prefix="/api")
 app.include_router(etapas.router, prefix="/api")
+app.include_router(orcamentos.router, prefix="/api")
 
 
 @app.get("/api/health")

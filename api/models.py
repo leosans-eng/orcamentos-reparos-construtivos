@@ -1,9 +1,9 @@
-"""Modelos do banco de dados — Fase 1."""
+"""Modelos do banco de dados — Fases 1 e 3."""
 
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
@@ -49,3 +49,21 @@ class AppSetting(Base):
 
     chave: Mapped[str] = mapped_column(String(128), primary_key=True)
     valor: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class OrcamentoCustomizado(Base):
+    """Orçamento customizado compartilhado (Fase 3)."""
+
+    __tablename__ = "orcamentos_customizados"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    nome: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    dados: Mapped[dict] = mapped_column(JSON, nullable=False)
+    versao: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )

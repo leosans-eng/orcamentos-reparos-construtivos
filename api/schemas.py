@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -87,3 +88,40 @@ class EtapaUpdateRequest(BaseModel):
 
 class EstadoPreviaRequest(BaseModel):
     estado: str
+
+
+BDI_PADRAO = 30.62
+
+
+class OrcamentoResumo(BaseModel):
+    id: UUID
+    nome: str
+    versao: int
+    criado_em: datetime
+    atualizado_em: datetime
+    grupos: int
+    itens: int
+
+    model_config = {"from_attributes": True}
+
+
+class OrcamentoListResponse(BaseModel):
+    orcamentos: list[OrcamentoResumo]
+
+
+class OrcamentoCreateRequest(BaseModel):
+    nome: str = Field(min_length=1, max_length=255)
+
+
+class OrcamentoUpdateRequest(BaseModel):
+    orcamento: dict[str, Any]
+    versao: int
+
+
+class OrcamentoRenomearRequest(BaseModel):
+    nome: str = Field(min_length=1, max_length=255)
+    versao: int
+
+
+class OrcamentoDuplicarRequest(BaseModel):
+    nome: str | None = Field(default=None, max_length=255)

@@ -89,3 +89,88 @@ O `{id}` é o UUID do usuário, obtido em **GET `/api/auth/users`**.
 4. Configurar nos desktops a URL da API informada pela TI
 
 Para trocar de Supabase para servidor próprio depois: altere apenas `DATABASE_URL` no servidor (com migração `pg_dump`/`pg_restore`).
+
+## Fase 3 — Orçamentos customizados
+
+Orçamentos compartilhados entre todos os usuários autenticados. O conteúdo (etapas, itens SINAPI, composições próprias) fica em JSON no banco; metadados ficam em colunas para listagem e ordenação.
+
+### Modelo (`orcamentos_customizados`)
+
+| Coluna | Tipo | Uso |
+|--------|------|-----|
+| `id` | UUID | Identificador do orçamento |
+| `nome` | string (255) | Nome exibido na lista; indexado para busca |
+| `dados` | JSON | `bdi_percent`, `estado_referencia`, `grupos[]` |
+| `versao` | int | Controle otimista (HTTP 409 em conflito) |
+| `created_at` | datetime | Ordenação na lista (mais recente primeiro) |
+| `updated_at` | datetime | Última alteração real |
+| `created_by_id` | UUID (opcional) | Usuário que criou ou duplicou |
+
+O JSON em `dados` segue o mesmo formato do desktop (`grupos` → `itens` com tipos `sinapi` e `composicao_propria`). Nome, datas e versão **não** ficam duplicados dentro de `dados`.
+
+### Endpoints
+
+Todos exigem JWT (`Authorize` em `/docs`).
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/api/orcamentos` | Lista resumida (criado_em ↓). Query `?q=` filtra por nome |
+| `GET` | `/api/orcamentos/{id}` | Orçamento completo + `versao` |
+| `POST` | `/api/orcamentos` | Cria vazio: `{"nome": "..."}` |
+| `PUT` | `/api/orcamentos/{id}` | Salva conteúdo: `{"orcamento": {...}, "versao": N}` |
+| `PATCH` | `/api/orcamentos/{id}/nome` | Renomeia: `{"nome": "...", "versao": N}` |
+| `POST` | `/api/orcamentos/{id}/duplicar` | Cópia com novos IDs: `{"nome": "..."}` (opcional) |
+| `DELETE` | `/api/orcamentos/{id}` | Exclui |
+
+### Resposta da lista (`GET /api/orcamentos`)
+
+```json
+{
+  "orcamentos": [
+    {
+      "id": "uuid",
+      "nome": "Edifício Alpha",
+      "versao": 12,
+      "criado_em": "2026-07-06T18:00:00+00:00",
+      "atualizado_em": "2026-07-06T19:30:00+00:00",
+      "grupos": 5,
+      "itens": 142
+    }
+  ]
+}
+```
+
+### Resposta completa (`GET /api/orcamentos/{id}`)
+
+```json
+{
+  "id": "uuid",
+  "nome": "Edifício Alpha",
+  "bdi_percent": 30.62,
+  "estado_referencia": "SP",
+  "grupos": [ "..." ],
+  "versao": 12,
+  "criado_em": "...",
+  "atualizado_em": "..."
+}
+```
+
+### Conflito de versão (409)
+
+Em `PUT` e `PATCH`, se `versao` enviada ≠ versão no banco:
+
+```json
+{
+  "detail": {
+    "detail": "conflito_versao",
+    "mensagem": "Alguém alterou este orçamento. Recarregue os dados e tente novamente.",
+    "versao_atual": 13
+  }
+}
+```
+
+### Próximos passos (desktop)
+
+- Substituir `core/orcamento_storage.py` por cliente HTTP (como composições/etapas)
+- Seed opcional a partir de `dados_usuario/orcamentos_customizados.json` na primeira subida
+- Importação i9 continua no desktop; após importar, `POST /api/orcamentos` + `PUT` com o conteúdo

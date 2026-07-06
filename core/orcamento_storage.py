@@ -126,22 +126,24 @@ def dict_para_orcamento(dados_orc):
     return orc
 
 
-def orcamento_para_dict(orcamento, *, criado_em=None):
+def orcamento_para_dict(orcamento, *, criado_em=None, atualizado_em=None):
     dados = orcamento.exportar_dict()
     dados["id"] = getattr(orcamento, "id", _novo_id())
     dados["estado_referencia"] = getattr(orcamento, "estado_referencia", "")
     agora = _agora_iso()
     dados["criado_em"] = criado_em or agora
-    dados["atualizado_em"] = agora
+    dados["atualizado_em"] = atualizado_em or agora
     return dados
 
 
-def atualizar_orcamento_na_lista(orcamento):
+def atualizar_orcamento_na_lista(orcamento, *, atualizar_data=True):
     dados = carregar_arquivo()
     payload = orcamento_para_dict(orcamento)
     for indice, orc in enumerate(dados.get("orcamentos", [])):
         if orc.get("id") == payload["id"]:
             payload["criado_em"] = orc.get("criado_em", payload["criado_em"])
+            if not atualizar_data:
+                payload["atualizado_em"] = orc.get("atualizado_em", payload["atualizado_em"])
             dados["orcamentos"][indice] = payload
             dados["orcamento_ativo_id"] = payload["id"]
             salvar_arquivo(dados)

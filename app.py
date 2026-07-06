@@ -228,12 +228,8 @@ class OrcApp:
 
 if __name__ == "__main__":
     while True:
-        _root_login = tk.Tk()
-        _root_login.withdraw()
-        if not garantir_login(_root_login):
-            _root_login.destroy()
+        if not garantir_login():
             raise SystemExit(0)
-        _root_login.destroy()
         iniciar_precarga_catalogos()
         app = OrcApp()
         app.executar()

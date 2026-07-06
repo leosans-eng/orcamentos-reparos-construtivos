@@ -1,9 +1,11 @@
+import sys
 import tkinter as tk
 from tkinter import ttk
 
 from core.api_client import reiniciar_cliente
 from core.api_config import carregar_config, salvar_config
 from core.api_exceptions import ApiError, ApiIndisponivelError
+from ui.icones import criar_botao_ttk_com_icone
 from ui.widgets import (
     COR_BORDA_PADRAO,
     COR_FUNDO_CARTAO,
@@ -20,19 +22,18 @@ COR_ROTULO = "#555555"
 COR_ERRO = "#c62828"
 
 
-class DialogoLogin(tk.Toplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
+class DialogoLogin(tk.Tk):
+    def __init__(self):
+        super().__init__()
         preparar_toplevel(self)
         configurar_estilos_ttk(self)
         self.resultado = False
+        self._refs_icones: list = []
 
         config = carregar_config()
         self.title("ORC — Login")
         aplicar_icone_janela(self)
         self.configure(bg=COR_FUNDO)
-        self.transient(parent)
-        self.grab_set()
         self.resizable(False, False)
 
         painel = tk.Frame(self, bg=COR_FUNDO, padx=28, pady=22)
@@ -114,22 +115,43 @@ class DialogoLogin(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Sair", command=self._cancelar, style="Delete.TButton").pack(
-            side="right"
-        )
-        ttk.Button(botoes, text="Entrar", command=self._entrar, style="Add.TButton").pack(
-            side="right", padx=(0, 8)
-        )
+        criar_botao_ttk_com_icone(
+            botoes,
+            texto="Sair",
+            nome_icone="log-out-outline",
+            command=self._cancelar,
+            estilo="Delete.TButton",
+            refs=self._refs_icones,
+        ).pack(side="right")
+        criar_botao_ttk_com_icone(
+            botoes,
+            texto="Entrar",
+            nome_icone="log-in-outline",
+            command=self._entrar,
+            estilo="Add.TButton",
+            refs=self._refs_icones,
+        ).pack(side="right", padx=(0, 8))
 
         self.bind("<Escape>", lambda _e: self._cancelar())
         self.protocol("WM_DELETE_WINDOW", self._cancelar)
         self.update_idletasks()
-        centralizar_janela(self, parent)
+        centralizar_janela(self)
+        self._trazer_para_frente()
 
         if self.var_usuario.get().strip() and not self.var_senha.get():
             entrada_senha.focus_set()
         elif not self.var_usuario.get().strip():
             self.focus_set()
+
+    def _trazer_para_frente(self):
+        self.lift()
+        self.focus_force()
+        if sys.platform == "win32":
+            try:
+                self.attributes("-topmost", True)
+                self.after(300, lambda: self.attributes("-topmost", False))
+            except tk.TclError:
+                pass
 
     def _campo(self, parent, rotulo, variavel, *, linha, largura, mostrar=None):
         tk.Label(
@@ -156,6 +178,7 @@ class DialogoLogin(tk.Toplevel):
 
     def _cancelar(self):
         self.resultado = False
+        self.quit()
         self.destroy()
 
     def _entrar(self):
@@ -192,10 +215,11 @@ class DialogoLogin(tk.Toplevel):
             return
 
         self.resultado = True
+        self.quit()
         self.destroy()
 
 
-def garantir_login(parent) -> bool:
-    dialogo = DialogoLogin(parent)
-    parent.wait_window(dialogo)
+def garantir_login() -> bool:
+    dialogo = DialogoLogin()
+    dialogo.mainloop()
     return dialogo.resultado

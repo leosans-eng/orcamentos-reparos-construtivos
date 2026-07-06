@@ -19,10 +19,26 @@ _CORES_STATUS = {
 }
 
 
+def _formatar_http_status(http: str) -> str:
+    if not http or http == "—":
+        return ""
+    partes: list[str] = []
+    for trecho in http.replace("->", " ").split():
+        codigo = trecho.strip()
+        if codigo and codigo not in partes:
+            partes.append(codigo)
+    if not partes:
+        return ""
+    if len(partes) == 1:
+        return f"HTTP {partes[0]}"
+    return f"HTTP {' -> '.join(partes)}"
+
+
 class DialogoTrocarSenha(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         preparar_toplevel(self)
+        self._refs_icones: list = []
         self.title("Trocar senha")
         aplicar_icone_janela(self)
         self.configure(bg="#ececec")
@@ -76,9 +92,14 @@ class DialogoTrocarSenha(tk.Toplevel):
         ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
             side="right"
         )
-        ttk.Button(botoes, text="Salvar", command=self._confirmar, style="Add.TButton").pack(
-            side="right", padx=(0, 8)
-        )
+        criar_botao_ttk_com_icone(
+            botoes,
+            texto="Salvar",
+            nome_icone="save-outline",
+            command=self._confirmar,
+            estilo="Add.TButton",
+            refs=self._refs_icones,
+        ).pack(side="right", padx=(0, 8))
 
         self.bind("<Escape>", lambda _e: self.destroy())
         self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -217,6 +238,8 @@ class DialogoConfiguracoes(tk.Toplevel):
             font=("Arial", 8),
             fg="#777777",
             bg="#ffffff",
+            wraplength=220,
+            justify="left",
         )
         self._lbl_http.pack(anchor="w")
 
@@ -287,7 +310,7 @@ class DialogoConfiguracoes(tk.Toplevel):
         self._lbl_status.config(text=status, fg=cor)
 
         if http and http != "—":
-            self._lbl_http.config(text=f"HTTP {http}")
+            self._lbl_http.config(text=_formatar_http_status(http))
         else:
             self._lbl_http.config(text="")
 

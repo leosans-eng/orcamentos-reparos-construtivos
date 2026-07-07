@@ -39,6 +39,10 @@ class UserActiveRequest(BaseModel):
     is_active: bool
 
 
+class UserPermissionsRequest(BaseModel):
+    admin: bool
+
+
 class UserPublic(BaseModel):
     id: UUID
     username: str

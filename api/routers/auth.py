@@ -16,6 +16,7 @@ from api.schemas import (
     TokenResponse,
     UserActiveRequest,
     UserCreateRequest,
+    UserPermissionsRequest,
     UserPublic,
 )
 
@@ -194,6 +195,43 @@ def definir_usuario_ativo(
             detail="Não é possível desativar o único administrador ativo.",
         )
     user.is_active = body.is_active
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/users/{user_id}/permissions", response_model=UserPublic)
+def definir_permissoes_usuario(
+    user_id: UUID,
+    body: UserPermissionsRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_user),
+):
+    """Promove ou remove permissão de administrador."""
+    _exigir_admin(admin)
+    user = _obter_usuario(db, user_id)
+    if user.id == admin.id and not body.admin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Você não pode remover seu próprio acesso de administrador.",
+        )
+    if (
+        user.permissions.get("admin")
+        and not body.admin
+        and user.is_active
+        and _contar_admins_ativos(db) <= 1
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Não é possível remover o único administrador ativo.",
+        )
+    permissoes = dict(user.permissions or {})
+    if body.admin:
+        permissoes["admin"] = True
+    else:
+        permissoes.pop("admin", None)
+    user.permissions = permissoes
     db.add(user)
     db.commit()
     db.refresh(user)

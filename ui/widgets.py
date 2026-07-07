@@ -165,6 +165,10 @@ def perguntar_texto(
     mensagem,
     valor_inicial="",
     texto_ok="OK",
+    *,
+    largura_entrada=44,
+    minsize=None,
+    padding=(16, 14),
 ):
     """Diálogo de entrada de texto com ícone do ORC (substitui simpledialog.askstring)."""
     resultado: list[str | None] = [None]
@@ -174,10 +178,12 @@ def perguntar_texto(
     aplicar_icone_janela(dialog)
     dialog.transient(parent)
     dialog.grab_set()
-    dialog.resizable(False, False)
+    dialog.resizable(bool(minsize), False)
+    if minsize:
+        dialog.minsize(*minsize)
     dialog.configure(bg="#ececec")
 
-    painel = tk.Frame(dialog, bg="#ececec", padx=16, pady=14)
+    painel = tk.Frame(dialog, bg="#ececec", padx=padding[0], pady=padding[1])
     painel.pack(fill="both", expand=True)
 
     tk.Label(
@@ -189,7 +195,7 @@ def perguntar_texto(
     ).pack(fill="x", pady=(0, 8))
 
     var_texto = tk.StringVar(value=valor_inicial)
-    entrada = ttk.Entry(painel, textvariable=var_texto, width=44)
+    entrada = ttk.Entry(painel, textvariable=var_texto, width=largura_entrada)
     entrada.pack(fill="x", pady=(0, 12))
 
     botoes = ttk.Frame(painel)

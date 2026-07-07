@@ -243,9 +243,10 @@ class DialogoNovaEtapa(tk.Toplevel):
         self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
-        self.resizable(False, False)
+        self.resizable(True, False)
+        self.minsize(540, 200)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
         painel.pack(fill="both", expand=True)
 
         tk.Label(
@@ -256,8 +257,8 @@ class DialogoNovaEtapa(tk.Toplevel):
         ).pack(fill="x", pady=(0, 4))
 
         self.var_nome = tk.StringVar()
-        entrada_nome = ttk.Entry(painel, textvariable=self.var_nome, width=44)
-        entrada_nome.pack(fill="x", pady=(0, 12))
+        entrada_nome = ttk.Entry(painel, textvariable=self.var_nome, width=52)
+        entrada_nome.pack(fill="x", pady=(0, 14))
 
         tk.Label(
             painel,
@@ -273,9 +274,9 @@ class DialogoNovaEtapa(tk.Toplevel):
             textvariable=self.var_modelo,
             values=opcoes,
             state="readonly",
-            width=42,
+            width=50,
         )
-        self.combo_modelo.pack(fill="x", pady=(0, 8))
+        self.combo_modelo.pack(fill="x", pady=(0, 10))
         self.combo_modelo.bind("<<ComboboxSelected>>", self._ao_mudar_modelo)
 
         botoes = ttk.Frame(painel)
@@ -1717,6 +1718,9 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             "Editar nome da etapa",
             "Novo nome da etapa:",
             valor_inicial=grupo["nome"],
+            largura_entrada=52,
+            minsize=(540, 110),
+            padding=(20, 16),
         )
         if not nome or not nome.strip():
             return

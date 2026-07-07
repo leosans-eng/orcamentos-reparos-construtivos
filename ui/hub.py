@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+from core.api_client import get_client
 from ui.dialogo_configuracoes import abrir_dialogo_configuracoes
 from ui.icones import criar_icone_svg
 from ui.widgets import (
@@ -135,6 +136,9 @@ class HubFrame(tk.Frame):
         btn_cfg.place(relx=1.0, rely=1.0, anchor="se", x=-14, y=-10)
 
         if self.on_logout is not None:
+            rodape_usuario = tk.Frame(self, bg="#ececec")
+            rodape_usuario.place(relx=0.0, rely=1.0, anchor="sw", x=14, y=-10)
+
             icone_logout = criar_icone_svg(
                 self,
                 "log-out-outline",
@@ -143,14 +147,33 @@ class HubFrame(tk.Frame):
             )
             self._refs_icones.append(icone_logout)
             btn_logout = ttk.Button(
-                self,
+                rodape_usuario,
                 text="Logout",
                 image=icone_logout,
                 compound="left",
                 command=self._logout,
                 style="Delete.Compact.TButton",
             )
-            btn_logout.place(relx=0.0, rely=1.0, anchor="sw", x=14, y=-10)
+            btn_logout.pack(side="left")
+
+            icone_person = criar_icone_svg(
+                self,
+                "person",
+                altura=16,
+                cor="#555555",
+            )
+            self._refs_icones.append(icone_person)
+            tk.Label(rodape_usuario, image=icone_person, bg="#ececec").pack(
+                side="left", padx=(10, 4)
+            )
+            usuario = get_client().username or "—"
+            tk.Label(
+                rodape_usuario,
+                text=usuario,
+                font=("Arial", 9),
+                fg="#555555",
+                bg="#ececec",
+            ).pack(side="left")
 
     def _abrir_configuracoes(self):
         janela = self.winfo_toplevel()

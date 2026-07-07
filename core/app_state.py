@@ -241,6 +241,14 @@ class AppContext:
                 status = "—"
         self.aplicar_status_servidor(str(status), str(http))
 
+    def _definir_status_sinapi(self, texto: str) -> None:
+        def aplicar():
+            if self.status_sinapi is not None:
+                self.status_sinapi.set(texto)
+            self.atualizar_rodape()
+
+        self._agendar_na_janela(aplicar)
+
     def iniciar_verificacao_sinapi(self, *, silencioso: bool = False):
         if self._sinapi_carregando:
             return False
@@ -257,8 +265,7 @@ class AppContext:
 
     def _verificar_atualizacao_sinapi(self, silencioso: bool = False):
         janela = self.janela
-        status = self.status_sinapi
-        if janela is None or status is None:
+        if janela is None or self.status_sinapi is None:
             self._sinapi_verificando = False
             return
 
@@ -266,8 +273,7 @@ class AppContext:
             self._agendar_na_janela(
                 lambda: self.aplicar_status_servidor("Verificando...", "—")
             )
-            status.set("SINAPI: verificando...")
-            self._agendar_na_janela(self.atualizar_rodape)
+            self._definir_status_sinapi("SINAPI: verificando...")
 
             atualizacoes, aviso, info_status = buscar_atualizacoes()
             if not atualizacoes:
@@ -279,37 +285,32 @@ class AppContext:
                 )
 
             if aviso == "nao_encontrada":
-                status.set(
+                self._definir_status_sinapi(
                     "SINAPI indisponível (servidor e pasta local)"
                 )
-                self._agendar_na_janela(self.atualizar_rodape)
                 return
 
             if aviso == "servidor_indisponivel":
                 if self.sinapi_referencia_rotulo != "BASE AUSENTE":
-                    status.set(
+                    self._definir_status_sinapi(
                         f"SINAPI local ({self.sinapi_referencia_rotulo})"
                     )
                 else:
-                    status.set(
+                    self._definir_status_sinapi(
                         "SINAPI: servidor da Caixa indisponível"
                     )
-                self._agendar_na_janela(self.atualizar_rodape)
                 return
 
             if not atualizacoes:
-                status.set("SINAPI atualizada")
-                self._agendar_na_janela(self.atualizar_rodape)
+                self._definir_status_sinapi("SINAPI atualizada")
                 return
 
             for ano, mes in atualizacoes:
-                status.set(f"SINAPI: baixando {mes:02d}/{ano}")
-                self._agendar_na_janela(self.atualizar_rodape)
+                self._definir_status_sinapi(f"SINAPI: baixando {mes:02d}/{ano}")
 
                 caminho = baixar_e_extrair(ano, mes)
 
-                status.set(f"SINAPI: processando {mes:02d}/{ano}")
-                self._agendar_na_janela(self.atualizar_rodape)
+                self._definir_status_sinapi(f"SINAPI: processando {mes:02d}/{ano}")
 
                 processar_arquivo(caminho)
 
@@ -323,8 +324,7 @@ class AppContext:
 
         except Exception as e:
             print("Erro atualização SINAPI:", e)
-            status.set("Erro atualização SINAPI")
-            self._agendar_na_janela(self.atualizar_rodape)
+            self._definir_status_sinapi("Erro atualização SINAPI")
             self._agendar_na_janela(
                 lambda: self.aplicar_status_servidor("Erro", "—")
             )

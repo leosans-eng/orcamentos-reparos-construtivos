@@ -22,9 +22,9 @@ COR_ROTULO = "#555555"
 COR_ERRO = "#c62828"
 
 
-class DialogoLogin(tk.Tk):
-    def __init__(self):
-        super().__init__()
+class DialogoLogin(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
         preparar_toplevel(self)
         configurar_estilos_ttk(self)
         self.resultado = False
@@ -34,6 +34,8 @@ class DialogoLogin(tk.Tk):
         self.title("ORC — Login")
         aplicar_icone_janela(self)
         self.configure(bg=COR_FUNDO)
+        self.transient(parent)
+        self.grab_set()
         self.resizable(False, False)
 
         painel = tk.Frame(self, bg=COR_FUNDO, padx=28, pady=22)
@@ -135,7 +137,7 @@ class DialogoLogin(tk.Tk):
         self.bind("<Escape>", lambda _e: self._cancelar())
         self.protocol("WM_DELETE_WINDOW", self._cancelar)
         self.update_idletasks()
-        centralizar_janela(self)
+        centralizar_janela(self, parent)
         self._trazer_para_frente()
 
         if self.var_usuario.get().strip() and not self.var_senha.get():
@@ -195,7 +197,6 @@ class DialogoLogin(tk.Tk):
     def _cancelar(self):
         self._cancelar_agendamentos()
         self.resultado = False
-        self.quit()
         self.destroy()
 
     def _entrar(self):
@@ -233,11 +234,10 @@ class DialogoLogin(tk.Tk):
 
         self.resultado = True
         self._cancelar_agendamentos()
-        self.quit()
         self.destroy()
 
 
-def garantir_login() -> bool:
-    dialogo = DialogoLogin()
-    dialogo.mainloop()
+def garantir_login(parent) -> bool:
+    dialogo = DialogoLogin(parent)
+    parent.wait_window(dialogo)
     return dialogo.resultado

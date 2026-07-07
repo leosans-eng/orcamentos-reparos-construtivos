@@ -1,7 +1,5 @@
 """Tela de seleção de orçamentos customizados antes da edição."""
 
-from datetime import datetime
-
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -23,20 +21,10 @@ from ui.recarga_catalogo import RecarregadorLista
 from ui.widgets import (
     confirmar_exclusao_com_espera,
     criar_barra_modulo,
+    formatar_data_iso_brasil,
     perguntar_texto,
     vincular_tooltip,
 )
-
-
-def _formatar_data_iso(iso_texto: str) -> str:
-    if not iso_texto:
-        return "—"
-    try:
-        texto = iso_texto.replace("Z", "+00:00")
-        dt = datetime.fromisoformat(texto)
-        return dt.astimezone().strftime("%d/%m/%Y %H:%M")
-    except ValueError:
-        return iso_texto
 
 
 class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
@@ -276,8 +264,8 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
                 iid=resumo["id"],
                 values=(
                     nome,
-                    _formatar_data_iso(resumo.get("criado_em", "")),
-                    _formatar_data_iso(resumo.get("atualizado_em", "")),
+                    formatar_data_iso_brasil(resumo.get("criado_em", "")),
+                    formatar_data_iso_brasil(resumo.get("atualizado_em", "")),
                     resumo.get("grupos", 0),
                     resumo.get("itens", 0),
                 ),

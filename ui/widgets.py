@@ -1,6 +1,7 @@
 import ctypes
 import sys
 import tkinter as tk
+from datetime import datetime, timedelta, timezone
 from tkinter import ttk
 
 from app_paths import icon_path
@@ -13,6 +14,21 @@ COR_TITULO_PADRAO = "#006699"
 COR_TITULO_HOVER = "#004466"
 
 PLACEHOLDER_ESTADO = "— Selecione —"
+FUSO_HORARIO_BRASIL = timezone(timedelta(hours=-3))
+
+
+def formatar_data_iso_brasil(iso_texto: str) -> str:
+    """Formata data/hora ISO (UTC) para exibição em GMT-3."""
+    if not iso_texto:
+        return "—"
+    try:
+        texto = str(iso_texto).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(texto)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(FUSO_HORARIO_BRASIL).strftime("%d/%m/%Y %H:%M")
+    except ValueError:
+        return str(iso_texto)
 
 
 def valores_combo_estado(estados):

@@ -24,6 +24,8 @@ from core.orcamento_customizado import (
 from core.orcamento_conversao import dict_para_orcamento
 from core.orcamento_storage import (
     atualizar_orcamento_na_lista,
+    invalidar_orcamento_cache,
+    obter_cache_orcamento,
     obter_orcamento_dict,
     renomear_orcamento,
 )
@@ -40,7 +42,8 @@ from core.sinapi_busca import (
 )
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
-from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
+from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone, criar_botao_ttk_so_icone
+from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
     aplicar_icone_janela,
@@ -50,6 +53,7 @@ from ui.widgets import (
     estado_do_combo,
     perguntar_texto,
     valores_combo_estado,
+    vincular_tooltip,
     formatar_decimal_br,
     formatar_moeda_br,
     formatar_quantidade_edicao,
@@ -1063,8 +1067,51 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._icone_excel_export = None
         self._icones_botoes = []
         self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
+        self._recarregador = RecarregadorCatalogo(
+            self,
+            obter_cache=lambda: obter_cache_orcamento(self.orcamento.id),
+            carregar_rede=lambda: obter_orcamento_dict(self.orcamento.id, forcar_rede=True),
+            ao_aplicar=self._aplicar_orcamento_recarregado,
+            ao_erro=self._ao_erro_recarga_orcamento,
+        )
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
+
+    def _montar_botao_recarregar_cabecalho(self, parent):
+        btn = criar_botao_ttk_so_icone(
+            parent,
+            nome_icone="sync-outline",
+            command=self.recarregar_orcamento,
+            estilo="Compact.TButton",
+            cor_icone="#006699",
+            refs=self._icones_botoes,
+        )
+        btn.pack(side="left", padx=(0, 8))
+        vincular_tooltip(btn, "Atualizar página")
+
+    def _ao_erro_recarga_orcamento(self, mensagem: str, avisar_erro: bool):
+        if avisar_erro:
+            messagebox.showwarning(
+                "Recarregar",
+                mensagem,
+                parent=self.winfo_toplevel(),
+            )
+
+    def _aplicar_orcamento_recarregado(self, registro: dict):
+        self._orcamento_sujo = False
+        self.orcamento = dict_para_orcamento(registro)
+        self._aplicar_orcamento_na_interface()
+        self._atualizar_grade()
+
+    def recarregar_orcamento(self, *, forcar_rede: bool = True):
+        if self._orcamento_sujo and forcar_rede:
+            if not messagebox.askyesno(
+                "Atualizar orçamento",
+                "Há alterações não salvas. Recarregar do servidor e descartá-las?",
+                parent=self.winfo_toplevel(),
+            ):
+                return
+        self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=True)
 
     def _montar(self):
         self.label_referencia = criar_barra_modulo(
@@ -1072,6 +1119,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             "Orçamento Customizado",
             self._voltar_para_selecao,
             texto_referencia=self._texto_referencia(),
+            montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
         )
 
         conteudo = tk.Frame(self, bg="#ececec")
@@ -1280,7 +1328,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
     def definir_orcamento(self, orcamento_id):
         if orcamento_id and orcamento_id != getattr(self.orcamento, "id", None):
             if self._orcamento_sujo:
-                self._persistir_orcamento_atual()
+                if not self._persistir_orcamento_atual():
+                    return
         self._orcamento_id = orcamento_id
         self._orcamento_sujo = False
         self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
@@ -1289,7 +1338,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
     def _voltar_para_selecao(self):
         if self._orcamento_sujo:
-            self._persistir_orcamento_atual()
+            if not self._persistir_orcamento_atual():
+                return
         self.on_voltar()
 
     def _carregar_orcamento_por_id(self, orcamento_id):
@@ -1317,7 +1367,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
     def _persistir_orcamento_atual(self):
         if not self._orcamento_sujo:
-            return
+            return True
         estado = self._estado_selecionado()
         self.orcamento.definir_estado_referencia(estado)
         try:
@@ -1327,8 +1377,23 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         try:
             atualizar_orcamento_na_lista(self.orcamento)
             self._orcamento_sujo = False
-        except ValueError:
-            pass
+            return True
+        except ValueError as exc:
+            self._tratar_erro_salvamento(exc)
+            return False
+
+    def _tratar_erro_salvamento(self, exc: ValueError):
+        mensagem = str(exc)
+        messagebox.showwarning("Orçamento", mensagem, parent=self.winfo_toplevel())
+        if "Recarregue" in mensagem:
+            self._recarregar_do_servidor()
+
+    def _recarregar_do_servidor(self):
+        invalidar_orcamento_cache(self.orcamento.id)
+        self._orcamento_sujo = False
+        self.orcamento = self._carregar_orcamento_por_id(self.orcamento.id)
+        self._aplicar_orcamento_na_interface()
+        self._atualizar_grade()
 
     def _registrar_alteracao(self, focar_meta=None):
         self._orcamento_sujo = True
@@ -1345,11 +1410,15 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if not nome or not nome.strip():
             return
         try:
-            renomear_orcamento(self.orcamento.id, nome)
+            registro = renomear_orcamento(self.orcamento.id, nome)
             self.orcamento.definir_nome(nome)
+            self.orcamento.versao = int(registro.get("versao", getattr(self.orcamento, "versao", 1)))
             self._atualizar_rotulo_nome()
         except ValueError as exc:
-            messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
+            mensagem = str(exc)
+            messagebox.showwarning("Orçamento", mensagem, parent=self.winfo_toplevel())
+            if "Recarregue" in mensagem:
+                self._recarregar_do_servidor()
 
     def _texto_referencia(self):
         ref = self.ctx.sinapi_referencia_rotulo
@@ -2109,4 +2178,4 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.grade.finalizar_reconstrucao(fracao, selecoes)
 
     def focar(self):
-        pass
+        self.recarregar_orcamento(forcar_rede=False)

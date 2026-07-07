@@ -10,17 +10,21 @@ from core.importacao_i9 import importar_planilha_i9
 from core.orcamento_storage import (
     adicionar_orcamento_importado,
     criar_orcamento,
+    duplicar_orcamento,
     excluir_orcamento,
     listar_orcamentos_resumo,
+    obter_cache_lista,
     obter_orcamento_dict,
     renomear_orcamento,
 )
 from ui.dialogo_importar_i9 import DialogoImportarI9
-from ui.icones import criar_botao_ttk_com_icone
+from ui.icones import criar_botao_ttk_com_icone, criar_botao_ttk_so_icone
+from ui.recarga_catalogo import RecarregadorLista
 from ui.widgets import (
     confirmar_exclusao_com_espera,
     criar_barra_modulo,
     perguntar_texto,
+    vincular_tooltip,
 )
 
 
@@ -42,7 +46,37 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self.on_abrir = on_abrir
         self.on_voltar = on_voltar
         self._icones_botoes = []
+        self._recarregador = RecarregadorLista(
+            self,
+            obter_cache=obter_cache_lista,
+            carregar_rede=lambda: listar_orcamentos_resumo(forcar_rede=True),
+            ao_aplicar=self._aplicar_lista_resumos,
+            ao_erro=self._ao_erro_recarga_lista,
+        )
         self._montar()
+
+    def _montar_botao_recarregar_cabecalho(self, parent):
+        btn = criar_botao_ttk_so_icone(
+            parent,
+            nome_icone="sync-outline",
+            command=self.recarregar_lista,
+            estilo="Compact.TButton",
+            cor_icone="#006699",
+            refs=self._icones_botoes,
+        )
+        btn.pack(side="left", padx=(0, 8))
+        vincular_tooltip(btn, "Atualizar página")
+
+    def _ao_erro_recarga_lista(self, mensagem: str, avisar_erro: bool):
+        if avisar_erro:
+            messagebox.showwarning(
+                "Recarregar",
+                mensagem,
+                parent=self.winfo_toplevel(),
+            )
+
+    def recarregar_lista(self, *, forcar_rede: bool = True):
+        self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=True)
 
     def _texto_referencia(self):
         ref = self.ctx.sinapi_referencia_rotulo
@@ -56,6 +90,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             "Orçamento Customizado",
             self.on_voltar,
             texto_referencia=self._texto_referencia(),
+            montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
         )
 
         conteudo = tk.Frame(self, bg="#ececec")
@@ -98,6 +133,15 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             state="disabled",
         )
         self.btn_abrir.pack(side="left", padx=(0, 4))
+
+        self.btn_copiar = ttk.Button(
+            linha_botoes,
+            text="Copiar orçamento",
+            command=self._copiar_selecionado,
+            style="Compact.TButton",
+            state="disabled",
+        )
+        self.btn_copiar.pack(side="left", padx=(0, 4))
 
         ttk.Button(
             linha_botoes,
@@ -160,8 +204,11 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
 
         self._atualizar_lista()
 
-    def recarregar(self):
-        self._atualizar_lista()
+    def recarregar(self, *, forcar_rede: bool = False):
+        self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=False)
+
+    def _aplicar_lista_resumos(self, resumos):
+        self._preencher_lista(resumos)
 
     def _orcamento_selecionado_id(self):
         selecao = self.tree.selection()
@@ -173,6 +220,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         tem_selecao = bool(self.tree.selection())
         estado = "normal" if tem_selecao else "disabled"
         self.btn_abrir.config(state=estado)
+        self.btn_copiar.config(state=estado)
 
     def _ao_duplo_clique(self, _event=None):
         if self._orcamento_selecionado_id():
@@ -190,11 +238,14 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self.on_abrir(orcamento_id)
 
     def _atualizar_lista(self):
+        self._preencher_lista(listar_orcamentos_resumo())
+
+    def _preencher_lista(self, resumos):
         filtro = self.var_busca.get().strip().lower()
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        for resumo in listar_orcamentos_resumo():
+        for resumo in resumos:
             nome = resumo.get("nome", "")
             if filtro and filtro not in nome.lower():
                 continue
@@ -244,10 +295,41 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             return
         try:
             renomear_orcamento(orcamento_id, nome)
-            self._atualizar_lista()
+            self.recarregar_lista(forcar_rede=True)
             if self.tree.exists(orcamento_id):
                 self.tree.selection_set(orcamento_id)
                 self.tree.focus(orcamento_id)
+        except ValueError as exc:
+            mensagem = str(exc)
+            messagebox.showwarning("Orçamento", mensagem, parent=self.winfo_toplevel())
+            if "Recarregue" in mensagem:
+                self.recarregar_lista(forcar_rede=True)
+
+    def _copiar_selecionado(self):
+        orcamento_id = self._orcamento_selecionado_id()
+        if not orcamento_id:
+            messagebox.showinfo(
+                "Orçamento",
+                "Selecione um orçamento na lista.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        registro = obter_orcamento_dict(orcamento_id)
+        nome_atual = registro.get("nome", "Sem nome") if registro else "Sem nome"
+        nome = perguntar_texto(
+            self.winfo_toplevel(),
+            "Copiar orçamento",
+            "Nome da cópia:",
+            valor_inicial=f"{nome_atual} - CÓPIA",
+        )
+        if not nome or not nome.strip():
+            return
+        try:
+            novo_id = duplicar_orcamento(orcamento_id, nome)
+            self.recarregar_lista(forcar_rede=True)
+            if self.tree.exists(novo_id):
+                self.tree.selection_set(novo_id)
+                self.tree.focus(novo_id)
         except ValueError as exc:
             messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
 

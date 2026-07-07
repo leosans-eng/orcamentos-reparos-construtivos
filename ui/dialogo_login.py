@@ -149,9 +149,25 @@ class DialogoLogin(tk.Tk):
         if sys.platform == "win32":
             try:
                 self.attributes("-topmost", True)
-                self.after(300, lambda: self.attributes("-topmost", False))
+                self._after_topmost = self.after(300, self._liberar_topmost)
             except tk.TclError:
                 pass
+
+    def _liberar_topmost(self):
+        self._after_topmost = None
+        try:
+            self.attributes("-topmost", False)
+        except tk.TclError:
+            pass
+
+    def _cancelar_agendamentos(self):
+        after_id = getattr(self, "_after_topmost", None)
+        if after_id is not None:
+            try:
+                self.after_cancel(after_id)
+            except tk.TclError:
+                pass
+            self._after_topmost = None
 
     def _campo(self, parent, rotulo, variavel, *, linha, largura, mostrar=None):
         tk.Label(
@@ -177,6 +193,7 @@ class DialogoLogin(tk.Tk):
             self.var_salvar_usuario.set(True)
 
     def _cancelar(self):
+        self._cancelar_agendamentos()
         self.resultado = False
         self.quit()
         self.destroy()
@@ -215,6 +232,7 @@ class DialogoLogin(tk.Tk):
             return
 
         self.resultado = True
+        self._cancelar_agendamentos()
         self.quit()
         self.destroy()
 

@@ -38,6 +38,7 @@ class OrcApp:
 
         self.janela = tk.Tk()
         self.ctx.janela = self.janela
+        self.ctx.iniciar_carregamento_sinapi()
         configurar_estilos_ttk(self.janela)
 
         self.janela.title(TITULOS_JANELA["hub"])

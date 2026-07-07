@@ -27,8 +27,23 @@ def limpar_cache():
     _detalhe_cache.clear()
 
 
-def _invalidar_cache():
-    limpar_cache()
+def _invalidar_lista_cache():
+    global _lista_cache
+    _lista_cache = None
+
+
+def obter_cache_lista():
+    return deepcopy(_lista_cache) if _lista_cache is not None else None
+
+
+def obter_cache_orcamento(orcamento_id: str):
+    registro = _detalhe_cache.get(str(orcamento_id))
+    return deepcopy(registro) if registro is not None else None
+
+
+def invalidar_orcamento_cache(orcamento_id: str):
+    _detalhe_cache.pop(str(orcamento_id), None)
+    _invalidar_lista_cache()
 
 
 def _normalizar_data(valor) -> str:
@@ -58,9 +73,13 @@ def carregar_arquivo():
     return {"versao": 1, "orcamento_ativo_id": None, "orcamentos": []}
 
 
-def listar_orcamentos_resumo(dados=None):
+def listar_orcamentos_resumo(dados=None, *, forcar_rede: bool = False):
     del dados
     global _lista_cache
+    if forcar_rede:
+        _lista_cache = None
+    if _lista_cache is not None:
+        return deepcopy(_lista_cache)
     try:
         resposta = get_client().listar_orcamentos()
     except ApiError as exc:
@@ -93,10 +112,12 @@ def _versao_orcamento(orcamento_id: str) -> int:
     return int(registro.get("versao", 1))
 
 
-def obter_orcamento_dict(orcamento_id, dados=None):
+def obter_orcamento_dict(orcamento_id, dados=None, *, forcar_rede: bool = False):
     del dados
     orcamento_id = str(orcamento_id)
-    if orcamento_id in _detalhe_cache:
+    if forcar_rede:
+        _detalhe_cache.pop(orcamento_id, None)
+    elif orcamento_id in _detalhe_cache:
         return deepcopy(_detalhe_cache[orcamento_id])
     try:
         registro = get_client().obter_orcamento(orcamento_id)
@@ -107,15 +128,18 @@ def obter_orcamento_dict(orcamento_id, dados=None):
 
 def atualizar_orcamento_na_lista(orcamento):
     orcamento_id = str(getattr(orcamento, "id", ""))
-    versao = _versao_orcamento(orcamento_id)
+    versao = getattr(orcamento, "versao", None)
+    if versao is None:
+        versao = _versao_orcamento(orcamento_id)
     payload = orcamento_para_payload_api(orcamento)
     try:
         registro = get_client().atualizar_orcamento(orcamento_id, payload, versao)
     except ApiError as exc:
         _tratar_erro_api(exc)
-    _atualizar_cache_detalhe(registro)
-    _invalidar_cache()
-    return carregar_arquivo()
+    normalizado = _atualizar_cache_detalhe(registro)
+    orcamento.versao = int(normalizado.get("versao", versao))
+    _invalidar_lista_cache()
+    return normalizado
 
 
 def criar_orcamento(nome):
@@ -124,7 +148,7 @@ def criar_orcamento(nome):
     except ApiError as exc:
         _tratar_erro_api(exc)
     _atualizar_cache_detalhe(registro)
-    _invalidar_cache()
+    _invalidar_lista_cache()
     return str(registro["id"])
 
 
@@ -143,8 +167,20 @@ def renomear_orcamento(orcamento_id, novo_nome):
         registro = get_client().renomear_orcamento(orcamento_id, novo_nome.strip(), versao)
     except ApiError as exc:
         _tratar_erro_api(exc)
-    _atualizar_cache_detalhe(registro)
-    _invalidar_cache()
+    normalizado = _atualizar_cache_detalhe(registro)
+    _invalidar_lista_cache()
+    return normalizado
+
+
+def duplicar_orcamento(orcamento_id, nome):
+    orcamento_id = str(orcamento_id)
+    try:
+        registro = get_client().duplicar_orcamento(orcamento_id, nome.strip())
+    except ApiError as exc:
+        _tratar_erro_api(exc)
+    normalizado = _atualizar_cache_detalhe(registro)
+    _invalidar_lista_cache()
+    return str(normalizado["id"])
 
 
 def excluir_orcamento(orcamento_id):
@@ -154,5 +190,5 @@ def excluir_orcamento(orcamento_id):
     except ApiError as exc:
         _tratar_erro_api(exc)
     _detalhe_cache.pop(orcamento_id, None)
-    _invalidar_cache()
+    _invalidar_lista_cache()
     return None

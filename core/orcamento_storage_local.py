@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from app_paths import orcamentos_customizados_path
 
-from core.orcamento_conversao import dict_para_orcamento, novo_id
+from core.orcamento_conversao import dict_para_orcamento, novo_id, regenerar_ids_grupos
 from core.orcamento_customizado import OrcamentoCustomizado
 
 VERSAO_ARQUIVO = 1
@@ -85,6 +85,19 @@ def limpar_cache():
     pass
 
 
+def obter_cache_lista():
+    return None
+
+
+def obter_cache_orcamento(orcamento_id: str):
+    del orcamento_id
+    return None
+
+
+def invalidar_orcamento_cache(orcamento_id: str):
+    del orcamento_id
+
+
 def _contar_itens_orcamento(dados_orc):
     total = 0
     for grupo in dados_orc.get("grupos", []):
@@ -92,7 +105,8 @@ def _contar_itens_orcamento(dados_orc):
     return len(dados_orc.get("grupos", [])), total
 
 
-def listar_orcamentos_resumo(dados=None):
+def listar_orcamentos_resumo(dados=None, *, forcar_rede: bool = False):
+    del forcar_rede
     if dados is None:
         dados = carregar_arquivo()
     resumos = []
@@ -113,7 +127,8 @@ def listar_orcamentos_resumo(dados=None):
     return resumos
 
 
-def obter_orcamento_dict(orcamento_id, dados=None):
+def obter_orcamento_dict(orcamento_id, dados=None, *, forcar_rede: bool = False):
+    del forcar_rede
     if dados is None:
         dados = carregar_arquivo()
     for orc in dados.get("orcamentos", []):
@@ -190,3 +205,23 @@ def excluir_orcamento(orcamento_id):
         dados["orcamento_ativo_id"] = restantes[0]["id"] if restantes else None
     salvar_arquivo(dados)
     return dados.get("orcamento_ativo_id")
+
+
+def duplicar_orcamento(orcamento_id, nome):
+    dados = carregar_arquivo()
+    origem = obter_orcamento_dict(orcamento_id, dados)
+    if origem is None:
+        raise ValueError("Orçamento não encontrado.")
+    novo_nome = nome.strip()
+    if not novo_nome:
+        raise ValueError("Informe o nome da cópia.")
+    copia = regenerar_ids_grupos(origem)
+    copia["id"] = novo_id()
+    copia["nome"] = novo_nome
+    agora = _agora_iso()
+    copia["criado_em"] = agora
+    copia["atualizado_em"] = agora
+    copia["versao"] = 1
+    dados.setdefault("orcamentos", []).append(copia)
+    salvar_arquivo(dados)
+    return copia["id"]

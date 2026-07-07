@@ -20,6 +20,7 @@ from core.sinapi_loader import (
     obter_estados_da_sinapi,
     recarregar_sinapi,
 )
+from core.sinapi_base import SinapiBase
 
 APP_VERSION = "1.3.0"
 
@@ -44,9 +45,9 @@ NOMES_GRUPOS_REPARO = {
 
 class AppContext:
     def __init__(self):
-        self.sinapi, self.caminho_sinapi_carregado, self.sinapi_referencia_rotulo = (
-            carregar_sinapi_inicial()
-        )
+        self.sinapi = SinapiBase.vazio()
+        self.caminho_sinapi_carregado = None
+        self.sinapi_referencia_rotulo = "Carregando..."
         self.dados_json = self._carregar_dados_json()
         self._sinapi_callbacks: list[Callable[[], Any]] = []
 
@@ -58,6 +59,45 @@ class AppContext:
         self.status_servidor_sinapi: tk.StringVar | None = None
         self.http_servidor_sinapi: tk.StringVar | None = None
         self._sinapi_verificando = False
+        self._sinapi_carregando = False
+
+    def _agendar_na_janela(self, callback) -> None:
+        janela = self.janela
+        if janela is None:
+            return
+        try:
+            if not janela.winfo_exists():
+                return
+            janela.after(0, callback)
+        except tk.TclError:
+            pass
+
+    def iniciar_carregamento_sinapi(self) -> None:
+        if self._sinapi_carregando:
+            return
+        self._sinapi_carregando = True
+        threading.Thread(
+            target=self._carregar_sinapi_inicial_background,
+            daemon=True,
+        ).start()
+
+    def _carregar_sinapi_inicial_background(self) -> None:
+        try:
+            resultado = carregar_sinapi_inicial()
+        except Exception as exc:
+            print("Erro ao carregar SINAPI local:", exc)
+            resultado = (SinapiBase.vazio(), None, "BASE AUSENTE")
+
+        def aplicar():
+            self._sinapi_carregando = False
+            (
+                self.sinapi,
+                self.caminho_sinapi_carregado,
+                self.sinapi_referencia_rotulo,
+            ) = resultado
+            self.notificar_sinapi_atualizada()
+
+        self._agendar_na_janela(aplicar)
 
     def _carregar_dados_json(self):
         with open(vicios_construtivos_path(), "r", encoding="utf-8") as f:
@@ -71,6 +111,7 @@ class AppContext:
 
     def notificar_sinapi_atualizada(self):
         self.atualizar_rodape()
+        self.atualizar_label_csv_rodape()
         for callback in self._sinapi_callbacks:
             callback()
 
@@ -100,6 +141,8 @@ class AppContext:
             return
 
         def executar():
+            if frame_rodape is None or not frame_rodape.winfo_exists():
+                return
             if not label_csv.winfo_exists():
                 return
             if label_csv.winfo_manager() != "pack":
@@ -108,30 +151,39 @@ class AppContext:
             label_csv.place(relx=1.0, rely=0.5, anchor="e", x=-6, in_=frame_rodape)
 
             def deslizar():
+                if frame_rodape is None or not frame_rodape.winfo_exists():
+                    return
                 if not label_csv.winfo_exists():
                     return
-                frame_rodape.update_idletasks()
-                label_csv.update_idletasks()
-                limite = frame_rodape.winfo_width()
-                if label_csv.winfo_x() - frame_rodape.winfo_x() > limite + 8:
-                    label_csv.destroy()
+                try:
+                    frame_rodape.update_idletasks()
+                    label_csv.update_idletasks()
+                    limite = frame_rodape.winfo_width()
+                    if label_csv.winfo_x() - frame_rodape.winfo_x() > limite + 8:
+                        label_csv.destroy()
+                        return
+                    info = label_csv.place_info()
+                    cur_x = int(float(info.get("x", 0)))
+                    label_csv.place(
+                        relx=1.0,
+                        rely=0.5,
+                        anchor="e",
+                        x=cur_x + RODAPE_CSV_DESLIZE_PASSO_PX,
+                        in_=frame_rodape,
+                    )
+                    frame_rodape.after(
+                        RODAPE_CSV_DESLIZE_INTERVALO_MS, deslizar
+                    )
+                except tk.TclError:
                     return
-                info = label_csv.place_info()
-                cur_x = int(float(info.get("x", 0)))
-                label_csv.place(
-                    relx=1.0,
-                    rely=0.5,
-                    anchor="e",
-                    x=cur_x + RODAPE_CSV_DESLIZE_PASSO_PX,
-                    in_=frame_rodape,
-                )
-                frame_rodape.after(
-                    RODAPE_CSV_DESLIZE_INTERVALO_MS, deslizar
-                )
 
             frame_rodape.after(25, deslizar)
 
-        frame_rodape.after(RODAPE_CSV_SUMIR_APOS_MS, executar)
+        try:
+            if frame_rodape is not None and frame_rodape.winfo_exists():
+                frame_rodape.after(RODAPE_CSV_SUMIR_APOS_MS, executar)
+        except tk.TclError:
+            pass
 
     def atualizar_label_csv_rodape(self):
         frame_rodape = self.frame_rodape
@@ -209,28 +261,26 @@ class AppContext:
             return
 
         try:
-            janela.after(
-                0,
-                lambda: self.aplicar_status_servidor("Verificando...", "—"),
+            self._agendar_na_janela(
+                lambda: self.aplicar_status_servidor("Verificando...", "—")
             )
             status.set("SINAPI: verificando...")
-            janela.after(0, self.atualizar_rodape)
+            self._agendar_na_janela(self.atualizar_rodape)
 
             atualizacoes, aviso, info_status = buscar_atualizacoes()
             if not atualizacoes:
-                janela.after(
-                    0,
+                self._agendar_na_janela(
                     lambda: self.aplicar_status_servidor(
                         info_status.get("status_servidor", "—"),
                         info_status.get("http_codigo", "—"),
-                    ),
+                    )
                 )
 
             if aviso == "nao_encontrada":
                 status.set(
                     "SINAPI indisponível (servidor e pasta local)"
                 )
-                janela.after(0, self.atualizar_rodape)
+                self._agendar_na_janela(self.atualizar_rodape)
                 return
 
             if aviso == "servidor_indisponivel":
@@ -242,41 +292,39 @@ class AppContext:
                     status.set(
                         "SINAPI: servidor da Caixa indisponível"
                     )
-                janela.after(0, self.atualizar_rodape)
+                self._agendar_na_janela(self.atualizar_rodape)
                 return
 
             if not atualizacoes:
                 status.set("SINAPI atualizada")
-                janela.after(0, self.atualizar_rodape)
+                self._agendar_na_janela(self.atualizar_rodape)
                 return
 
             for ano, mes in atualizacoes:
                 status.set(f"SINAPI: baixando {mes:02d}/{ano}")
-                janela.after(0, self.atualizar_rodape)
+                self._agendar_na_janela(self.atualizar_rodape)
 
                 caminho = baixar_e_extrair(ano, mes)
 
                 status.set(f"SINAPI: processando {mes:02d}/{ano}")
-                janela.after(0, self.atualizar_rodape)
+                self._agendar_na_janela(self.atualizar_rodape)
 
                 processar_arquivo(caminho)
 
             limpar_versoes_antigas()
             self.recarregar_sinapi_em_memoria()
-            janela.after(
-                0,
+            self._agendar_na_janela(
                 lambda h=info_status.get("http_codigo", "—"): self._concluir_atualizacao_sinapi(
                     silencioso, h
-                ),
+                )
             )
 
         except Exception as e:
             print("Erro atualização SINAPI:", e)
             status.set("Erro atualização SINAPI")
-            janela.after(0, self.atualizar_rodape)
-            janela.after(
-                0,
-                lambda: self.aplicar_status_servidor("Erro", "—"),
+            self._agendar_na_janela(self.atualizar_rodape)
+            self._agendar_na_janela(
+                lambda: self.aplicar_status_servidor("Erro", "—")
             )
         finally:
             self._sinapi_verificando = False

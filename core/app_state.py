@@ -242,6 +242,8 @@ class AppContext:
         self.aplicar_status_servidor(str(status), str(http))
 
     def iniciar_verificacao_sinapi(self, *, silencioso: bool = False):
+        if self._sinapi_carregando:
+            return False
         if self._sinapi_verificando:
             return False
         self._sinapi_verificando = True

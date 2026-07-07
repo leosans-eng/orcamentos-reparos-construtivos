@@ -143,6 +143,22 @@ def centralizar_janela(janela, parent=None):
             pass
 
 
+def focar_entrada_apos_exibir(entrada, *, selecionar=False):
+    """Coloca o foco no campo após a janela ser exibida e centralizada."""
+    def aplicar():
+        try:
+            if not entrada.winfo_exists():
+                return
+            entrada.focus_set()
+            if selecionar:
+                entrada.select_range(0, "end")
+                entrada.icursor("end")
+        except tk.TclError:
+            pass
+
+    entrada.after_idle(aplicar)
+
+
 def perguntar_texto(
     parent,
     titulo,
@@ -175,8 +191,6 @@ def perguntar_texto(
     var_texto = tk.StringVar(value=valor_inicial)
     entrada = ttk.Entry(painel, textvariable=var_texto, width=44)
     entrada.pack(fill="x", pady=(0, 12))
-    entrada.focus_set()
-    entrada.select_range(0, "end")
 
     botoes = ttk.Frame(painel)
     botoes.pack(fill="x")
@@ -199,6 +213,7 @@ def perguntar_texto(
     entrada.bind("<Escape>", lambda _e: cancelar())
     dialog.protocol("WM_DELETE_WINDOW", cancelar)
     centralizar_janela(dialog, parent)
+    focar_entrada_apos_exibir(entrada, selecionar=True)
     parent.wait_window(dialog)
     return resultado[0]
 

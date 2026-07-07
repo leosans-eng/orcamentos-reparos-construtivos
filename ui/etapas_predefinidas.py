@@ -29,6 +29,7 @@ from ui.widgets import (
     centralizar_janela,
     confirmar_exclusao_com_espera,
     criar_barra_modulo,
+    focar_entrada_apos_exibir,
     vincular_tooltip,
 )
 
@@ -57,7 +58,6 @@ class DialogoNovaEtapaPredefinida(tk.Toplevel):
         self.var_nome = tk.StringVar()
         entrada = ttk.Entry(painel, textvariable=self.var_nome, width=44)
         entrada.pack(fill="x", pady=(0, 12))
-        entrada.focus_set()
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
@@ -72,6 +72,7 @@ class DialogoNovaEtapaPredefinida(tk.Toplevel):
         self.bind("<Return>", lambda _e: self._confirmar())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(entrada)
 
     def _confirmar(self):
         nome = self.var_nome.get().strip()
@@ -277,6 +278,18 @@ class EtapasPredefinidasFrame(tk.Frame):
             command=self._remover_item,
             estilo="Delete.Compact.TButton",
             refs=self._icones_botoes,
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_bt_itens,
+            text="Item ↑",
+            command=lambda: self._mover_item(-1),
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_bt_itens,
+            text="Item ↓",
+            command=lambda: self._mover_item(1),
+            style="Compact.TButton",
         ).pack(side="left")
 
         tk.Label(
@@ -544,6 +557,41 @@ class EtapasPredefinidasFrame(tk.Frame):
             return
         self._dados = carregar()
         self._atualizar_lista_etapas()
+
+    def _mover_item(self, delta):
+        etapa = self._etapa_em_edicao()
+        if etapa is None:
+            return
+        selecionado = self.tree_itens.selection()
+        if not selecionado:
+            messagebox.showinfo(
+                "Mover item",
+                "Selecione um item na lista.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        item_id = selecionado[0]
+        itens = etapa.get("itens", [])
+        indice = next(
+            (i for i, item in enumerate(itens) if item.get("id") == item_id),
+            -1,
+        )
+        if indice < 0:
+            return
+        novo_indice = indice + delta
+        if novo_indice < 0 or novo_indice >= len(itens):
+            return
+        itens[indice], itens[novo_indice] = itens[novo_indice], itens[indice]
+        try:
+            atualizar(etapa, self._dados)
+        except ValueError as exc:
+            messagebox.showwarning("Mover item", str(exc), parent=self.winfo_toplevel())
+            return
+        self._dados = carregar()
+        self._atualizar_lista_etapas()
+        if self.tree_itens.exists(item_id):
+            self.tree_itens.selection_set(item_id)
+            self.tree_itens.focus(item_id)
 
     def focar(self):
         self.recarregar_catalogo(forcar_rede=False)

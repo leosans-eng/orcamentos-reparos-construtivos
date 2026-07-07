@@ -72,7 +72,28 @@ def _garantir_csv_processado(pasta_processado: str) -> None:
         return
     from sinapi.extrair_sinapi import processar_arquivo
 
-    processar_arquivo(xlsx)
+    try:
+        processar_arquivo(xlsx)
+    except Exception as exc:
+        print("Erro ao processar planilha SINAPI inicial:", exc)
+
+
+def carregar_sinapi_por_referencia(pasta_processado=PASTA_SINAPI_PROCESSADO):
+    try:
+        _remover_csv_monolitico_obsoleto(pasta_processado)
+        _garantir_csv_processado(pasta_processado)
+
+        pares = _listar_pares_processados(pasta_processado)
+        if not pares:
+            return SinapiBase.vazio(), None, "BASE AUSENTE"
+
+        chave = max(pares.keys())
+        caminho_catalogo, caminho_precos = pares[chave]
+        rotulo = _rotulo_referencia(chave[0], chave[1])
+        return _carregar_par(caminho_catalogo, caminho_precos, rotulo)
+    except Exception as exc:
+        print("Erro ao carregar base SINAPI:", exc)
+        return SinapiBase.vazio(), None, "BASE AUSENTE"
 
 
 def obter_csv_sinapi_mais_recente(pasta_processado=PASTA_SINAPI_PROCESSADO):
@@ -98,20 +119,6 @@ def _carregar_par(caminho_catalogo: str, caminho_precos: str, rotulo: str):
     )
     base = SinapiBase(catalogo, precos)
     return base, caminho_catalogo, rotulo
-
-
-def carregar_sinapi_por_referencia(pasta_processado=PASTA_SINAPI_PROCESSADO):
-    _remover_csv_monolitico_obsoleto(pasta_processado)
-    _garantir_csv_processado(pasta_processado)
-
-    pares = _listar_pares_processados(pasta_processado)
-    if not pares:
-        return SinapiBase.vazio(), None, "BASE AUSENTE"
-
-    chave = max(pares.keys())
-    caminho_catalogo, caminho_precos = pares[chave]
-    rotulo = _rotulo_referencia(chave[0], chave[1])
-    return _carregar_par(caminho_catalogo, caminho_precos, rotulo)
 
 
 def carregar_sinapi_inicial():

@@ -65,7 +65,13 @@ class OrcApp:
         self.mostrar_modulo("hub")
 
         self._schedule_update_check()
-        self.janela.after(500, self.ctx.iniciar_verificacao_sinapi)
+        self.janela.after(500, self._aguardar_sinapi_e_verificar)
+
+    def _aguardar_sinapi_e_verificar(self):
+        if self.ctx._sinapi_carregando:
+            self.janela.after(300, self._aguardar_sinapi_e_verificar)
+            return
+        self.ctx.iniciar_verificacao_sinapi()
 
     def _schedule_update_check(self):
         try:

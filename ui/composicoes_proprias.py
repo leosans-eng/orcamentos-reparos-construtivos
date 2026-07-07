@@ -41,6 +41,7 @@ from ui.widgets import (
     preparar_toplevel,
     valores_combo_estado,
     vincular_tooltip,
+    focar_entrada_apos_exibir,
 )
 
 COR_DEPRECIADO = "#fff8e1"
@@ -77,13 +78,17 @@ class DialogoComponenteMercado(tk.Toplevel):
             ("Coeficiente:", "coeficiente"),
         ]
         self.vars = {}
+        self._entrada_inicial = None
         for rotulo, chave in campos:
             linha = tk.Frame(painel, bg="#ececec")
             linha.pack(fill="x", pady=3)
             tk.Label(linha, text=rotulo, width=22, anchor="w", bg="#ececec").pack(side="left")
             var = tk.StringVar(value="1" if chave == "coeficiente" else "")
             self.vars[chave] = var
-            ttk.Entry(linha, textvariable=var, width=36).pack(side="left", fill="x", expand=True)
+            entrada = ttk.Entry(linha, textvariable=var, width=36)
+            entrada.pack(side="left", fill="x", expand=True)
+            if self._entrada_inicial is None:
+                self._entrada_inicial = entrada
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(12, 0))
@@ -97,6 +102,8 @@ class DialogoComponenteMercado(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        if self._entrada_inicial is not None:
+            focar_entrada_apos_exibir(self._entrada_inicial)
 
     def _parse_float(self, texto):
         return float(str(texto).strip().replace(",", "."))
@@ -178,7 +185,7 @@ class DialogoNovaComposicao(tk.Toplevel):
         self.bind("<Return>", lambda _e: self._confirmar())
         self.update_idletasks()
         centralizar_janela(self, parent)
-        self._entrada_inicial.focus_set()
+        focar_entrada_apos_exibir(self._entrada_inicial)
 
     def _confirmar(self):
         codigo = self.vars["codigo"].get().strip()
@@ -430,6 +437,18 @@ class ComposicoesPropriasFrame(tk.Frame):
             command=self._remover_componente,
             estilo="Delete.Compact.TButton",
             refs=self._icones_botoes,
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_bt_cmp,
+            text="Item ↑",
+            command=lambda: self._mover_componente(-1),
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_bt_cmp,
+            text="Item ↓",
+            command=lambda: self._mover_componente(1),
+            style="Compact.TButton",
         ).pack(side="left")
 
     def _atualizar_lista_composicoes(self, *, calcular_custos=True):
@@ -622,6 +641,44 @@ class ComposicoesPropriasFrame(tk.Frame):
             return
         self._dados = carregar()
         self._atualizar_listas()
+
+    def _mover_componente(self, delta):
+        comp = self._composicao_em_edicao()
+        if comp is None:
+            return
+        selecionado = self.tree_componentes.selection()
+        if not selecionado:
+            messagebox.showinfo(
+                "Mover componente",
+                "Selecione um componente na lista.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        comp_id = selecionado[0]
+        componentes = comp.get("componentes", [])
+        indice = next(
+            (i for i, item in enumerate(componentes) if item.get("id") == comp_id),
+            -1,
+        )
+        if indice < 0:
+            return
+        novo_indice = indice + delta
+        if novo_indice < 0 or novo_indice >= len(componentes):
+            return
+        componentes[indice], componentes[novo_indice] = (
+            componentes[novo_indice],
+            componentes[indice],
+        )
+        try:
+            atualizar(comp, self._dados)
+        except ValueError as exc:
+            messagebox.showwarning("Mover componente", str(exc), parent=self.winfo_toplevel())
+            return
+        self._dados = carregar()
+        self._atualizar_componentes()
+        if self.tree_componentes.exists(comp_id):
+            self.tree_componentes.selection_set(comp_id)
+            self.tree_componentes.focus(comp_id)
 
     def _excluir_composicao(self):
         comp = self._composicao_em_edicao()

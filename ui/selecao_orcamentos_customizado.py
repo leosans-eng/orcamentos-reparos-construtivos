@@ -202,13 +202,30 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self.tree.bind("<Return>", self._ao_duplo_clique)
         self.tree.bind("<<TreeviewSelect>>", self._ao_selecionar)
 
-        self._atualizar_lista()
+        self._lista_fingerprint = None
 
     def recarregar(self, *, forcar_rede: bool = False):
         self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=False)
 
     def _aplicar_lista_resumos(self, resumos):
+        fingerprint = self._fingerprint_resumos(resumos)
+        if fingerprint == self._lista_fingerprint:
+            return
+        self._lista_fingerprint = fingerprint
         self._preencher_lista(resumos)
+
+    @staticmethod
+    def _fingerprint_resumos(resumos):
+        return tuple(
+            (
+                resumo.get("id"),
+                resumo.get("nome"),
+                resumo.get("atualizado_em"),
+                resumo.get("grupos"),
+                resumo.get("itens"),
+            )
+            for resumo in resumos
+        )
 
     def _orcamento_selecionado_id(self):
         selecao = self.tree.selection()
@@ -238,9 +255,13 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self.on_abrir(orcamento_id)
 
     def _atualizar_lista(self):
-        self._preencher_lista(listar_orcamentos_resumo())
+        resumos = listar_orcamentos_resumo()
+        fingerprint = self._fingerprint_resumos(resumos)
+        self._lista_fingerprint = fingerprint
+        self._preencher_lista(resumos)
 
     def _preencher_lista(self, resumos):
+        selecionado = self._orcamento_selecionado_id()
         filtro = self.var_busca.get().strip().lower()
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -261,6 +282,9 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
                     resumo.get("itens", 0),
                 ),
             )
+        if selecionado and self.tree.exists(selecionado):
+            self.tree.selection_set(selecionado)
+            self.tree.focus(selecionado)
         self._ao_selecionar()
 
     def _novo_orcamento(self):

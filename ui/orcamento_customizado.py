@@ -51,6 +51,7 @@ from ui.widgets import (
     preparar_toplevel,
     criar_barra_modulo,
     estado_do_combo,
+    focar_entrada_apos_exibir,
     perguntar_texto,
     valores_combo_estado,
     vincular_tooltip,
@@ -128,8 +129,7 @@ class DialogoEditarQuantidade(tk.Toplevel):
         )
         entrada = ttk.Entry(linha_qtd, textvariable=self.var_quantidade, width=14)
         entrada.pack(side="left", padx=(8, 0))
-        entrada.focus_set()
-        entrada.select_range(0, "end")
+        self._entrada_quantidade = entrada
         entrada.bind("<Return>", lambda _e: self._confirmar())
         entrada.bind("<Escape>", lambda _e: self.destroy())
 
@@ -145,6 +145,7 @@ class DialogoEditarQuantidade(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(self._entrada_quantidade, selecionar=True)
 
     def _confirmar(self):
         self.on_confirmar(self.var_quantidade.get())
@@ -201,7 +202,6 @@ class DialogoTrocarOrdemEtapa(tk.Toplevel):
         )
         self.combo_posicao.pack(side="left", padx=(8, 0), fill="x", expand=True)
         self.combo_posicao.current(indice_inicial)
-        self.combo_posicao.focus_set()
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
@@ -291,7 +291,7 @@ class DialogoNovaEtapa(tk.Toplevel):
         self.bind("<Return>", lambda _e: self._confirmar())
         self.update_idletasks()
         centralizar_janela(self, parent)
-        entrada_nome.focus_set()
+        focar_entrada_apos_exibir(entrada_nome)
 
     def _ao_mudar_modelo(self, _event=None):
         modelo = self.var_modelo.get().strip()
@@ -366,6 +366,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(self.entrada_busca)
 
     def _montar(self, estado_inicial):
         painel = tk.Frame(self, bg="#ececec", padx=12, pady=10)
@@ -565,7 +566,6 @@ class DialogoBuscaSinapi(tk.Toplevel):
         if self.ctx.sinapi.empty:
             self.label_status.config(text="Base SINAPI indisponível.", fg="#C62828")
 
-        self.entrada_busca.focus_set()
         self.after_idle(self._ajustar_layout_detalhe)
 
     def _ao_redimensionar(self, event=None):
@@ -846,6 +846,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(self.entrada_busca)
 
     def _montar(self, estado_inicial):
         painel = tk.Frame(self, bg="#ececec", padx=12, pady=10)
@@ -876,9 +877,8 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         )
         self.var_busca = tk.StringVar()
         self.var_busca.trace_add("write", lambda *_a: self._atualizar_lista())
-        ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36).grid(
-            row=1, column=1, padx=4, pady=3, sticky="ew"
-        )
+        self.entrada_busca = ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36)
+        self.entrada_busca.grid(row=1, column=1, padx=4, pady=3, sticky="ew")
 
         if self.mostrar_quantidade:
             tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(

@@ -8,6 +8,7 @@ from ui.icones import criar_botao_ttk_com_icone
 from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
+    focar_entrada_apos_exibir,
     preparar_toplevel,
 )
 
@@ -71,7 +72,7 @@ class DialogoTrocarSenha(tk.Toplevel):
         self.var_nova = tk.StringVar()
         self.var_confirmar = tk.StringVar()
 
-        self._campo(inner, "Senha atual:", self.var_atual, 0)
+        self._entrada_atual = self._campo(inner, "Senha atual:", self.var_atual, 0)
         self._campo(inner, "Nova senha:", self.var_nova, 2)
         entrada_confirmar = self._campo(inner, "Confirmar nova senha:", self.var_confirmar, 4)
         entrada_confirmar.bind("<Return>", lambda _e: self._confirmar())
@@ -105,6 +106,7 @@ class DialogoTrocarSenha(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.update_idletasks()
         centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(self._entrada_atual)
 
     def _campo(self, parent, rotulo, variavel, linha):
         tk.Label(

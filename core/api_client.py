@@ -104,7 +104,7 @@ class OrcApiClient:
 
     def health(self) -> bool:
         try:
-            response = self._request("GET", "/api/health")
+            response = self._request("GET", "/api/health", timeout=5)
             return response.status_code == 200
         except ApiError:
             return False
@@ -191,6 +191,50 @@ class OrcApiClient:
 
     def excluir_etapa(self, etapa_id: str) -> None:
         response = self._request("DELETE", f"/api/etapas/{etapa_id}")
+        self._tratar_resposta(response)
+
+    def listar_orcamentos(self, q: str | None = None) -> dict:
+        params = {"q": q} if q else None
+        response = self._request("GET", "/api/orcamentos", params=params)
+        return self._tratar_resposta(response)
+
+    def obter_orcamento(self, orcamento_id: str) -> dict:
+        response = self._request("GET", f"/api/orcamentos/{orcamento_id}")
+        return self._tratar_resposta(response)
+
+    def criar_orcamento(self, nome: str) -> dict:
+        response = self._request("POST", "/api/orcamentos", json={"nome": nome})
+        return self._tratar_resposta(response)
+
+    def atualizar_orcamento(self, orcamento_id: str, orcamento: dict, versao: int) -> dict:
+        response = self._request(
+            "PUT",
+            f"/api/orcamentos/{orcamento_id}",
+            json={"orcamento": orcamento, "versao": versao},
+        )
+        return self._tratar_resposta(response)
+
+    def renomear_orcamento(self, orcamento_id: str, nome: str, versao: int) -> dict:
+        response = self._request(
+            "PATCH",
+            f"/api/orcamentos/{orcamento_id}/nome",
+            json={"nome": nome, "versao": versao},
+        )
+        return self._tratar_resposta(response)
+
+    def duplicar_orcamento(self, orcamento_id: str, nome: str | None = None) -> dict:
+        payload: dict = {}
+        if nome is not None:
+            payload["nome"] = nome
+        response = self._request(
+            "POST",
+            f"/api/orcamentos/{orcamento_id}/duplicar",
+            json=payload,
+        )
+        return self._tratar_resposta(response)
+
+    def excluir_orcamento(self, orcamento_id: str) -> None:
+        response = self._request("DELETE", f"/api/orcamentos/{orcamento_id}")
         self._tratar_resposta(response)
 
 

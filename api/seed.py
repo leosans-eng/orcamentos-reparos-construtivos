@@ -5,13 +5,15 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from api.auth import hash_password
 from api.config import settings
-from api.models import AppSetting, ComposicaoPropria, EtapaPredefinida, User
+from api.models import AppSetting, ComposicaoPropria, EtapaPredefinida, OrcamentoCustomizado, User
+from api.schemas import BDI_PADRAO
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,48 @@ def garantir_usuario_admin(db: Session) -> None:
     logger.info("Usuário admin criado: %s", settings.admin_username)
 
 
+def _parse_data_iso(valor) -> datetime | None:
+    if not valor:
+        return None
+    try:
+        texto = str(valor).replace("Z", "+00:00")
+        return datetime.fromisoformat(texto)
+    except ValueError:
+        return None
+
+
+def _seed_orcamentos(db: Session) -> None:
+    if db.query(OrcamentoCustomizado).count() > 0:
+        return
+    dados = _ler_json("orcamentos_customizados.json")
+    if not dados or not dados.get("orcamentos"):
+        logger.warning("Nenhum orçamento para importar no seed.")
+        return
+
+    agora = datetime.now(timezone.utc)
+    for orc in dados["orcamentos"]:
+        orc_id = uuid.UUID(str(orc["id"]))
+        nome = str(orc.get("nome", "Sem nome")).strip() or "Sem nome"
+        conteudo = {
+            "bdi_percent": float(orc.get("bdi_percent", BDI_PADRAO)),
+            "estado_referencia": str(orc.get("estado_referencia", "") or "").strip(),
+            "grupos": orc.get("grupos", []),
+        }
+        criado = _parse_data_iso(orc.get("criado_em")) or agora
+        atualizado = _parse_data_iso(orc.get("atualizado_em")) or criado
+        registro = OrcamentoCustomizado(
+            id=orc_id,
+            nome=nome,
+            dados=conteudo,
+            versao=1,
+            created_at=criado,
+            updated_at=atualizado,
+        )
+        db.add(registro)
+    db.commit()
+    logger.info("Seed: %s orçamentos importados.", len(dados["orcamentos"]))
+
+
 def garantir_dados_iniciais(db: Session) -> None:
     garantir_usuario_admin(db)
 
@@ -111,6 +155,8 @@ def garantir_dados_iniciais(db: Session) -> None:
         else:
             _set_setting(db, CATALOGO_ETAPAS_VERSAO, {"versao": 1})
             logger.warning("Nenhuma etapa para importar no seed.")
+
+    _seed_orcamentos(db)
 
     _get_setting(db, ESTADO_PREVIA_CHAVE, {"estado": ESTADO_PREVIA_PADRAO})
     _get_setting(db, CATALOGO_COMPOSICOES_VERSAO, {"versao": 1})

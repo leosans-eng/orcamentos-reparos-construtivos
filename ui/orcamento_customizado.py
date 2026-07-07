@@ -21,10 +21,9 @@ from core.orcamento_customizado import (
     sincronizar_precos_sinapi_no_orcamento,
     subtotal_item,
 )
+from core.orcamento_conversao import dict_para_orcamento
 from core.orcamento_storage import (
     atualizar_orcamento_na_lista,
-    carregar_arquivo,
-    dict_para_orcamento,
     obter_orcamento_dict,
     renomear_orcamento,
 )
@@ -1058,7 +1057,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         super().__init__(parent, bg="#ececec")
         self.ctx = ctx
         self.on_voltar = on_voltar
-        self._dados_arquivo = carregar_arquivo()
         self._orcamento_id = orcamento_id
         self._trocando_orcamento = False
         self._orcamento_sujo = False
@@ -1295,11 +1293,9 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.on_voltar()
 
     def _carregar_orcamento_por_id(self, orcamento_id):
-        dados = carregar_arquivo()
-        registro = obter_orcamento_dict(dados, orcamento_id)
+        registro = obter_orcamento_dict(orcamento_id)
         if registro is None:
             raise ValueError(f"Orçamento não encontrado: {orcamento_id}")
-        self._dados_arquivo = dados
         return dict_para_orcamento(registro)
 
     def _atualizar_rotulo_nome(self):
@@ -1329,9 +1325,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError:
             pass
         try:
-            self._dados_arquivo = atualizar_orcamento_na_lista(
-                self.orcamento, atualizar_data=True
-            )
+            atualizar_orcamento_na_lista(self.orcamento)
             self._orcamento_sujo = False
         except ValueError:
             pass
@@ -1353,7 +1347,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         try:
             renomear_orcamento(self.orcamento.id, nome)
             self.orcamento.definir_nome(nome)
-            self._dados_arquivo = carregar_arquivo()
             self._atualizar_rotulo_nome()
         except ValueError as exc:
             messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())

@@ -9,7 +9,6 @@ from core.composicoes_proprias_storage import listar as listar_composicoes_catal
 from core.importacao_i9 import importar_planilha_i9
 from core.orcamento_storage import (
     adicionar_orcamento_importado,
-    carregar_arquivo,
     criar_orcamento,
     excluir_orcamento,
     listar_orcamentos_resumo,
@@ -195,8 +194,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        dados = carregar_arquivo()
-        for resumo in listar_orcamentos_resumo(dados):
+        for resumo in listar_orcamentos_resumo():
             nome = resumo.get("nome", "")
             if filtro and filtro not in nome.lower():
                 continue
@@ -234,8 +232,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
                 parent=self.winfo_toplevel(),
             )
             return
-        dados = carregar_arquivo()
-        registro = obter_orcamento_dict(dados, orcamento_id)
+        registro = obter_orcamento_dict(orcamento_id)
         nome_atual = registro.get("nome", "") if registro else ""
         nome = perguntar_texto(
             self.winfo_toplevel(),
@@ -263,8 +260,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
                 parent=self.winfo_toplevel(),
             )
             return
-        dados = carregar_arquivo()
-        registro = obter_orcamento_dict(dados, orcamento_id)
+        registro = obter_orcamento_dict(orcamento_id)
         nome = registro.get("nome", "Sem nome") if registro else "Sem nome"
         if not confirmar_exclusao_com_espera(
             self.winfo_toplevel(),

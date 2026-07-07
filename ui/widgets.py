@@ -481,7 +481,7 @@ def criar_botao_voltar(parent, command, bg_parent="#ececec"):
     )
     lbl = tk.Label(
         btn,
-        text="← Voltar ao início",
+        text="← Voltar",
         font=("Arial", 10, "bold"),
         fg=COR_TITULO_PADRAO,
         bg=COR_FUNDO_CARTAO,

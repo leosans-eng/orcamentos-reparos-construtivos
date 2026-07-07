@@ -58,9 +58,9 @@ A documentação interativa fica em: http://localhost:8000/docs
 
 - **URL da API:** `http://localhost:8000` (dev) ou a URL fornecida pela TI em produção
 - **Usuário inicial:** `admin` (definido em `api\.env`)
-- **Senha inicial:** `orc-admin-change-me` (troque em produção)
+- **Senha inicial:** valor de `ADMIN_PASSWORD` em `api\.env`
 
-Na primeira execução, o banco é populado automaticamente a partir de `dados_usuario/composicoes_proprias.json` e `dados_usuario/etapas_predefinidas.json`.
+Na primeira execução, o banco é populado automaticamente a partir de `dados_usuario/composicoes_proprias.json`, `dados_usuario/etapas_predefinidas.json` e `dados_usuario/orcamentos_customizados.json` (se a tabela de orçamentos estiver vazia).
 
 ## Administração de usuários (somente admin)
 

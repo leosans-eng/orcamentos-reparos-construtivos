@@ -29,7 +29,8 @@ TITULOS_JANELA = {
 
 
 class OrcApp:
-    def __init__(self):
+    def __init__(self, *, offline: bool = False):
+        self.offline = offline
         self.ctx = AppContext()
         self._modulo_atual = None
         self._frames = {}
@@ -113,17 +114,19 @@ class OrcApp:
             self.area_conteudo,
             self.ctx,
             on_selecionar_modulo=self._ao_selecionar_modulo_hub,
-            on_logout=self._logout,
+            on_logout=None if self.offline else self._logout,
         )
 
     def _logout(self):
         from core.api_client import get_client
         from core.composicoes_proprias_storage import limpar_cache as limpar_cache_composicoes
         from core.etapas_predefinidas_storage import limpar_cache as limpar_cache_etapas
+        from core.orcamento_storage import limpar_cache as limpar_cache_orcamentos
 
         get_client().logout()
         limpar_cache_composicoes()
         limpar_cache_etapas()
+        limpar_cache_orcamentos()
         self.pediu_logout = True
         self.janela.destroy()
 

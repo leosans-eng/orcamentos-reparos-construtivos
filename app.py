@@ -256,11 +256,23 @@ if __name__ == "__main__":
     while True:
         print("[ORC] Abrindo tela de login")
         _root_login = tk.Tk()
-        _root_login.withdraw()
         if not garantir_login(_root_login):
             print("[ORC] Login cancelado — encerrando")
+            try:
+                from atualizacao import reiniciar_coordenador_atualizacao
+
+                reiniciar_coordenador_atualizacao()
+            except ImportError:
+                pass
             _root_login.destroy()
             raise SystemExit(0)
+        try:
+            from atualizacao import reiniciar_coordenador_atualizacao
+
+            # Solta o poll do login antes de destruir a janela.
+            reiniciar_coordenador_atualizacao()
+        except ImportError:
+            pass
         _root_login.destroy()
         print("[ORC] Login ok — iniciando hub")
         iniciar_precarga_catalogos()

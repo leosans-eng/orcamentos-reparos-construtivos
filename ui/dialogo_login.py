@@ -13,7 +13,6 @@ from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
     configurar_estilos_ttk,
-    preparar_toplevel,
 )
 
 URL_PADRAO = "http://localhost:8000"
@@ -22,23 +21,29 @@ COR_ROTULO = "#555555"
 COR_ERRO = "#c62828"
 
 
-class DialogoLogin(tk.Toplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        preparar_toplevel(self)
-        configurar_estilos_ttk(self)
+class DialogoLogin:
+    """Login montado na janela raiz (Tk) para aparecer na barra de tarefas."""
+
+    def __init__(self, root: tk.Tk):
+        self.root = root
         self.resultado = False
         self._refs_icones: list = []
+        self._after_topmost = None
+        self._concluido = tk.BooleanVar(master=root, value=False)
+
+        configurar_estilos_ttk(root)
 
         config = carregar_config()
-        self.title("ORC — Login")
-        aplicar_icone_janela(self)
-        self.configure(bg=COR_FUNDO)
-        self.transient(parent)
-        self.grab_set()
-        self.resizable(False, False)
+        root.title("ORC — Login")
+        aplicar_icone_janela(root)
+        root.configure(bg=COR_FUNDO)
+        root.resizable(False, False)
+        root.protocol("WM_DELETE_WINDOW", self._cancelar)
 
-        painel = tk.Frame(self, bg=COR_FUNDO, padx=28, pady=22)
+        for filho in root.winfo_children():
+            filho.destroy()
+
+        painel = tk.Frame(root, bg=COR_FUNDO, padx=28, pady=22)
         painel.pack(fill="both", expand=True)
 
         cartao = tk.Frame(
@@ -134,39 +139,44 @@ class DialogoLogin(tk.Toplevel):
             refs=self._refs_icones,
         ).pack(side="right", padx=(0, 8))
 
-        self.bind("<Escape>", lambda _e: self._cancelar())
-        self.protocol("WM_DELETE_WINDOW", self._cancelar)
-        self.update_idletasks()
-        centralizar_janela(self, parent)
+        root.bind("<Escape>", lambda _e: self._cancelar())
+        root.update_idletasks()
+        centralizar_janela(root)
         self._trazer_para_frente()
 
         if self.var_usuario.get().strip() and not self.var_senha.get():
             entrada_senha.focus_set()
         elif not self.var_usuario.get().strip():
-            self.focus_set()
+            root.focus_set()
+
+    def esperar(self) -> bool:
+        self.root.wait_variable(self._concluido)
+        return self.resultado
 
     def _trazer_para_frente(self):
-        self.lift()
-        self.focus_force()
-        if sys.platform == "win32":
-            try:
-                self.attributes("-topmost", True)
-                self._after_topmost = self.after(300, self._liberar_topmost)
-            except tk.TclError:
-                pass
+        root = self.root
+        try:
+            root.deiconify()
+            root.lift()
+            root.focus_force()
+            if sys.platform == "win32":
+                root.attributes("-topmost", True)
+                self._after_topmost = root.after(300, self._liberar_topmost)
+        except tk.TclError:
+            pass
 
     def _liberar_topmost(self):
         self._after_topmost = None
         try:
-            self.attributes("-topmost", False)
+            self.root.attributes("-topmost", False)
         except tk.TclError:
             pass
 
     def _cancelar_agendamentos(self):
-        after_id = getattr(self, "_after_topmost", None)
+        after_id = self._after_topmost
         if after_id is not None:
             try:
-                self.after_cancel(after_id)
+                self.root.after_cancel(after_id)
             except tk.TclError:
                 pass
             self._after_topmost = None
@@ -194,10 +204,13 @@ class DialogoLogin(tk.Toplevel):
         if self.var_salvar_senha.get():
             self.var_salvar_usuario.set(True)
 
-    def _cancelar(self):
+    def _finalizar(self, resultado: bool):
         self._cancelar_agendamentos()
-        self.resultado = False
-        self.destroy()
+        self.resultado = resultado
+        self._concluido.set(True)
+
+    def _cancelar(self):
+        self._finalizar(False)
 
     def _entrar(self):
         url = self.var_url.get().strip().rstrip("/") or URL_PADRAO
@@ -211,7 +224,7 @@ class DialogoLogin(tk.Toplevel):
             return
 
         self._lbl_erro.config(text="Conectando…", fg=COR_TITULO_PADRAO)
-        self.update_idletasks()
+        self.root.update_idletasks()
 
         salvar_config(
             url,
@@ -232,12 +245,10 @@ class DialogoLogin(tk.Toplevel):
             self._lbl_erro.config(text=exc.mensagem, fg=COR_ERRO)
             return
 
-        self.resultado = True
-        self._cancelar_agendamentos()
-        self.destroy()
+        self._finalizar(True)
 
 
-def garantir_login(parent) -> bool:
+def garantir_login(parent: tk.Tk) -> bool:
     print("[ORC] Tela: Login")
     dialogo = DialogoLogin(parent)
     try:
@@ -245,12 +256,12 @@ def garantir_login(parent) -> bool:
         from core.app_state import APP_VERSION
 
         # Começa no login; se o usuário entrar antes, o hub reutiliza o resultado.
-        iniciar_verificacao_atualizacao(dialogo, APP_VERSION)
+        iniciar_verificacao_atualizacao(parent, APP_VERSION)
     except ImportError:
         pass
-    parent.wait_window(dialogo)
-    if dialogo.resultado:
+    ok = dialogo.esperar()
+    if ok:
         print("[ORC] Login autenticado")
     else:
         print("[ORC] Login não concluído")
-    return dialogo.resultado
+    return ok

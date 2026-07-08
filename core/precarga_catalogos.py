@@ -10,9 +10,11 @@ def iniciar_precarga_catalogos() -> None:
         try:
             from core.composicoes_proprias_storage import carregar as carregar_composicoes
             from core.etapas_predefinidas_storage import carregar as carregar_etapas
+            from core.orcamento_storage import listar_orcamentos_resumo
 
             carregar_composicoes()
             carregar_etapas()
+            listar_orcamentos_resumo()
         except ValueError:
             pass
 

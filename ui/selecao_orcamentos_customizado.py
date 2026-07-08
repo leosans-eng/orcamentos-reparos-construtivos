@@ -34,12 +34,15 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self.on_abrir = on_abrir
         self.on_voltar = on_voltar
         self._icones_botoes = []
+        self._resumos_cache: list[dict] = []
         self._recarregador = RecarregadorLista(
             self,
             obter_cache=obter_cache_lista,
             carregar_rede=lambda: listar_orcamentos_resumo(forcar_rede=True),
             ao_aplicar=self._aplicar_lista_resumos,
             ao_erro=self._ao_erro_recarga_lista,
+            ao_inicio=self._ao_inicio_carregamento,
+            ao_fim=self._ao_fim_carregamento,
         )
         self._montar()
 
@@ -62,6 +65,21 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
                 mensagem,
                 parent=self.winfo_toplevel(),
             )
+
+    def _ao_inicio_carregamento(self):
+        if not self._resumos_cache and not self.tree.get_children():
+            self._definir_status_lista("Carregando orçamentos…")
+
+    def _ao_fim_carregamento(self):
+        if self._resumos_cache or self.tree.get_children():
+            self._definir_status_lista("")
+        else:
+            self._definir_status_lista("Nenhum orçamento encontrado.")
+
+    def _definir_status_lista(self, texto: str):
+        if getattr(self, "_lbl_status_lista", None) is None:
+            return
+        self._lbl_status_lista.config(text=texto)
 
     def recarregar_lista(self, *, forcar_rede: bool = True):
         self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=True)
@@ -165,6 +183,16 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             side="left", padx=(4, 0), fill="x", expand=True
         )
 
+        self._lbl_status_lista = tk.Label(
+            painel_lista,
+            text="",
+            bg="#ececec",
+            fg="#666666",
+            font=("Arial", 9),
+            anchor="w",
+        )
+        self._lbl_status_lista.pack(fill="x", pady=(0, 4))
+
         container_tree = tk.Frame(painel_lista, bg="#ececec")
         container_tree.pack(fill="both", expand=True)
 
@@ -196,6 +224,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=False)
 
     def _aplicar_lista_resumos(self, resumos):
+        self._resumos_cache = list(resumos)
         fingerprint = self._fingerprint_resumos(resumos)
         if fingerprint == self._lista_fingerprint:
             return
@@ -243,9 +272,15 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self.on_abrir(orcamento_id)
 
     def _atualizar_lista(self):
-        resumos = listar_orcamentos_resumo()
-        fingerprint = self._fingerprint_resumos(resumos)
-        self._lista_fingerprint = fingerprint
+        resumos = self._resumos_cache
+        if not resumos:
+            cache = obter_cache_lista()
+            if cache is not None:
+                resumos = cache
+                self._resumos_cache = list(cache)
+            elif self._recarregador.em_andamento:
+                self._definir_status_lista("Carregando orçamentos…")
+                return
         self._preencher_lista(resumos)
 
     def _preencher_lista(self, resumos):

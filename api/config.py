@@ -12,10 +12,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = "sqlite:///./api/orc_dev.db"
+    database_url: str = "postgresql+psycopg2://orc:orc_dev@localhost:5432/orc"
     secret_key: str = "troque-esta-chave-em-producao"
     admin_username: str = "admin"
-    admin_password: str = "orc-admin-change-me"
+    admin_password: str = "password"
     seed_data_dir: str = "../dados_usuario"
     api_host: str = "0.0.0.0"
     api_port: int = 8000

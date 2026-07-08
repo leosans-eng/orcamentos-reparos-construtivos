@@ -1,176 +1,139 @@
-# API ORC — Fase 1
+# API ORC
 
-Backend compartilhado para **composições próprias** e **etapas pré-definidas**.
+Backend compartilhado do sistema ORC: **autenticação**, **composições próprias**, **etapas pré-definidas** e **orçamentos customizados**.
+
+Banco padrão: **PostgreSQL**.
 
 ## Pré-requisitos
 
 - Python 3.10+
-- Para produção: PostgreSQL (recomendado)
-- Para testes locais sem Docker: SQLite (já configurado em `api/.env`)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recomendado para o Postgres local)
+- Ou um PostgreSQL já instalado (mesma URL do `.env.example`)
 
-## 1. Banco de dados
+## 1. Banco de dados (PostgreSQL)
 
-### Opção A — SQLite (testes locais, sem instalar nada)
-
-O arquivo `api/.env` já vem com:
-
-```
-DATABASE_URL=sqlite:///./api/orc_dev.db
-```
-
-### Opção B — PostgreSQL (produção / servidor da TI)
-
-Na raiz do projeto, com [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado:
+Na raiz do projeto:
 
 ```bat
 docker compose up -d
 ```
 
-Em `api/.env`:
+Isso sobe o container `orc-postgres` na porta `5432` (usuário/senha/db: `orc` / `orc_dev` / `orc`).
 
-```
-DATABASE_URL=postgresql+psycopg2://orc:orc_dev@localhost:5432/orc
-```
-
-## 2. Configurar ambiente da API
+### Configurar `api/.env`
 
 ```bat
 copy .env.example api\.env
 ```
 
-Edite `api\.env` se necessário (padrão já funciona com Docker local).
+Ou, se você ainda usa SQLite no `.env` antigo:
 
-## 3. Instalar dependências da API
+```bat
+api\switch_to_postgres.bat
+```
+
+URL padrão:
+
+```
+DATABASE_URL=postgresql+psycopg2://orc:orc_dev@localhost:5432/orc
+```
+
+### Migrar dados do SQLite (opcional)
+
+Se você já tem `api/orc_dev.db` com usuários/orçamentos de teste:
+
+1. Postgres no ar (`docker compose up -d`)
+2. `api\.env` apontando para PostgreSQL
+3. Na raiz, com o venv ativo:
+
+```bat
+.venv\Scripts\python.exe -m api.migrate_sqlite_to_postgres
+```
+
+Se o Postgres já tiver dados e você quiser substituir:
+
+```bat
+.venv\Scripts\python.exe -m api.migrate_sqlite_to_postgres --force
+```
+
+Na **primeira** subida sem migração, o seed cria o admin e importa JSONs de `dados_usuario/` se as tabelas estiverem vazias.
+
+## 2. Instalar dependências da API
 
 ```bat
 pip install -r api\requirements.txt
 ```
 
-## 4. Iniciar a API
+## 3. Iniciar a API
 
 ```bat
 api\run_dev.bat
 ```
 
-A documentação interativa fica em: http://localhost:8000/docs
+O script tenta subir o Docker Compose e depois o uvicorn em `0.0.0.0:8000`.
 
-## 5. Login no ORC desktop
+- Neste PC: http://localhost:8000/docs  
+- Colegas na rede: `http://SEU_IPV4:8000`  
 
-- **URL da API:** `http://localhost:8000` (dev) ou a URL fornecida pela TI em produção
-- **Usuário inicial:** `admin` (definido em `api\.env`)
+Se o Firewall do Windows perguntar, permita o Python em redes privadas.
+
+## 4. Login no ORC desktop
+
+- **URL da API:** `http://localhost:8000` (dev) ou `http://IPV4:8000` (rede)
+- **Usuário inicial:** `admin` (ou `ADMIN_USERNAME` em `api\.env`)
 - **Senha inicial:** valor de `ADMIN_PASSWORD` em `api\.env`
-
-Na primeira execução, o banco é populado automaticamente a partir de `dados_usuario/composicoes_proprias.json`, `dados_usuario/etapas_predefinidas.json` e `dados_usuario/orcamentos_customizados.json` (se a tabela de orçamentos estiver vazia).
 
 ## Administração de usuários (somente admin)
 
-Abra http://localhost:8000/docs, faça login em **POST `/api/auth/login`** com o `admin` e clique em **Authorize** colando o `access_token`.
+Abra http://localhost:8000/docs, faça login em **POST `/api/auth/login`** e clique em **Authorize** colando o `access_token`.
 
 | Ação | Endpoint | Corpo de exemplo |
 |------|----------|------------------|
 | Listar usuários | `GET /api/auth/users` | — |
 | Criar usuário | `POST /api/auth/users` | `{"username": "maria", "password": "senha-segura"}` |
-| Redefinir senha (esqueceu) | `POST /api/auth/users/{id}/reset-password` | `{"senha_nova": "nova-senha"}` |
-| Desativar acesso | `PATCH /api/auth/users/{id}/active` | `{"is_active": false}` |
-| Reativar acesso | `PATCH /api/auth/users/{id}/active` | `{"is_active": true}` |
-| Excluir usuário | `DELETE /api/auth/users/{id}` | — |
-
-O `{id}` é o UUID do usuário, obtido em **GET `/api/auth/users`**.
-
-**Senhas:** o sistema nunca guarda a senha em texto legível. Se alguém esquecer, o admin **define uma senha nova** (reset); não há como “recuperar” a antiga.
-
-**Desativar vs excluir:** desativar bloqueia o login e mantém o cadastro; excluir remove o usuário do banco.
+| Criar já como admin | `POST /api/auth/users` | `{"username": "joao", "password": "...", "permissions": {"admin": true}}` |
+| Promover / remover admin | `PATCH /api/auth/users/{id}/permissions` | `{"admin": true}` ou `{"admin": false}` |
+| Redefinir senha | `POST /api/auth/users/{id}/reset-password` | `{"senha_nova": "nova-senha"}` |
+| Desativar / reativar | `PATCH /api/auth/users/{id}/active` | `{"is_active": false}` |
+| Excluir | `DELETE /api/auth/users/{id}` | — |
 
 ## Produção (servidor da TI)
 
-1. Instalar PostgreSQL e criar banco `orc`
-2. Definir `DATABASE_URL` e `SECRET_KEY` em `api/.env`
-3. Rodar: `uvicorn api.main:app --host 0.0.0.0 --port 8000`
-4. Configurar nos desktops a URL da API informada pela TI
+1. Instalar PostgreSQL e criar banco `orc` (e usuário com privilégios)
+2. Definir em `api/.env` (ou variáveis de ambiente do serviço):
+   - `DATABASE_URL=postgresql+psycopg2://USER:SENHA@HOST:5432/orc`
+   - `SECRET_KEY=` chave longa e aleatória (nunca o valor de exemplo)
+   - `ADMIN_PASSWORD=` senha forte do admin inicial
+3. Rodar **sem** `--reload`, preferencialmente como serviço:
+   ```bat
+   uvicorn api.main:app --host 0.0.0.0 --port 8000
+   ```
+4. Firewall: liberar a porta da API só na rede interna
+5. Nos desktops ORC: URL `http://IP_DO_SERVIDOR:8000`
+6. Backup periódico do Postgres (`pg_dump`)
 
-Para trocar de Supabase para servidor próprio depois: altere apenas `DATABASE_URL` no servidor (com migração `pg_dump`/`pg_restore`).
+## Orçamentos customizados
 
-## Fase 3 — Orçamentos customizados
+Orçamentos compartilhados entre usuários autenticados. Conteúdo em JSON; metadados em colunas.
 
-Orçamentos compartilhados entre todos os usuários autenticados. O conteúdo (etapas, itens SINAPI, composições próprias) fica em JSON no banco; metadados ficam em colunas para listagem e ordenação.
-
-### Modelo (`orcamentos_customizados`)
-
-| Coluna | Tipo | Uso |
-|--------|------|-----|
-| `id` | UUID | Identificador do orçamento |
-| `nome` | string (255) | Nome exibido na lista; indexado para busca |
-| `dados` | JSON | `bdi_percent`, `estado_referencia`, `grupos[]` |
-| `versao` | int | Controle otimista (HTTP 409 em conflito) |
-| `created_at` | datetime | Ordenação na lista (mais recente primeiro) |
-| `updated_at` | datetime | Última alteração real |
-| `created_by_id` | UUID (opcional) | Usuário que criou ou duplicou |
-
-O JSON em `dados` segue o mesmo formato do desktop (`grupos` → `itens` com tipos `sinapi` e `composicao_propria`). Nome, datas e versão **não** ficam duplicados dentro de `dados`.
-
-### Endpoints
-
-Todos exigem JWT (`Authorize` em `/docs`).
+### Endpoints (JWT)
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| `GET` | `/api/orcamentos` | Lista resumida (criado_em ↓). Query `?q=` filtra por nome |
-| `GET` | `/api/orcamentos/{id}` | Orçamento completo + `versao` |
-| `POST` | `/api/orcamentos` | Cria vazio: `{"nome": "..."}` |
-| `PUT` | `/api/orcamentos/{id}` | Salva conteúdo: `{"orcamento": {...}, "versao": N}` |
-| `PATCH` | `/api/orcamentos/{id}/nome` | Renomeia: `{"nome": "...", "versao": N}` |
-| `POST` | `/api/orcamentos/{id}/duplicar` | Cópia com novos IDs: `{"nome": "..."}` (opcional) |
+| `GET` | `/api/orcamentos` | Lista (`?q=` filtra por nome) |
+| `GET` | `/api/orcamentos/{id}` | Detalhe + `versao` |
+| `POST` | `/api/orcamentos` | Cria: `{"nome": "..."}` |
+| `PUT` | `/api/orcamentos/{id}` | Salva: `{"orcamento": {...}, "versao": N}` |
+| `PATCH` | `/api/orcamentos/{id}/nome` | Renomeia |
+| `POST` | `/api/orcamentos/{id}/duplicar` | Cópia |
 | `DELETE` | `/api/orcamentos/{id}` | Exclui |
 
-### Resposta da lista (`GET /api/orcamentos`)
+Conflito de edição simultânea → HTTP **409** (`Recarregue…`).
 
-```json
-{
-  "orcamentos": [
-    {
-      "id": "uuid",
-      "nome": "Edifício Alpha",
-      "versao": 12,
-      "criado_em": "2026-07-06T18:00:00+00:00",
-      "atualizado_em": "2026-07-06T19:30:00+00:00",
-      "grupos": 5,
-      "itens": 142
-    }
-  ]
-}
+## SQLite (apenas emergência)
+
+Não use com vários usuários. Se precisar isoladamente, comente a URL Postgres em `api/.env` e use:
+
 ```
-
-### Resposta completa (`GET /api/orcamentos/{id}`)
-
-```json
-{
-  "id": "uuid",
-  "nome": "Edifício Alpha",
-  "bdi_percent": 30.62,
-  "estado_referencia": "SP",
-  "grupos": [ "..." ],
-  "versao": 12,
-  "criado_em": "...",
-  "atualizado_em": "..."
-}
+DATABASE_URL=sqlite:///./api/orc_dev.db
 ```
-
-### Conflito de versão (409)
-
-Em `PUT` e `PATCH`, se `versao` enviada ≠ versão no banco:
-
-```json
-{
-  "detail": {
-    "detail": "conflito_versao",
-    "mensagem": "Alguém alterou este orçamento. Recarregue os dados e tente novamente.",
-    "versao_atual": 13
-  }
-}
-```
-
-### Próximos passos (desktop)
-
-- Substituir `core/orcamento_storage.py` por cliente HTTP (como composições/etapas)
-- Seed opcional a partir de `dados_usuario/orcamentos_customizados.json` na primeira subida
-- Importação i9 continua no desktop; após importar, `POST /api/orcamentos` + `PUT` com o conteúdo

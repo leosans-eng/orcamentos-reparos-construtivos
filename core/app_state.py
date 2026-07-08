@@ -69,8 +69,19 @@ class AppContext:
             if not janela.winfo_exists():
                 return
             janela.after(0, callback)
-        except tk.TclError:
+        except (tk.TclError, RuntimeError):
             pass
+
+    def desligar_ui(self) -> None:
+        """Evita callbacks Tk após destroy da janela (logout / reinício)."""
+        self.janela = None
+        self.frame_rodape = None
+        self.label_rodape = None
+        self.label_nome_csv_rodape = None
+        self.status_sinapi = None
+        self.status_servidor_sinapi = None
+        self.http_servidor_sinapi = None
+        self._sinapi_callbacks.clear()
 
     def iniciar_carregamento_sinapi(self) -> None:
         if self._sinapi_carregando:

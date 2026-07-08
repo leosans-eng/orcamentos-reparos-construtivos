@@ -1,3 +1,4 @@
+import gc
 import os
 import tkinter as tk
 
@@ -64,6 +65,7 @@ class OrcApp:
         self._criar_hub()
         self.mostrar_modulo("hub")
 
+        # Continua / conclui a checagem iniciada no login (ou inicia no offline).
         self._schedule_update_check()
         self.janela.after(500, self._aguardar_sinapi_e_verificar)
 
@@ -125,19 +127,31 @@ class OrcApp:
         )
 
     def _logout(self):
+        from atualizacao import reiniciar_coordenador_atualizacao
         from core.api_client import get_client
         from core.composicoes_proprias_storage import limpar_cache as limpar_cache_composicoes
         from core.etapas_predefinidas_storage import limpar_cache as limpar_cache_etapas
         from core.orcamento_storage import limpar_cache as limpar_cache_orcamentos
 
+        print("[ORC] Logout — retornando à tela de login")
         get_client().logout()
         limpar_cache_composicoes()
         limpar_cache_etapas()
         limpar_cache_orcamentos()
+        reiniciar_coordenador_atualizacao()
+        self.ctx.desligar_ui()
+        # Liberar Image/PhotoImage na thread principal antes do destroy
+        # para evitar Tcl_AsyncDelete no finalizador de outra thread.
+        self._frames.clear()
         self.pediu_logout = True
-        self.janela.destroy()
+        try:
+            self.janela.destroy()
+        except tk.TclError:
+            pass
+        gc.collect()
 
     def _criar_modulo(self, nome):
+        print(f"[ORC] Criando módulo: {nome}")
         if nome == "area_privativa":
             self._frames[nome] = criar_area_privativa(
                 self.area_conteudo,
@@ -171,10 +185,12 @@ class OrcApp:
 
     def _ao_selecionar_modulo_hub(self, modulo):
         if modulo == "area_comum":
+            print("[ORC] Módulo Área Comum ainda não disponível")
             return
         self.mostrar_modulo(modulo)
 
     def mostrar_modulo(self, nome):
+        print(f"[ORC] Navegação → {TITULOS_JANELA.get(nome, nome)}")
         if (
             self._modulo_atual == "area_privativa"
             and "area_privativa" in self._frames
@@ -238,14 +254,19 @@ class OrcApp:
 
 if __name__ == "__main__":
     while True:
+        print("[ORC] Abrindo tela de login")
         _root_login = tk.Tk()
         _root_login.withdraw()
         if not garantir_login(_root_login):
+            print("[ORC] Login cancelado — encerrando")
             _root_login.destroy()
             raise SystemExit(0)
         _root_login.destroy()
+        print("[ORC] Login ok — iniciando hub")
         iniciar_precarga_catalogos()
         app = OrcApp()
         app.executar()
         if not app.pediu_logout:
+            print("[ORC] Aplicação encerrada")
             break
+        print("[ORC] Sessão encerrada — novo ciclo de login")

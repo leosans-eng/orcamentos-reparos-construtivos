@@ -238,6 +238,19 @@ class DialogoLogin(tk.Toplevel):
 
 
 def garantir_login(parent) -> bool:
+    print("[ORC] Tela: Login")
     dialogo = DialogoLogin(parent)
+    try:
+        from atualizacao import iniciar_verificacao_atualizacao
+        from core.app_state import APP_VERSION
+
+        # Começa no login; se o usuário entrar antes, o hub reutiliza o resultado.
+        iniciar_verificacao_atualizacao(dialogo, APP_VERSION)
+    except ImportError:
+        pass
     parent.wait_window(dialogo)
+    if dialogo.resultado:
+        print("[ORC] Login autenticado")
+    else:
+        print("[ORC] Login não concluído")
     return dialogo.resultado

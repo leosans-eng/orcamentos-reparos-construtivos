@@ -47,7 +47,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self._montar()
 
     def _montar_botao_recarregar_cabecalho(self, parent):
-        btn = criar_botao_ttk_so_icone(
+        self._btn_recarregar = criar_botao_ttk_so_icone(
             parent,
             nome_icone="sync-outline",
             command=self.recarregar_lista,
@@ -55,8 +55,21 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             cor_icone="#006699",
             refs=self._icones_botoes,
         )
-        btn.pack(side="left", padx=(0, 8))
-        vincular_tooltip(btn, "Atualizar página")
+        self._btn_recarregar.pack(side="left", padx=(0, 6))
+        vincular_tooltip(self._btn_recarregar, "Atualizar página")
+
+        self._barra_progresso = ttk.Progressbar(
+            parent,
+            mode="indeterminate",
+            length=72,
+        )
+        self._lbl_atualizando = tk.Label(
+            parent,
+            text="",
+            bg="#ececec",
+            fg="#666666",
+            font=("Arial", 8),
+        )
 
     def _ao_erro_recarga_lista(self, mensagem: str, avisar_erro: bool):
         if avisar_erro:
@@ -67,14 +80,44 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             )
 
     def _ao_inicio_carregamento(self):
+        self._mostrar_indicador_carregamento(True)
         if not self._resumos_cache and not self.tree.get_children():
             self._definir_status_lista("Carregando orçamentos…")
 
     def _ao_fim_carregamento(self):
+        self._mostrar_indicador_carregamento(False)
         if self._resumos_cache or self.tree.get_children():
             self._definir_status_lista("")
         else:
             self._definir_status_lista("Nenhum orçamento encontrado.")
+
+    def _mostrar_indicador_carregamento(self, ativo: bool):
+        barra = getattr(self, "_barra_progresso", None)
+        label = getattr(self, "_lbl_atualizando", None)
+        botao = getattr(self, "_btn_recarregar", None)
+        if barra is None or label is None:
+            return
+        if ativo:
+            if botao is not None:
+                botao.state(["disabled"])
+            if not barra.winfo_ismapped():
+                barra.pack(side="left", padx=(0, 6))
+            if not label.winfo_ismapped():
+                label.pack(side="left", padx=(0, 8))
+            label.config(text="Atualizando…")
+            barra.start(12)
+        else:
+            try:
+                barra.stop()
+            except tk.TclError:
+                pass
+            if barra.winfo_ismapped():
+                barra.pack_forget()
+            if label.winfo_ismapped():
+                label.pack_forget()
+            label.config(text="")
+            if botao is not None:
+                botao.state(["!disabled"])
 
     def _definir_status_lista(self, texto: str):
         if getattr(self, "_lbl_status_lista", None) is None:
@@ -400,7 +443,14 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             return
         try:
             excluir_orcamento(orcamento_id)
-            self._atualizar_lista()
+            self._resumos_cache = [
+                resumo
+                for resumo in self._resumos_cache
+                if str(resumo.get("id")) != str(orcamento_id)
+            ]
+            self._lista_fingerprint = self._fingerprint_resumos(self._resumos_cache)
+            self._preencher_lista(self._resumos_cache)
+            self.recarregar_lista(forcar_rede=True)
         except ValueError as exc:
             messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
 

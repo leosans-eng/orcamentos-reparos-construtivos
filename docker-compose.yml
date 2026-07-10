@@ -1,6 +1,6 @@
-# PostgreSQL para API ORC (desenvolvimento e homologação).
+# PostgreSQL para a API ORC.
 # Uso: docker compose up -d
-# A API lê DATABASE_URL em api/.env (ver .env.example).
+# A API lê DATABASE_URL em api/.env.
 services:
   db:
     image: postgres:16-alpine

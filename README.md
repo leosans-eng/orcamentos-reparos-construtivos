@@ -75,11 +75,11 @@ O app consulta o arquivo [`version.json`](version.json) no repositório GitHub e
 
 No hub, o botão **Configurações** abre um diálogo para **reverificar a base SINAPI** manualmente e acompanhar o status do servidor (HTTP e situação da última consulta).
 
-### API compartilhada (Fase 1)
+### API compartilhada
 
-Composições próprias e etapas pré-definidas são lidas e gravadas via **API FastAPI** (dados compartilhados entre todos os usuários). Na abertura do app é solicitado **login** (usuário e senha).
+Composições próprias, etapas pré-definidas e orçamentos customizados são lidos e gravados via **API FastAPI** + **PostgreSQL** (dados compartilhados entre os usuários). Na abertura do app é solicitado **login**.
 
-Para desenvolvimento e deploy da API, consulte [`api/README.md`](api/README.md).
+Para deploy e operação da API, consulte [`api/README.md`](api/README.md).
 
 ## Requisitos
 

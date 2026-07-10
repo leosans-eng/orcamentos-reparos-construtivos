@@ -2,23 +2,22 @@
 
 Backend compartilhado do sistema ORC: **autenticação**, **composições próprias**, **etapas pré-definidas** e **orçamentos customizados**.
 
-Banco padrão: **PostgreSQL**.
+Banco: **PostgreSQL**.
 
 ## Pré-requisitos
 
 - Python 3.10+
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recomendado para o Postgres local)
-- Ou um PostgreSQL já instalado (mesma URL do `.env.example`)
+- PostgreSQL (em desenvolvimento local: [Docker Desktop](https://www.docker.com/products/docker-desktop/) + `docker compose up -d`)
 
-## 1. Banco de dados (PostgreSQL)
+## 1. Banco de dados
 
-Na raiz do projeto:
+Na raiz do projeto (homologação / PC de desenvolvimento):
 
 ```bat
 docker compose up -d
 ```
 
-Isso sobe o container `orc-postgres` na porta `5432` (usuário/senha/db: `orc` / `orc_dev` / `orc`).
+Container `orc-postgres` na porta `5432` (usuário/senha/db: `orc` / `orc_dev` / `orc`).
 
 ### Configurar `api/.env`
 
@@ -26,60 +25,34 @@ Isso sobe o container `orc-postgres` na porta `5432` (usuário/senha/db: `orc` /
 copy .env.example api\.env
 ```
 
-Ou, se você ainda usa SQLite no `.env` antigo:
-
-```bat
-api\switch_to_postgres.bat
-```
-
-URL padrão:
+URL de desenvolvimento:
 
 ```
 DATABASE_URL=postgresql+psycopg2://orc:orc_dev@localhost:5432/orc
 ```
 
-### Migrar dados do SQLite (opcional)
+Na **primeira** subida com tabelas vazias, o seed cria o admin e pode importar JSONs de `dados_usuario/` (se existirem).
 
-Se você já tem `api/orc_dev.db` com usuários/orçamentos de teste:
-
-1. Postgres no ar (`docker compose up -d`)
-2. `api\.env` apontando para PostgreSQL
-3. Na raiz, com o venv ativo:
-
-```bat
-.venv\Scripts\python.exe -m api.migrate_sqlite_to_postgres
-```
-
-Se o Postgres já tiver dados e você quiser substituir:
-
-```bat
-.venv\Scripts\python.exe -m api.migrate_sqlite_to_postgres --force
-```
-
-Na **primeira** subida sem migração, o seed cria o admin e importa JSONs de `dados_usuario/` se as tabelas estiverem vazias.
-
-## 2. Instalar dependências da API
+## 2. Instalar dependências
 
 ```bat
 pip install -r api\requirements.txt
 ```
 
-## 3. Iniciar a API
+## 3. Iniciar a API (desenvolvimento)
 
 ```bat
 api\run_dev.bat
 ```
 
-O script tenta subir o Docker Compose e depois o uvicorn em `0.0.0.0:8000`.
+Sobe o Compose (se o Docker estiver no PATH) e o uvicorn em `0.0.0.0:8000` com reload.
 
 - Neste PC: http://localhost:8000/docs  
 - Colegas na rede: `http://SEU_IPV4:8000`  
 
-Se o Firewall do Windows perguntar, permita o Python em redes privadas.
-
 ## 4. Login no ORC desktop
 
-- **URL da API:** `http://localhost:8000` (dev) ou `http://IPV4:8000` (rede)
+- **URL da API:** `http://localhost:8000` ou `http://IPV4:8000`
 - **Usuário inicial:** `admin` (ou `ADMIN_USERNAME` em `api\.env`)
 - **Senha inicial:** valor de `ADMIN_PASSWORD` em `api\.env`
 
@@ -112,9 +85,11 @@ Abra http://localhost:8000/docs, faça login em **POST `/api/auth/login`** e cli
 5. Nos desktops ORC: URL `http://IP_DO_SERVIDOR:8000`
 6. Backup periódico do Postgres (ver abaixo)
 
+Checklist completo: [`LANCAMENTO.md`](LANCAMENTO.md).
+
 ## Backup com `pg_dump`
 
-O Postgres guarda usuários, composições, etapas e orçamentos. É importante o Backup periódico principalmente por conta de orçamentos em andamento, que são realizados múltiplas vezes por semana.
+O Postgres guarda usuários, composições, etapas e orçamentos. Backup periódico é importante principalmente por orçamentos em andamento.
 
 **Frequência sugerida (LAN):** diário + retenção de 7–14 dias, em pasta fora do disco do servidor (NAS / outro HD).
 
@@ -126,9 +101,9 @@ REM Restore (banco de destino já criado)
 pg_restore -h localhost -U orc -d orc --clean --if-exists backups\orc_YYYYMMDD.dump
 ```
 
-Ajuste `-h`, `-U` e `-d` conforme o `DATABASE_URL` de produção. Em Docker local, use o host/porta publicados pelo Compose (`localhost:5432`).
+Ajuste `-h`, `-U` e `-d` conforme o `DATABASE_URL` de produção.
 
-**Importante:** Testar o restore pelo menos uma vez em homologação.
+**Importante:** testar o restore pelo menos uma vez em homologação.
 
 ## Orçamentos customizados
 
@@ -147,11 +122,3 @@ Orçamentos compartilhados entre usuários autenticados. Conteúdo em JSON; meta
 | `DELETE` | `/api/orcamentos/{id}` | Exclui |
 
 Conflito de edição simultânea → HTTP **409** (`Recarregue…`).
-
-## SQLite (apenas emergência)
-
-Não use com vários usuários. Se precisar isoladamente, comente a URL Postgres em `api/.env` e use:
-
-```
-DATABASE_URL=sqlite:///./api/orc_dev.db
-```

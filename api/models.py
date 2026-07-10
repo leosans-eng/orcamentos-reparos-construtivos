@@ -1,4 +1,4 @@
-"""Modelos do banco de dados — Fases 1 e 3."""
+"""Modelos do banco de dados da API ORC."""
 
 import uuid
 from datetime import datetime, timezone
@@ -52,7 +52,7 @@ class AppSetting(Base):
 
 
 class OrcamentoCustomizado(Base):
-    """Orçamento customizado compartilhado (Fase 3)."""
+    """Orçamento customizado compartilhado entre usuários autenticados."""
 
     __tablename__ = "orcamentos_customizados"
 

@@ -1,4 +1,4 @@
-"""Rotas dos orçamentos customizados compartilhados (Fase 3)."""
+"""Rotas dos orçamentos customizados compartilhados."""
 
 from __future__ import annotations
 

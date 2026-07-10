@@ -1,4 +1,4 @@
-"""Ponto de entrada da API ORC — Fases 1 e 3."""
+"""Ponto de entrada da API ORC."""
 
 from contextlib import asynccontextmanager
 import logging
@@ -37,10 +37,10 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="ORC API",
     description=(
-        "API compartilhada do sistema ORC — Fase 1 (composições e etapas) "
-        "e Fase 3 (orçamentos customizados)."
+        "API compartilhada do sistema ORC: autenticação, composições próprias, "
+        "etapas pré-definidas e orçamentos customizados."
     ),
-    version="0.2.0",
+    version="1.0.0",
     lifespan=lifespan,
 )
 

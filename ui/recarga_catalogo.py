@@ -15,12 +15,16 @@ class RecarregadorCatalogo:
         carregar_rede: Callable[[], dict],
         ao_aplicar: Callable[[dict], None],
         ao_erro: Callable[[str, bool], None] | None = None,
+        ao_inicio: Callable[[], None] | None = None,
+        ao_fim: Callable[[], None] | None = None,
     ):
         self._widget = widget
         self._obter_cache = obter_cache
         self._carregar_rede = carregar_rede
         self._ao_aplicar = ao_aplicar
         self._ao_erro = ao_erro
+        self._ao_inicio = ao_inicio
+        self._ao_fim = ao_fim
         self._em_andamento = False
 
     def solicitar(self, *, forcar_rede: bool = False, avisar_erro: bool = True) -> None:
@@ -32,6 +36,8 @@ class RecarregadorCatalogo:
         if self._em_andamento:
             return
         self._em_andamento = True
+        if self._ao_inicio is not None:
+            self._ao_inicio()
 
         def trabalho():
             erro: str | None = None
@@ -48,10 +54,17 @@ class RecarregadorCatalogo:
                         self._ao_erro(erro, avisar_erro)
                 elif dados is not None:
                     self._ao_aplicar(dados)
+                if self._ao_fim is not None:
+                    self._ao_fim()
 
             self._widget.after(0, concluir)
 
         threading.Thread(target=trabalho, daemon=True).start()
+
+    @property
+    def em_andamento(self) -> bool:
+        return self._em_andamento
+
 
 class RecarregadorLista:
     """Recarga de listas da API sem bloquear a interface Tkinter."""

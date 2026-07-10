@@ -42,10 +42,11 @@ from core.sinapi_busca import (
 )
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
-from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone, criar_botao_ttk_so_icone
+from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
 from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
+    ControleAtualizacaoPagina,
     aplicar_icone_janela,
     centralizar_janela,
     preparar_toplevel,
@@ -54,7 +55,6 @@ from ui.widgets import (
     focar_entrada_apos_exibir,
     perguntar_texto,
     valores_combo_estado,
-    vincular_tooltip,
     formatar_decimal_br,
     formatar_moeda_br,
     formatar_quantidade_edicao,
@@ -1074,21 +1074,18 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             carregar_rede=lambda: obter_orcamento_dict(self.orcamento.id, forcar_rede=True),
             ao_aplicar=self._aplicar_orcamento_recarregado,
             ao_erro=self._ao_erro_recarga_orcamento,
+            ao_inicio=self._ao_inicio_carregamento,
+            ao_fim=self._ao_fim_carregamento,
         )
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
     def _montar_botao_recarregar_cabecalho(self, parent):
-        btn = criar_botao_ttk_so_icone(
+        self._controle_atualizacao = ControleAtualizacaoPagina(
             parent,
-            nome_icone="sync-outline",
             command=self.recarregar_orcamento,
-            estilo="Compact.TButton",
-            cor_icone="#006699",
             refs=self._icones_botoes,
         )
-        btn.pack(side="left", padx=(0, 8))
-        vincular_tooltip(btn, "Atualizar página")
 
     def _ao_erro_recarga_orcamento(self, mensagem: str, avisar_erro: bool):
         if avisar_erro:
@@ -1097,6 +1094,14 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 mensagem,
                 parent=self.winfo_toplevel(),
             )
+
+    def _ao_inicio_carregamento(self):
+        if getattr(self, "_controle_atualizacao", None) is not None:
+            self._controle_atualizacao.definir_ativo(True)
+
+    def _ao_fim_carregamento(self):
+        if getattr(self, "_controle_atualizacao", None) is not None:
+            self._controle_atualizacao.definir_ativo(False)
 
     def _aplicar_orcamento_recarregado(self, registro: dict):
         self._orcamento_sujo = False

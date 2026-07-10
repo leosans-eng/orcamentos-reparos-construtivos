@@ -620,3 +620,56 @@ def criar_barra_modulo(
             montar_acoes_antes_referencia(lado_direito)
 
     return label_referencia
+
+
+class ControleAtualizacaoPagina:
+    """Botão 'Atualizar página' com barrinha de progresso ao lado."""
+
+    def __init__(self, parent, *, command, refs, bg="#ececec"):
+        from ui.icones import criar_botao_ttk_so_icone
+
+        self.botao = criar_botao_ttk_so_icone(
+            parent,
+            nome_icone="sync-outline",
+            command=command,
+            estilo="Compact.TButton",
+            cor_icone="#006699",
+            refs=refs,
+        )
+        self.botao.pack(side="left", padx=(0, 6))
+        vincular_tooltip(self.botao, "Atualizar página")
+
+        self.barra = ttk.Progressbar(
+            parent,
+            mode="indeterminate",
+            length=72,
+        )
+        self.label = tk.Label(
+            parent,
+            text="",
+            bg=bg,
+            fg="#666666",
+            font=("Arial", 8),
+        )
+
+    def definir_ativo(self, ativo: bool):
+        if ativo:
+            self.botao.state(["disabled"])
+            if not self.barra.winfo_ismapped():
+                self.barra.pack(side="left", padx=(0, 6))
+            if not self.label.winfo_ismapped():
+                self.label.pack(side="left", padx=(0, 8))
+            self.label.config(text="Atualizando…")
+            self.barra.start(12)
+            return
+
+        try:
+            self.barra.stop()
+        except tk.TclError:
+            pass
+        if self.barra.winfo_ismapped():
+            self.barra.pack_forget()
+        if self.label.winfo_ismapped():
+            self.label.pack_forget()
+        self.label.config(text="")
+        self.botao.state(["!disabled"])

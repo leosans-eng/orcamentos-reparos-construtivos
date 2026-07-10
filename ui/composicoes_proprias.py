@@ -24,12 +24,12 @@ from core.composicoes_proprias_storage import (
 from ui.icones import (
     criar_botao_inserir_prominente,
     criar_botao_ttk_com_icone,
-    criar_botao_ttk_so_icone,
 )
 from ui.orcamento_customizado import DialogoBuscaSinapi
 from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
+    ControleAtualizacaoPagina,
     aplicar_icone_janela,
     centralizar_janela,
     confirmar_exclusao_com_espera,
@@ -40,7 +40,6 @@ from ui.widgets import (
     perguntar_texto,
     preparar_toplevel,
     valores_combo_estado,
-    vincular_tooltip,
     focar_entrada_apos_exibir,
 )
 
@@ -239,6 +238,8 @@ class ComposicoesPropriasFrame(tk.Frame):
             carregar_rede=carregar,
             ao_aplicar=self._aplicar_dados_catalogo,
             ao_erro=self._ao_erro_recarga_catalogo,
+            ao_inicio=self._ao_inicio_carregamento,
+            ao_fim=self._ao_fim_carregamento,
         )
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
@@ -250,16 +251,11 @@ class ComposicoesPropriasFrame(tk.Frame):
         return f"Referência SINAPI: {ref}"
 
     def _montar_botao_recarregar_cabecalho(self, parent):
-        btn = criar_botao_ttk_so_icone(
+        self._controle_atualizacao = ControleAtualizacaoPagina(
             parent,
-            nome_icone="sync-outline",
             command=self.recarregar_catalogo,
-            estilo="Compact.TButton",
-            cor_icone="#006699",
             refs=self._icones_botoes,
         )
-        btn.pack(side="left", padx=(0, 8))
-        vincular_tooltip(btn, "Atualizar página")
 
     def _ao_erro_recarga_catalogo(self, mensagem: str, avisar_erro: bool):
         if avisar_erro:
@@ -268,6 +264,14 @@ class ComposicoesPropriasFrame(tk.Frame):
                 mensagem,
                 parent=self.winfo_toplevel(),
             )
+
+    def _ao_inicio_carregamento(self):
+        if getattr(self, "_controle_atualizacao", None) is not None:
+            self._controle_atualizacao.definir_ativo(True)
+
+    def _ao_fim_carregamento(self):
+        if getattr(self, "_controle_atualizacao", None) is not None:
+            self._controle_atualizacao.definir_ativo(False)
 
     def _aplicar_dados_catalogo(self, dados: dict):
         self._dados = dados

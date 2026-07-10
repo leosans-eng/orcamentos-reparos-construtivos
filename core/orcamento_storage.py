@@ -18,6 +18,14 @@ _detalhe_cache: dict[str, dict] = {}
 def _tratar_erro_api(exc: ApiError) -> None:
     if isinstance(exc, ConflitoVersaoError):
         raise ValueError(exc.mensagem) from exc
+    if getattr(exc, "status_code", None) and int(exc.status_code) >= 500:
+        raise ValueError(
+            exc.mensagem
+            or (
+                "O servidor está temporariamente indisponível.\n"
+                "O banco de dados pode estar fora do ar. Tente novamente em instantes."
+            )
+        ) from exc
     raise ValueError(exc.mensagem) from exc
 
 

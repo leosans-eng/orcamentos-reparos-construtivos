@@ -162,7 +162,7 @@ Ordenadas por **impacto × esforço** no estágio atual:
 6. **Alembic** — evita `create_all` cego quando o modelo mudar (adicione colunas com segurança).
 7. **JWT mais curto + refresh** — hoje expire longo (12h); ok em LAN; em risco maior, reduzir TTL.
 8. **Logs estruturados / request id** — facilita suporte da TI (“qual request falhou”).
-9. **Health com checagem de DB** — `/api/health` hoje não valida Postgres; um `SELECT 1` ajuda o monitor da TI.
+9. **Health com checagem de DB** — `/api/health` valida o Postgres (`SELECT 1`) e responde **503** se o banco estiver fora; o desktop trata 5xx como “serviço indisponível” e evita tela em branco ao abrir módulos.
 10. **SINAPI continua local no desktop** — correto; não colocar a base SINAPI na API (pesada). Otimizar o carregamento local (já em background) é o caminho.
 
 Não priorize micro-otimizações de CPU na API enquanto o volume for poucas dezenas de usuários na LAN: estabilidade, backup e concorrência vêm primeiro.

@@ -1,6 +1,7 @@
 """Módulo Orçamento Customizado: seleção de orçamento e edição."""
 
 import tkinter as tk
+from tkinter import messagebox
 
 from ui.orcamento_customizado import OrcamentoCustomizadoFrame
 from ui.selecao_orcamentos_customizado import SelecaoOrcamentosCustomizadoFrame
@@ -38,14 +39,27 @@ class OrcamentoCustomizadoModulo(tk.Frame):
         self._orcamento_aberto_id = orcamento_id
         self._frame_selecao.pack_forget()
 
-        if self._frame_editor is None:
-            self._frame_editor = OrcamentoCustomizadoFrame(
-                self,
-                self.ctx,
-                on_voltar=self._mostrar_selecao,
-                orcamento_id=orcamento_id,
+        try:
+            if self._frame_editor is None:
+                self._frame_editor = OrcamentoCustomizadoFrame(
+                    self,
+                    self.ctx,
+                    on_voltar=self._mostrar_selecao,
+                    orcamento_id=orcamento_id,
+                )
+            else:
+                self._frame_editor.definir_orcamento(orcamento_id)
+            self._frame_editor.pack(fill="both", expand=True)
+        except ValueError as exc:
+            if self._frame_editor is not None:
+                self._frame_editor.destroy()
+                self._frame_editor = None
+            self._orcamento_aberto_id = None
+            self._frame_selecao.pack(fill="both", expand=True)
+            messagebox.showwarning(
+                "Orçamento",
+                str(exc)
+                or "Não foi possível abrir o orçamento.\n"
+                "Verifique se a API e o banco de dados estão disponíveis.",
+                parent=self.winfo_toplevel(),
             )
-        else:
-            self._frame_editor.definir_orcamento(orcamento_id)
-
-        self._frame_editor.pack(fill="both", expand=True)

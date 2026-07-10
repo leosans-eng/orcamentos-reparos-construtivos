@@ -18,6 +18,7 @@ from ui.hub import HubFrame
 from ui.orcamento_customizado_modulo import OrcamentoCustomizadoModulo
 from ui.dialogo_login import garantir_login
 from ui.widgets import centralizar_janela_principal, configurar_estilos_ttk
+from tkinter import messagebox
 
 TITULOS_JANELA = {
     "hub": "ORC — Orçamentos de Reparos Construtivos",
@@ -208,45 +209,76 @@ class OrcApp:
             and nome not in modulos_expandidos
         )
         entrando_modulo_expandido = nome in modulos_expandidos
+        modulo_anterior = self._modulo_atual
 
         for frame in self._frames.values():
             frame.pack_forget()
 
-        if nome not in self._frames:
-            self._criar_modulo(nome)
+        try:
+            if nome not in self._frames:
+                self._criar_modulo(nome)
+            self._frames[nome].pack(fill="both", expand=True)
+            self._modulo_atual = nome
+            self.janela.title(TITULOS_JANELA.get(nome, TITULOS_JANELA["hub"]))
 
-        self._frames[nome].pack(fill="both", expand=True)
-        self._modulo_atual = nome
-        self.janela.title(TITULOS_JANELA.get(nome, TITULOS_JANELA["hub"]))
+            if entrando_modulo_expandido:
+                try:
+                    self.janela.state("zoomed")
+                except tk.TclError:
+                    self.janela.attributes("-zoomed", True)
+            elif saindo_modulo_expandido:
+                try:
+                    self.janela.state("normal")
+                except tk.TclError:
+                    self.janela.attributes("-zoomed", False)
+                centralizar_janela_principal(
+                    self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
+                )
 
-        if entrando_modulo_expandido:
-            try:
-                self.janela.state("zoomed")
-            except tk.TclError:
-                self.janela.attributes("-zoomed", True)
-        elif saindo_modulo_expandido:
-            try:
-                self.janela.state("normal")
-            except tk.TclError:
-                self.janela.attributes("-zoomed", False)
-            centralizar_janela_principal(
-                self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
+            if nome == "hub":
+                centralizar_janela_principal(
+                    self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
+                )
+            elif nome == "area_privativa":
+                self._frames[nome].ativar_scroll()
+                self._frames[nome].focar()
+            elif nome in (
+                "consulta_sinapi",
+                "orcamento_customizado",
+                "composicoes_proprias",
+                "etapas_predefinidas",
+            ):
+                self._frames[nome].focar()
+        except Exception as exc:
+            print(f"[ORC] Falha ao abrir módulo {nome}: {exc}")
+            if nome in self._frames and nome != "hub":
+                try:
+                    self._frames[nome].destroy()
+                except tk.TclError:
+                    pass
+                self._frames.pop(nome, None)
+            messagebox.showerror(
+                "Serviço indisponível",
+                str(exc)
+                or "Não foi possível abrir este módulo.\n"
+                "Verifique se a API e o banco de dados estão disponíveis.",
+                parent=self.janela,
             )
-
-        if nome == "hub":
-            centralizar_janela_principal(
-                self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
-            )
-        elif nome == "area_privativa":
-            self._frames[nome].ativar_scroll()
-            self._frames[nome].focar()
-        elif nome in (
-            "consulta_sinapi",
-            "orcamento_customizado",
-            "composicoes_proprias",
-            "etapas_predefinidas",
-        ):
-            self._frames[nome].focar()
+            destino = "hub" if nome != "hub" else modulo_anterior or "hub"
+            if destino == nome:
+                destino = "hub"
+            if destino in self._frames:
+                self._frames[destino].pack(fill="both", expand=True)
+                self._modulo_atual = destino
+                self.janela.title(TITULOS_JANELA.get(destino, TITULOS_JANELA["hub"]))
+                if destino == "hub":
+                    try:
+                        self.janela.state("normal")
+                    except tk.TclError:
+                        pass
+                    centralizar_janela_principal(
+                        self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
+                    )
 
     def executar(self):
         self.janela.mainloop()

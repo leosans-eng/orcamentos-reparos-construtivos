@@ -91,6 +91,18 @@ class OrcApiClient:
                 str(payload.get("mensagem", "Conflito de versão. Recarregue os dados.")),
                 versao_atual=payload.get("versao_atual"),
             )
+        if response.status_code >= 500:
+            mensagem = self._mensagem_erro(
+                response,
+                "O servidor está temporariamente indisponível.\n"
+                "O banco de dados pode estar fora do ar. Tente novamente em instantes.",
+            )
+            if mensagem.strip().lower() in {"internal server error", "internal server error."}:
+                mensagem = (
+                    "O servidor está temporariamente indisponível.\n"
+                    "O banco de dados pode estar fora do ar. Tente novamente em instantes."
+                )
+            raise ApiIndisponivelError(mensagem, response.status_code)
         if response.status_code >= 400:
             raise ApiError(
                 self._mensagem_erro(response, response.text or "Erro na API."),
@@ -103,11 +115,22 @@ class OrcApiClient:
         return response.json()
 
     def health(self) -> bool:
+        """True somente se a API e o banco responderem OK."""
         try:
             response = self._request("GET", "/api/health", timeout=5)
             return response.status_code == 200
         except ApiError:
             return False
+
+    def verificar_saude(self) -> None:
+        """Levanta ApiIndisponivelError se a API ou o banco estiverem fora."""
+        try:
+            response = self._request("GET", "/api/health", timeout=5)
+        except ApiIndisponivelError:
+            raise
+        if response.status_code == 200:
+            return
+        self._tratar_resposta(response)
 
     def login(self, username: str, password: str) -> str:
         response = self._request(

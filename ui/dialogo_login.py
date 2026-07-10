@@ -4,7 +4,7 @@ from tkinter import ttk
 
 from core.api_client import reiniciar_cliente
 from core.api_config import carregar_config, salvar_config
-from core.api_exceptions import ApiError, ApiIndisponivelError
+from core.api_exceptions import ApiError
 from ui.icones import criar_botao_ttk_com_icone
 from ui.widgets import (
     COR_BORDA_PADRAO,
@@ -235,11 +235,7 @@ class DialogoLogin:
         )
         cliente = reiniciar_cliente(base_url=url)
         try:
-            if not cliente.health():
-                raise ApiIndisponivelError(
-                    f"A API em {url} não respondeu.\n"
-                    "Verifique se o servidor está em execução e se a URL está correta."
-                )
+            cliente.verificar_saude()
             cliente.login(usuario, senha)
         except ApiError as exc:
             self._lbl_erro.config(text=exc.mensagem, fg=COR_ERRO)

@@ -1,11 +1,8 @@
-# Stack completa da API ORC: PostgreSQL + FastAPI.
+# Stack API ORC: PostgreSQL + FastAPI (servidor Windows + Docker Desktop)
 #
-# Linux / WSL / servidor:
-#   cp .env.example api/.env    # edite SECRET_KEY e ADMIN_PASSWORD
-#   docker compose up -d --build
-#
-# A API fica em http://localhost:8000  (docs: /docs  health: /api/health)
-# O host `db` é o Postgres na rede interna do Compose (não use localhost dentro do container).
+#   copy .env.example .env
+#   run_dev.bat
+#   # ou: docker compose up -d --build
 
 services:
   db:
@@ -29,12 +26,11 @@ services:
   api:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: Dockerfile
     container_name: orc-api
     ports:
       - "${API_PORT:-8000}:8000"
     environment:
-      # Sempre o serviço `db` na rede Docker (sobrescreve localhost do api/.env).
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-orc}:${POSTGRES_PASSWORD:-orc_dev}@db:5432/${POSTGRES_DB:-orc}
       SECRET_KEY: ${SECRET_KEY:-troque-esta-chave-em-producao}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
@@ -43,11 +39,9 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: "8000"
     env_file:
-      - path: api/.env
+      - path: .env
         required: false
     volumes:
-      # JSON de seed (composições, etapas, orçamentos). Atualize a pasta e reinicie a API
-      # só na primeira carga (tabelas vazias); depois os dados ficam no Postgres.
       - ./dados_usuario:/app/dados_usuario:ro
     depends_on:
       db:

@@ -1,31 +1,36 @@
 @echo off
-REM Desenvolvimento Windows: Postgres no Docker + API no host com --reload.
-REM No Linux/WSL/servidor prefira a stack completa:
-REM   docker compose up -d --build
-cd /d "%~dp0\.."
+REM Producao — servidor Windows (Docker Desktop): sobe Postgres + API.
+REM Equivalente: docker compose up -d --build
+cd /d "%~dp0"
 
-if not exist "api\.env" (
-  copy ".env.example" "api\.env"
-  echo Arquivo api\.env criado a partir de .env.example
+if not exist ".env" (
+  copy ".env.example" ".env"
+  echo Arquivo .env criado a partir de .env.example
+  echo Edite SECRET_KEY e ADMIN_PASSWORD em .env antes de usar em producao.
+  echo.
 )
 
 where docker >nul 2>&1
-if %ERRORLEVEL%==0 (
-  echo Subindo apenas o Postgres ^(docker compose up -d db^)...
-  docker compose up -d db
-  if errorlevel 1 (
-    echo AVISO: nao foi possivel subir o Postgres. Verifique o Docker.
-  ) else (
-    timeout /t 3 /nobreak >nul
-  )
-) else (
-  echo AVISO: Docker nao encontrado no PATH do Windows.
-  echo No WSL use: docker compose up -d --build
-  echo Ou: docker compose up -d db   e depois este .bat com Postgres acessivel em localhost:5432
+if errorlevel 1 (
+  echo Docker nao encontrado no PATH.
+  echo Instale e abra o Docker Desktop, depois execute este arquivo de novo.
+  pause
+  exit /b 1
 )
 
-set "PYTHON=%~dp0..\.venv\Scripts\python.exe"
-if not exist "%PYTHON%" set "PYTHON=python"
+docker compose up -d --build
+if errorlevel 1 (
+  echo.
+  echo Falha ao subir os containers. Verifique se o Docker Desktop esta em execucao.
+  pause
+  exit /b 1
+)
 
-REM --reload so para desenvolvimento no host Windows.
-"%PYTHON%" -m uvicorn api.main:app --reload --reload-dir api --host 0.0.0.0 --port 8000
+echo.
+echo API:      http://localhost:8000/docs
+echo Health:   http://localhost:8000/api/health
+echo Rede:     http://IP_DO_SERVIDOR:8000
+echo Logs:     docker compose logs -f api
+echo Parar:    docker compose down
+echo.
+pause

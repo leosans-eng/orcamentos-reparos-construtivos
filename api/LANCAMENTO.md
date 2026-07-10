@@ -1,67 +1,51 @@
-# Pré-lançamento / entrega da API ORC à TI
+# Checklist de entrega — API ORC (servidor Windows)
 
-## Repositório App × API
+## Subida padrão
 
-**Manter monorepo** por enquanto. Separar só quando o instalador do ORC e o deploy da API tiverem ciclos bem independentes.
+1. Instalar/abrir **Docker Desktop**
+2. `copy .env.example .env` — definir `SECRET_KEY` e `ADMIN_PASSWORD`
+3. Executar **`run_dev.bat`**
 
-## Checklist de entrega
+## Segurança
 
-### Segurança e configuração
+- [ ] `SECRET_KEY` de produção (não o valor de exemplo)
+- [ ] `ADMIN_PASSWORD` forte
+- [ ] `.env` fora do Git
+- [ ] Firewall Windows: porta **TCP 8000** (rede privada)
 
-- [ ] `SECRET_KEY` de produção longa e aleatória (não o valor de `.env.example`)
-- [ ] `ADMIN_PASSWORD` forte; trocar após o primeiro login
-- [ ] API **sem** `--reload` em produção (o Compose já sobe assim)
-- [ ] Firewall liberando a porta **8000** só na rede interna
-- [ ] `api/.env` e dumps **fora** do Git
+## Banco / seed
 
-### Banco
+- [ ] Pasta `dados_usuario/` com os JSON no servidor (seed na 1ª subida)
+- [ ] Backup `pg_dump` (Agendador de Tarefas) + teste de restore
+- [ ] Após o seed, dados vivem no Postgres
 
-- [ ] Stack `docker compose up -d --build` **ou** Postgres da TI + container/imagem da API
-- [ ] Backup automático (`pg_dump`) e teste de restore — ver `api/README.md`
-- [ ] Primeira subida: seed via `dados_usuario/` (tabelas vazias) ou restore de dump
-- [ ] JSON de seed atualizados na pasta `dados_usuario/` no servidor (se for usar seed)
+## Rede
 
+- [ ] Clientes usam o IPv4 da LAN do servidor (não localhost)
+- [ ] Teste de outro PC: `http://IP:8000/api/health`
+- [ ] Se falhar só na LAN: Firewall + checar se a porta 8000 está publicada no Docker Desktop
 
+## Testes rápidos
 
-### Funcional
+- [ ] `/api/health` → ok
+- [ ] Login admin; criar usuário
+- [ ] Desktop ORC conecta em `http://IP:8000`
+- [ ] Dois PCs editando: conflito 409 funciona
+- [ ] `docker compose restart api` — dados permanecem
 
-- [ ] `/api/health` → `ok` (API + banco)
-- [ ] Login JWT; usuários admin e comuns
-- [ ] CRUD composições / etapas / orçamentos
-- [ ] Conflito 409 (edição simultânea)
-- [ ] Promoção admin: `PATCH /api/auth/users/{id}/permissions`
+## Comandos úteis (Prompt / PowerShell)
 
+| Ação | Comando |
+|------|---------|
+| Subir | `run_dev.bat` |
+| Parar | `docker compose down` |
+| Logs | `docker compose logs -f api` |
+| Só API | `docker compose up -d api` |
 
+### Backup
 
-### Desktop / rede
-
-- [ ] URL de produção ou IP do servidor no login do ORC
-- [ ] Teste multi-PC (`http://IP:8000`, não localhost nos colegas)
-
-
-
-### Entregáveis à TI
-
-- [ ] Como subir, variáveis obrigatórias, healthcheck, backup (`api/README.md`)
-- [ ] Credenciais iniciais por canal seguro
-- [ ] Quem aplica updates da API
-
-
-
-### Planejar depois (não bloqueia go-live)
-
-- [ ] Migrações Alembic (hoje: `create_all`)
-- [ ] CORS mais restrito se a API sair da LAN
-- [ ] HTTPS / reverse proxy se a TI exigir
-- [ ] UI desktop de gestão de usuários (hoje via `/docs`)
-
-
-
-## Checklist rápido de testes
-
-- [ ] `docker compose up -d --build` sobe `orc-postgres` e `orc-api`
-- [ ] `/docs` e `/api/health` OK
-- [ ] Login admin; criar usuário; promover admin
-- [ ] Orçamento: criar, editar, copiar, excluir; conflito em 2 PCs
-- [ ] Composições e etapas: CRUD + botão Atualizar
-- [ ] `docker compose restart api`; dados persistem no Postgres
+```bat
+mkdir backups 2>nul
+docker exec orc-postgres pg_dump -U orc -d orc -F c -f /tmp/orc.dump
+docker cp orc-postgres:/tmp/orc.dump backups\orc_AAAAMMDD.dump
+```

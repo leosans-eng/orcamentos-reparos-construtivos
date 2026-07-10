@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     secret_key: str = "troque-esta-chave-em-producao"
     admin_username: str = "admin"
     admin_password: str = "password"
-    seed_data_dir: str = "../dados_usuario"
+    seed_data_dir: str = "dados_usuario"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     access_token_expire_minutes: int = 60 * 12

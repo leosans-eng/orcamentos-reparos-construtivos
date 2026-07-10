@@ -1,6 +1,4 @@
-# Imagem da API ORC (FastAPI + Uvicorn).
-# Build a partir da raiz do repositório:
-#   docker compose build
+# Imagem da API ORC (contexto = raiz deste repositório / pasta api/).
 
 FROM python:3.12-slim
 
@@ -10,11 +8,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
-COPY api/requirements.txt /app/api/requirements.txt
-RUN pip install --no-cache-dir -r /app/api/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    && mkdir -p /app/api /app/dados_usuario
 
-COPY api /app/api
-RUN mkdir -p /app/dados_usuario
+COPY __init__.py auth.py config.py database.py deps.py main.py models.py schemas.py seed.py /app/api/
+COPY routers /app/api/routers
 
 EXPOSE 8000
 

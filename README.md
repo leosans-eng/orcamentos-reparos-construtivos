@@ -77,9 +77,17 @@ No hub, o botão **Configurações** abre um diálogo para **reverificar a base 
 
 ### API compartilhada
 
-Composições próprias, etapas pré-definidas e orçamentos customizados são lidos e gravados via **API FastAPI** + **PostgreSQL** (dados compartilhados entre os usuários). Na abertura do app é solicitado **login**.
+Composições próprias, etapas pré-definidas e orçamentos customizados usam **API FastAPI + PostgreSQL**.
 
-Para deploy e operação da API, consulte [`api/README.md`](api/README.md).
+O backend autossuficiente (o que a TI sobe no servidor) está em [`api/`](api/) — ver [`api/README.md`](api/README.md) e [`api/MENSAGEM-TI.md`](api/MENSAGEM-TI.md).
+
+```bat
+cd api
+copy .env.example .env
+run_dev.bat
+```
+
+No desktop ORC, informe a URL `http://IP_DO_SERVIDOR:8000` na tela de login.
 
 ## Requisitos
 

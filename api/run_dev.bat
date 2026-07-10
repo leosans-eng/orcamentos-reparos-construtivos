@@ -1,5 +1,7 @@
 @echo off
-REM Inicia a API ORC em modo desenvolvimento (PostgreSQL via Docker Compose).
+REM Desenvolvimento Windows: Postgres no Docker + API no host com --reload.
+REM No Linux/WSL/servidor prefira a stack completa:
+REM   docker compose up -d --build
 cd /d "%~dp0\.."
 
 if not exist "api\.env" (
@@ -7,32 +9,23 @@ if not exist "api\.env" (
   echo Arquivo api\.env criado a partir de .env.example
 )
 
-REM Sobe o Postgres se o Docker estiver disponivel.
 where docker >nul 2>&1
 if %ERRORLEVEL%==0 (
-  echo Verificando container PostgreSQL...
-  docker compose up -d
+  echo Subindo apenas o Postgres ^(docker compose up -d db^)...
+  docker compose up -d db
   if errorlevel 1 (
-    echo.
-    echo AVISO: nao foi possivel subir o Postgres com Docker Compose.
-    echo Instale o Docker Desktop ou aponte DATABASE_URL em api\.env para um Postgres ja existente.
-    echo.
+    echo AVISO: nao foi possivel subir o Postgres. Verifique o Docker.
   ) else (
-    echo Aguardando Postgres ficar pronto...
     timeout /t 3 /nobreak >nul
   )
 ) else (
-  echo.
-  echo AVISO: Docker nao encontrado no PATH.
-  echo A API espera PostgreSQL em DATABASE_URL ^(api\.env^).
-  echo Instale Docker Desktop e rode: docker compose up -d
-  echo Ou use um Postgres local com a mesma URL do .env.example.
-  echo.
+  echo AVISO: Docker nao encontrado no PATH do Windows.
+  echo No WSL use: docker compose up -d --build
+  echo Ou: docker compose up -d db   e depois este .bat com Postgres acessivel em localhost:5432
 )
 
 set "PYTHON=%~dp0..\.venv\Scripts\python.exe"
 if not exist "%PYTHON%" set "PYTHON=python"
 
-REM --reload-dir api evita reiniciar ao salvar JSON em dados_usuario/
-REM --host 0.0.0.0 permite acesso pela rede (colegas usam http://SEU_IPV4:8000)
+REM --reload so para desenvolvimento no host Windows.
 "%PYTHON%" -m uvicorn api.main:app --reload --reload-dir api --host 0.0.0.0 --port 8000

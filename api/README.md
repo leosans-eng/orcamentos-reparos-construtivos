@@ -2,59 +2,42 @@
 
 Backend compartilhado do sistema ORC: **autenticação**, **composições próprias**, **etapas pré-definidas** e **orçamentos customizados**.
 
-Banco: **PostgreSQL**.
+Banco: **PostgreSQL**. Empacotamento recomendado: **Docker Compose** (API + Postgres).
 
-## Pré-requisitos
+## Subida rápida (Linux / WSL / servidor)
 
-- Python 3.10+
-- PostgreSQL (em desenvolvimento local: [Docker Desktop](https://www.docker.com/products/docker-desktop/) + `docker compose up -d`)
+Na raiz do repositório:
 
-## 1. Banco de dados
+```bash
+cp .env.example api/.env
+# Edite api/.env: SECRET_KEY e ADMIN_PASSWORD (obrigatório em produção)
 
-Na raiz do projeto (homologação / PC de desenvolvimento):
-
-```bat
-docker compose up -d
+docker compose up -d --build
 ```
 
-Container `orc-postgres` na porta `5432` (usuário/senha/db: `orc` / `orc_dev` / `orc`).
+Pronto:
 
-### Configurar `api/.env`
+| Serviço | URL |
+|---------|-----|
+| API / docs | http://localhost:8000/docs |
+| Health | http://localhost:8000/api/health |
+| Postgres | `localhost:5432` (usuário/senha/db: `orc` / `orc_dev` / `orc`) |
 
-```bat
-copy .env.example api\.env
-```
+Parar: `docker compose down`  
+Logs da API: `docker compose logs -f api`
 
-URL de desenvolvimento:
+Na **primeira** subida com tabelas vazias, o seed cria o `admin` e importa os JSON de `dados_usuario/` (montados no container). Inclua nessa pasta os arquivos atualizados de composições, etapas e orçamentos antes do `up`, se quiser a carga inicial dos testes.
 
-```
-DATABASE_URL=postgresql+psycopg2://orc:orc_dev@localhost:5432/orc
-```
+Os desktops ORC usam `http://IP_DO_SERVIDOR:8000` no login.
 
-Na **primeira** subida com tabelas vazias, o seed cria o admin e pode importar JSONs de `dados_usuario/` (se existirem).
+## Desenvolvimento no Windows (API no host)
 
-## 2. Instalar dependências
+Útil quando você quer `--reload` no código Python sem rebuild da imagem:
 
-```bat
-pip install -r api\requirements.txt
-```
+1. `docker compose up -d db` — só o Postgres  
+2. `api\run_dev.bat` — uvicorn no Windows com reload  
 
-## 3. Iniciar a API (desenvolvimento)
-
-```bat
-api\run_dev.bat
-```
-
-Sobe o Compose (se o Docker estiver no PATH) e o uvicorn em `0.0.0.0:8000` com reload.
-
-- Neste PC: http://localhost:8000/docs  
-- Colegas na rede: `http://SEU_IPV4:8000`  
-
-## 4. Login no ORC desktop
-
-- **URL da API:** `http://localhost:8000` ou `http://IPV4:8000`
-- **Usuário inicial:** `admin` (ou `ADMIN_USERNAME` em `api\.env`)
-- **Senha inicial:** valor de `ADMIN_PASSWORD` em `api\.env`
+`DATABASE_URL` em `api/.env` deve apontar para `localhost:5432`.
 
 ## Administração de usuários (somente admin)
 
@@ -70,44 +53,38 @@ Abra http://localhost:8000/docs, faça login em **POST `/api/auth/login`** e cli
 | Desativar / reativar | `PATCH /api/auth/users/{id}/active` | `{"is_active": false}` |
 | Excluir | `DELETE /api/auth/users/{id}` | — |
 
-## Produção (servidor da TI)
+## Produção (TI)
 
-1. Instalar PostgreSQL e criar banco `orc` (e usuário com privilégios)
-2. Definir em `api/.env` (ou variáveis de ambiente do serviço):
-   - `DATABASE_URL=postgresql+psycopg2://USER:SENHA@HOST:5432/orc`
-   - `SECRET_KEY=` chave longa e aleatória (nunca o valor de exemplo)
-   - `ADMIN_PASSWORD=` senha forte do admin inicial
-3. Rodar **sem** `--reload`, preferencialmente como serviço:
-   ```bat
-   uvicorn api.main:app --host 0.0.0.0 --port 8000
-   ```
-4. Firewall: liberar a porta da API só na rede interna
-5. Nos desktops ORC: URL `http://IP_DO_SERVIDOR:8000`
-6. Backup periódico do Postgres (ver abaixo)
+Preferência: o mesmo `docker compose up -d --build` no servidor Linux.
 
-Checklist completo: [`LANCAMENTO.md`](LANCAMENTO.md).
+Checklist: [`LANCAMENTO.md`](LANCAMENTO.md).
+
+1. Definir em `api/.env` (ou variáveis do Compose): `SECRET_KEY`, `ADMIN_PASSWORD` fortes  
+2. Opcional: trocar `POSTGRES_PASSWORD` (e alinhar no Compose)  
+3. Firewall: liberar **8000** na LAN (Postgres 5432 só se a TI precisar acesso externo ao banco)  
+4. Desktops: URL `http://IP_DO_SERVIDOR:8000`  
+5. Backup periódico do Postgres (abaixo)
+
+Se a TI já tiver Postgres gerenciado, pode rodar só a imagem da API apontando `DATABASE_URL` para esse host (sem o serviço `db`).
 
 ## Backup com `pg_dump`
 
-O Postgres guarda usuários, composições, etapas e orçamentos. Backup periódico é importante principalmente por orçamentos em andamento.
-
-**Frequência sugerida (LAN):** diário + retenção de 7–14 dias, em pasta fora do disco do servidor (NAS / outro HD).
-
-```bat
-REM Backup (formato custom — recomendado)
-pg_dump -h localhost -U orc -d orc -F c -f backups\orc_YYYYMMDD.dump
-
-REM Restore (banco de destino já criado)
-pg_restore -h localhost -U orc -d orc --clean --if-exists backups\orc_YYYYMMDD.dump
+```bash
+# Com o stack Compose no ar:
+docker exec orc-postgres pg_dump -U orc -d orc -F c -f /tmp/orc.dump
+docker cp orc-postgres:/tmp/orc.dump ./api/backups/orc_YYYYMMDD.dump
 ```
 
-Ajuste `-h`, `-U` e `-d` conforme o `DATABASE_URL` de produção.
+Restore (banco de destino já criado):
 
-**Importante:** testar o restore pelo menos uma vez em homologação.
+```bash
+docker cp ./api/backups/orc_YYYYMMDD.dump orc-postgres:/tmp/orc.dump
+docker exec orc-postgres pg_restore -U orc -d orc --clean --if-exists /tmp/orc.dump
+```
+
+**Frequência sugerida (LAN):** diário + retenção 7–14 dias, cópia fora do disco do servidor. Teste o restore em homologação.
 
 ## Orçamentos customizados
-
-Orçamentos compartilhados entre usuários autenticados. Conteúdo em JSON; metadados em colunas.
 
 ### Endpoints (JWT)
 

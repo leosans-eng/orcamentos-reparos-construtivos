@@ -10,16 +10,16 @@
 
 - [ ] `SECRET_KEY` de produção longa e aleatória (não o valor de `.env.example`)
 - [ ] `ADMIN_PASSWORD` forte; trocar após o primeiro login
-- [ ] `DATABASE_URL` apontando para o Postgres **do servidor**
-- [ ] API **sem** `--reload` em produção
-- [ ] Firewall liberando a porta só na rede interna
+- [ ] API **sem** `--reload` em produção (o Compose já sobe assim)
+- [ ] Firewall liberando a porta **8000** só na rede interna
 - [ ] `api/.env` e dumps **fora** do Git
 
 ### Banco
 
-- [ ] Postgres provisionado pela TI
+- [ ] Stack `docker compose up -d --build` **ou** Postgres da TI + container/imagem da API
 - [ ] Backup automático (`pg_dump`) e teste de restore — ver `api/README.md`
-- [ ] Primeira subida da API (`create_all` + seed) ou restore de dump
+- [ ] Primeira subida: seed via `dados_usuario/` (tabelas vazias) ou restore de dump
+- [ ] JSON de seed atualizados na pasta `dados_usuario/` no servidor (se for usar seed)
 
 
 
@@ -59,9 +59,9 @@
 
 ## Checklist rápido de testes
 
-- [ ] `docker compose up -d` (homologação) ou Postgres da TI no ar
-- [ ] API sobe; `/docs` e `/api/health` OK
+- [ ] `docker compose up -d --build` sobe `orc-postgres` e `orc-api`
+- [ ] `/docs` e `/api/health` OK
 - [ ] Login admin; criar usuário; promover admin
 - [ ] Orçamento: criar, editar, copiar, excluir; conflito em 2 PCs
 - [ ] Composições e etapas: CRUD + botão Atualizar
-- [ ] Reiniciar API; dados persistem no Postgres
+- [ ] `docker compose restart api`; dados persistem no Postgres

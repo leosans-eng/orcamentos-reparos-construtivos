@@ -110,7 +110,25 @@ Abra http://localhost:8000/docs, faça login em **POST `/api/auth/login`** e cli
    ```
 4. Firewall: liberar a porta da API só na rede interna
 5. Nos desktops ORC: URL `http://IP_DO_SERVIDOR:8000`
-6. Backup periódico do Postgres (`pg_dump`)
+6. Backup periódico do Postgres (ver abaixo)
+
+## Backup com `pg_dump`
+
+O Postgres guarda usuários, composições, etapas e orçamentos. É importante o Backup periódico principalmente por conta de orçamentos em andamento, que são realizados múltiplas vezes por semana.
+
+**Frequência sugerida (LAN):** diário + retenção de 7–14 dias, em pasta fora do disco do servidor (NAS / outro HD).
+
+```bat
+REM Backup (formato custom — recomendado)
+pg_dump -h localhost -U orc -d orc -F c -f backups\orc_YYYYMMDD.dump
+
+REM Restore (banco de destino já criado)
+pg_restore -h localhost -U orc -d orc --clean --if-exists backups\orc_YYYYMMDD.dump
+```
+
+Ajuste `-h`, `-U` e `-d` conforme o `DATABASE_URL` de produção. Em Docker local, use o host/porta publicados pelo Compose (`localhost:5432`).
+
+**Importante:** Testar o restore pelo menos uma vez em homologação.
 
 ## Orçamentos customizados
 

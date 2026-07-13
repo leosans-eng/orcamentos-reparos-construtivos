@@ -21,3 +21,4 @@ dados_usuario/orc_sessao.json
 api/orc_dev.db
 api/.env
 api/backups/
+api/

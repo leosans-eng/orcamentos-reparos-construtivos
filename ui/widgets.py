@@ -259,8 +259,16 @@ def _configurar_botao_colorido(style, nome, *, background, active, pressed, padd
     )
     style.map(
         nome,
-        background=[("active", active), ("pressed", pressed)],
-        foreground=[("active", "black"), ("pressed", "black")],
+        background=[
+            ("disabled", "#e0e0e0"),
+            ("active", active),
+            ("pressed", pressed),
+        ],
+        foreground=[
+            ("disabled", "#9e9e9e"),
+            ("active", "black"),
+            ("pressed", "black"),
+        ],
     )
 
 

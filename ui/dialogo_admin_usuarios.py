@@ -282,7 +282,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
         self.resizable(True, True)
-        self.minsize(640, 420)
+        self.minsize(720, 440)
 
         painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
         painel.pack(fill="both", expand=True)
@@ -320,37 +320,42 @@ class DialogoAdminUsuarios(tk.Toplevel):
             command=self._redefinir_senha,
             style="Compact.TButton",
             state="disabled",
+            width=15,
         )
         self.btn_senha.pack(side="left", padx=(0, 4))
 
+        # Largura fixa para "Desativar" / "Ativar" não alterar o layout.
         self.btn_ativo = ttk.Button(
             linha_botoes,
             text="Desativar",
             command=self._alternar_ativo,
             style="Compact.TButton",
             state="disabled",
+            width=10,
         )
         self.btn_ativo.pack(side="left", padx=(0, 4))
 
+        # Largura fixa para caber "Remover admin" sem esticar a janela.
         self.btn_admin = ttk.Button(
             linha_botoes,
             text="Tornar admin",
             command=self._alternar_admin,
             style="Edit.Compact.TButton",
             state="disabled",
+            width=14,
         )
         self.btn_admin.pack(side="left", padx=(0, 4))
 
-        self.btn_excluir = criar_botao_ttk_com_icone(
+        # Sem ícone SVG: no Windows, ttk + SVG desabilitado gera artefato vermelho.
+        self.btn_excluir = ttk.Button(
             linha_botoes,
-            texto="Excluir",
-            nome_icone="trash-outline",
+            text="Excluir",
             command=self._excluir,
-            estilo="Delete.Compact.TButton",
-            refs=self._refs_icones,
+            style="Delete.Compact.TButton",
+            state="disabled",
+            width=8,
         )
         self.btn_excluir.pack(side="left", padx=(0, 4))
-        self.btn_excluir.config(state="disabled")
 
         criar_botao_ttk_com_icone(
             linha_botoes,
@@ -394,6 +399,10 @@ class DialogoAdminUsuarios(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.update_idletasks()
+        # Abre já no tamanho que comporta "Remover admin", sem crescer ao selecionar.
+        largura = max(720, self.winfo_reqwidth())
+        altura = max(440, self.winfo_reqheight())
+        self.geometry(f"{largura}x{altura}")
         centralizar_janela(self, parent)
         self._recarregar()
 

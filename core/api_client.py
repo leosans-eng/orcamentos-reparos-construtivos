@@ -158,9 +158,60 @@ class OrcApiClient:
         )
         return self._tratar_resposta(response)
 
+    def obter_me(self) -> dict:
+        response = self._request("GET", "/api/auth/me")
+        return self._tratar_resposta(response)
+
     def listar_usuarios(self) -> list:
         response = self._request("GET", "/api/auth/users")
         return self._tratar_resposta(response)
+
+    def criar_usuario(
+        self,
+        username: str,
+        password: str,
+        *,
+        admin: bool = False,
+    ) -> dict:
+        permissions = {"admin": True} if admin else {}
+        response = self._request(
+            "POST",
+            "/api/auth/users",
+            json={
+                "username": username,
+                "password": password,
+                "permissions": permissions,
+            },
+        )
+        return self._tratar_resposta(response)
+
+    def redefinir_senha_usuario(self, user_id: str, senha_nova: str) -> dict:
+        response = self._request(
+            "POST",
+            f"/api/auth/users/{user_id}/reset-password",
+            json={"senha_nova": senha_nova},
+        )
+        return self._tratar_resposta(response)
+
+    def definir_usuario_ativo(self, user_id: str, is_active: bool) -> dict:
+        response = self._request(
+            "PATCH",
+            f"/api/auth/users/{user_id}/active",
+            json={"is_active": is_active},
+        )
+        return self._tratar_resposta(response)
+
+    def definir_permissoes_usuario(self, user_id: str, *, admin: bool) -> dict:
+        response = self._request(
+            "PATCH",
+            f"/api/auth/users/{user_id}/permissions",
+            json={"admin": admin},
+        )
+        return self._tratar_resposta(response)
+
+    def excluir_usuario(self, user_id: str) -> None:
+        response = self._request("DELETE", f"/api/auth/users/{user_id}")
+        self._tratar_resposta(response)
 
     def get_composicoes_catalogo(self) -> dict:
         response = self._request("GET", "/api/composicoes/catalogo")

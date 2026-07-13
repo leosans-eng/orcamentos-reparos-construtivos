@@ -4,6 +4,7 @@ from tkinter import messagebox, ttk
 from core.api_client import get_client
 from core.api_config import carregar_config, salvar_config
 from core.api_exceptions import ApiError
+from ui.dialogo_admin_usuarios import abrir_dialogo_admin_usuarios, usuario_atual_eh_admin
 from ui.icones import criar_botao_ttk_com_icone
 from ui.widgets import (
     aplicar_icone_janela,
@@ -276,6 +277,35 @@ class DialogoConfiguracoes(tk.Toplevel):
             style="Compact.TButton",
         ).pack(anchor="w")
 
+        if usuario_atual_eh_admin():
+            secao_admin = tk.Frame(
+                painel, bg="#ffffff", highlightbackground="#cccccc", highlightthickness=1
+            )
+            secao_admin.pack(fill="x", pady=(0, 12))
+            admin_inner = tk.Frame(secao_admin, bg="#ffffff", padx=14, pady=12)
+            admin_inner.pack(fill="x")
+
+            tk.Label(
+                admin_inner,
+                text="Administração",
+                font=("Arial", 10, "bold"),
+                fg="#006699",
+                bg="#ffffff",
+            ).pack(anchor="w", pady=(0, 6))
+            tk.Label(
+                admin_inner,
+                text="Gerencie usuários, senhas e permissões.",
+                font=("Arial", 9),
+                fg="#555555",
+                bg="#ffffff",
+            ).pack(anchor="w", pady=(0, 8))
+            ttk.Button(
+                admin_inner,
+                text="Administrar usuários",
+                command=self._abrir_admin_usuarios,
+                style="Compact.TButton",
+            ).pack(anchor="w")
+
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(4, 0))
         ttk.Button(botoes, text="Fechar", command=self.destroy, style="Delete.TButton").pack(
@@ -299,6 +329,9 @@ class DialogoConfiguracoes(tk.Toplevel):
 
     def _trocar_senha(self):
         DialogoTrocarSenha(self)
+
+    def _abrir_admin_usuarios(self):
+        abrir_dialogo_admin_usuarios(self)
 
     def _atualizar_status(self):
         status = "—"

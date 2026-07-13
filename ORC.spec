@@ -73,6 +73,7 @@ a = Analysis(
         'core.api_config',
         'core.api_exceptions',
         'ui.dialogo_login',
+        'ui.dialogo_admin_usuarios',
         'ui.recarga_catalogo',
         'ui.orcamento_customizado_modulo',
         'ui.selecao_orcamentos_customizado',

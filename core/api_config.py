@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app_paths import dados_usuario_dir
 
-URL_PADRAO = "http://localhost:8000"
+URL_PADRAO = "https://api-orc.indenizacaomcmv.com.br"
 
 
 def api_config_path() -> Path:

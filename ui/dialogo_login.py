@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from core.api_client import reiniciar_cliente
-from core.api_config import carregar_config, salvar_config
+from core.api_config import URL_PADRAO, carregar_config, salvar_config
 from core.api_exceptions import ApiError
 from ui.icones import criar_botao_ttk_com_icone
 from ui.widgets import (
@@ -15,7 +15,6 @@ from ui.widgets import (
     configurar_estilos_ttk,
 )
 
-URL_PADRAO = "http://localhost:8000"
 COR_FUNDO = "#ececec"
 COR_ROTULO = "#555555"
 COR_ERRO = "#c62828"
@@ -57,26 +56,24 @@ class DialogoLogin:
         inner.pack(fill="x")
         inner.columnconfigure(0, weight=1)
 
-        self.var_url = tk.StringVar(value=config.get("base_url", URL_PADRAO))
         self.var_usuario = tk.StringVar(value=config.get("usuario", ""))
         self.var_senha = tk.StringVar(value=config.get("senha", ""))
         self.var_salvar_usuario = tk.BooleanVar(value=bool(config.get("salvar_usuario")))
         self.var_salvar_senha = tk.BooleanVar(value=bool(config.get("salvar_senha")))
 
-        self._campo(inner, "URL da API:", self.var_url, linha=0, largura=40)
-        self._campo(inner, "Usuário:", self.var_usuario, linha=2, largura=28)
+        self._campo(inner, "Usuário:", self.var_usuario, linha=0, largura=28)
         entrada_senha = self._campo(
             inner,
             "Senha:",
             self.var_senha,
-            linha=4,
+            linha=2,
             largura=28,
             mostrar="•",
         )
         entrada_senha.bind("<Return>", lambda _e: self._entrar())
 
         opcoes = tk.Frame(inner, bg=COR_FUNDO_CARTAO)
-        opcoes.grid(row=6, column=0, sticky="w", pady=(10, 0))
+        opcoes.grid(row=4, column=0, sticky="w", pady=(10, 0))
 
         chk_usuario = tk.Checkbutton(
             opcoes,
@@ -213,7 +210,6 @@ class DialogoLogin:
         self._finalizar(False)
 
     def _entrar(self):
-        url = self.var_url.get().strip().rstrip("/") or URL_PADRAO
         usuario = self.var_usuario.get().strip()
         senha = self.var_senha.get()
         if not usuario:
@@ -227,13 +223,13 @@ class DialogoLogin:
         self.root.update_idletasks()
 
         salvar_config(
-            url,
+            URL_PADRAO,
             salvar_usuario=self.var_salvar_usuario.get(),
             salvar_senha=self.var_salvar_senha.get(),
             usuario=usuario,
             senha=senha,
         )
-        cliente = reiniciar_cliente(base_url=url)
+        cliente = reiniciar_cliente(base_url=URL_PADRAO)
         try:
             cliente.verificar_saude()
             cliente.login(usuario, senha)

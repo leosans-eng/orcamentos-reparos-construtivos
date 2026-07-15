@@ -8,7 +8,6 @@ from core.exportacao_planilha_orcamento import (
     exportar_orcamento_customizado_modelo_formatado,
 )
 from core.composicoes_proprias_storage import listar as listar_composicoes_catalogo
-from core.importacao_i9 import importar_planilha_i9
 from core.orcamento_customizado import (
     BDI_PADRAO,
     TIPO_COMPOSICAO_PROPRIA,
@@ -22,16 +21,13 @@ from core.orcamento_customizado import (
     sincronizar_precos_sinapi_no_orcamento,
     subtotal_item,
 )
+from core.orcamento_conversao import dict_para_orcamento
 from core.orcamento_storage import (
     atualizar_orcamento_na_lista,
-    carregar_arquivo,
-    criar_orcamento,
-    dict_para_orcamento,
-    excluir_orcamento,
-    listar_nomes,
+    invalidar_orcamento_cache,
+    obter_cache_orcamento,
     obter_orcamento_dict,
     renomear_orcamento,
-    salvar_arquivo,
 )
 from core.sinapi_busca import (
     TIPO_COMPOSICAO,
@@ -44,18 +40,19 @@ from core.sinapi_busca import (
     pesquisar_sinapi,
     tipo_sinapi_para_filtro,
 )
-from ui.dialogo_importar_i9 import DialogoImportarI9
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
 from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
+from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
+    ControleAtualizacaoPagina,
     aplicar_icone_janela,
     centralizar_janela,
     preparar_toplevel,
-    confirmar_exclusao_com_espera,
     criar_barra_modulo,
     estado_do_combo,
+    focar_entrada_apos_exibir,
     perguntar_texto,
     valores_combo_estado,
     formatar_decimal_br,
@@ -132,8 +129,7 @@ class DialogoEditarQuantidade(tk.Toplevel):
         )
         entrada = ttk.Entry(linha_qtd, textvariable=self.var_quantidade, width=14)
         entrada.pack(side="left", padx=(8, 0))
-        entrada.focus_set()
-        entrada.select_range(0, "end")
+        self._entrada_quantidade = entrada
         entrada.bind("<Return>", lambda _e: self._confirmar())
         entrada.bind("<Escape>", lambda _e: self.destroy())
 
@@ -149,6 +145,7 @@ class DialogoEditarQuantidade(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(self._entrada_quantidade, selecionar=True)
 
     def _confirmar(self):
         self.on_confirmar(self.var_quantidade.get())
@@ -205,7 +202,6 @@ class DialogoTrocarOrdemEtapa(tk.Toplevel):
         )
         self.combo_posicao.pack(side="left", padx=(8, 0), fill="x", expand=True)
         self.combo_posicao.current(indice_inicial)
-        self.combo_posicao.focus_set()
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
@@ -247,9 +243,10 @@ class DialogoNovaEtapa(tk.Toplevel):
         self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
-        self.resizable(False, False)
+        self.resizable(True, False)
+        self.minsize(540, 200)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
         painel.pack(fill="both", expand=True)
 
         tk.Label(
@@ -260,8 +257,8 @@ class DialogoNovaEtapa(tk.Toplevel):
         ).pack(fill="x", pady=(0, 4))
 
         self.var_nome = tk.StringVar()
-        entrada_nome = ttk.Entry(painel, textvariable=self.var_nome, width=44)
-        entrada_nome.pack(fill="x", pady=(0, 12))
+        entrada_nome = ttk.Entry(painel, textvariable=self.var_nome, width=52)
+        entrada_nome.pack(fill="x", pady=(0, 14))
 
         tk.Label(
             painel,
@@ -277,9 +274,9 @@ class DialogoNovaEtapa(tk.Toplevel):
             textvariable=self.var_modelo,
             values=opcoes,
             state="readonly",
-            width=42,
+            width=50,
         )
-        self.combo_modelo.pack(fill="x", pady=(0, 8))
+        self.combo_modelo.pack(fill="x", pady=(0, 10))
         self.combo_modelo.bind("<<ComboboxSelected>>", self._ao_mudar_modelo)
 
         botoes = ttk.Frame(painel)
@@ -295,7 +292,7 @@ class DialogoNovaEtapa(tk.Toplevel):
         self.bind("<Return>", lambda _e: self._confirmar())
         self.update_idletasks()
         centralizar_janela(self, parent)
-        entrada_nome.focus_set()
+        focar_entrada_apos_exibir(entrada_nome)
 
     def _ao_mudar_modelo(self, _event=None):
         modelo = self.var_modelo.get().strip()
@@ -370,6 +367,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(self.entrada_busca)
 
     def _montar(self, estado_inicial):
         painel = tk.Frame(self, bg="#ececec", padx=12, pady=10)
@@ -569,7 +567,6 @@ class DialogoBuscaSinapi(tk.Toplevel):
         if self.ctx.sinapi.empty:
             self.label_status.config(text="Base SINAPI indisponível.", fg="#C62828")
 
-        self.entrada_busca.focus_set()
         self.after_idle(self._ajustar_layout_detalhe)
 
     def _ao_redimensionar(self, event=None):
@@ -850,6 +847,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(self.entrada_busca)
 
     def _montar(self, estado_inicial):
         painel = tk.Frame(self, bg="#ececec", padx=12, pady=10)
@@ -880,9 +878,8 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         )
         self.var_busca = tk.StringVar()
         self.var_busca.trace_add("write", lambda *_a: self._atualizar_lista())
-        ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36).grid(
-            row=1, column=1, padx=4, pady=3, sticky="ew"
-        )
+        self.entrada_busca = ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36)
+        self.entrada_busca.grid(row=1, column=1, padx=4, pady=3, sticky="ew")
 
         if self.mostrar_quantidade:
             tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(
@@ -1061,81 +1058,100 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
 
 
 class OrcamentoCustomizadoFrame(tk.Frame):
-    def __init__(self, parent, ctx, on_voltar):
+    def __init__(self, parent, ctx, on_voltar, *, orcamento_id=None):
         super().__init__(parent, bg="#ececec")
         self.ctx = ctx
         self.on_voltar = on_voltar
-        self._dados_arquivo = carregar_arquivo()
-        self._mapa_combo_ids = {}
+        self._orcamento_id = orcamento_id
         self._trocando_orcamento = False
+        self._orcamento_sujo = False
         self._icone_excel_export = None
         self._icones_botoes = []
-        self.orcamento = self._carregar_orcamento_ativo()
+        self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
+        self._recarregador = RecarregadorCatalogo(
+            self,
+            obter_cache=lambda: obter_cache_orcamento(self.orcamento.id),
+            carregar_rede=lambda: obter_orcamento_dict(self.orcamento.id, forcar_rede=True),
+            ao_aplicar=self._aplicar_orcamento_recarregado,
+            ao_erro=self._ao_erro_recarga_orcamento,
+            ao_inicio=self._ao_inicio_carregamento,
+            ao_fim=self._ao_fim_carregamento,
+        )
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
+
+    def _montar_botao_recarregar_cabecalho(self, parent):
+        self._controle_atualizacao = ControleAtualizacaoPagina(
+            parent,
+            command=self.recarregar_orcamento,
+            refs=self._icones_botoes,
+        )
+
+    def _ao_erro_recarga_orcamento(self, mensagem: str, avisar_erro: bool):
+        if avisar_erro:
+            messagebox.showwarning(
+                "Recarregar",
+                mensagem,
+                parent=self.winfo_toplevel(),
+            )
+
+    def _ao_inicio_carregamento(self):
+        if getattr(self, "_controle_atualizacao", None) is not None:
+            self._controle_atualizacao.definir_ativo(True)
+
+    def _ao_fim_carregamento(self):
+        if getattr(self, "_controle_atualizacao", None) is not None:
+            self._controle_atualizacao.definir_ativo(False)
+
+    def _aplicar_orcamento_recarregado(self, registro: dict):
+        self._orcamento_sujo = False
+        self.orcamento = dict_para_orcamento(registro)
+        self._aplicar_orcamento_na_interface()
+        self._atualizar_grade()
+
+    def recarregar_orcamento(self, *, forcar_rede: bool = True):
+        if self._orcamento_sujo and forcar_rede:
+            if not messagebox.askyesno(
+                "Atualizar orçamento",
+                "Há alterações não salvas. Recarregar do servidor e descartá-las?",
+                parent=self.winfo_toplevel(),
+            ):
+                return
+        self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=True)
 
     def _montar(self):
         self.label_referencia = criar_barra_modulo(
             self,
             "Orçamento Customizado",
-            self.on_voltar,
+            self._voltar_para_selecao,
             texto_referencia=self._texto_referencia(),
+            montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
         )
 
         conteudo = tk.Frame(self, bg="#ececec")
         conteudo.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
-        linha_orc = tk.LabelFrame(
-            conteudo,
-            text="Orçamento salvo",
+        linha_cabecalho = tk.Frame(conteudo, bg="#ececec")
+        linha_cabecalho.pack(fill="x", padx=4, pady=(0, 8))
+
+        self.label_nome_orcamento = tk.Label(
+            linha_cabecalho,
+            text="",
             bg="#ececec",
-            padx=8,
-            pady=6,
+            fg="#006699",
+            font=("Arial", 11, "bold"),
+            anchor="w",
         )
-        linha_orc.pack(fill="x", padx=4, pady=(0, 8))
+        self.label_nome_orcamento.pack(side="left")
 
-        linha_salvo = tk.Frame(linha_orc, bg="#ececec")
-        linha_salvo.pack(fill="x")
-
-        tk.Label(linha_salvo, text="Selecionar:", bg="#ececec").pack(side="left")
-        self.combo_orcamento = ttk.Combobox(
-            linha_salvo, width=50, state="readonly"
-        )
-        self.combo_orcamento.pack(side="left", padx=(4, 8))
-        self.combo_orcamento.bind("<<ComboboxSelected>>", self._ao_trocar_orcamento)
-
-        criar_botao_ttk_com_icone(
-            linha_salvo,
-            texto="Adicionar orçamento",
-            nome_icone="add-circle-outline",
-            command=self._adicionar_orcamento,
-            estilo="Add.Compact.TButton",
-            refs=self._icones_botoes,
-        ).pack(side="left", padx=(0, 4))
         ttk.Button(
-            linha_salvo,
+            linha_cabecalho,
             text="Editar nome do orçamento",
             command=self._renomear_orcamento,
             style="Edit.Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        criar_botao_ttk_com_icone(
-            linha_salvo,
-            texto="Excluir orçamento",
-            nome_icone="trash-outline",
-            command=self._excluir_orcamento,
-            estilo="Delete.Compact.TButton",
-            refs=self._icones_botoes,
-        ).pack(side="left", padx=(0, 4))
-        criar_botao_ttk_com_icone(
-            linha_salvo,
-            texto="Importar i9",
-            nome_icone="attach-outline",
-            command=self._importar_i9,
-            estilo="Compact.TButton",
-            refs=self._icones_botoes,
-        ).pack(side="left", padx=(0, 12))
+        ).pack(side="left", padx=(8, 16))
 
-        frame_direita = tk.Frame(linha_salvo, bg="#ececec")
+        frame_direita = tk.Frame(linha_cabecalho, bg="#ececec")
         frame_direita.pack(side="right")
 
         tk.Label(frame_direita, text="BDI (%):", bg="#ececec").pack(side="left")
@@ -1312,47 +1328,40 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         self.label_total.pack(side="left")
 
-        self._atualizar_combo_orcamentos()
         self._aplicar_orcamento_na_interface()
         self._atualizar_grade()
 
-    def _carregar_orcamento_ativo(self):
-        orc_id = self._dados_arquivo.get("orcamento_ativo_id")
-        dados = obter_orcamento_dict(self._dados_arquivo, orc_id)
-        if dados is None:
-            dados = self._dados_arquivo["orcamentos"][0]
-        return dict_para_orcamento(dados)
+    def definir_orcamento(self, orcamento_id):
+        if orcamento_id and orcamento_id != getattr(self.orcamento, "id", None):
+            if self._orcamento_sujo:
+                if not self._persistir_orcamento_atual():
+                    return
+        self._orcamento_id = orcamento_id
+        self._orcamento_sujo = False
+        self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
+        self._aplicar_orcamento_na_interface()
+        self._atualizar_grade()
 
-    def _atualizar_combo_orcamentos(self):
-        nomes = listar_nomes(self._dados_arquivo)
-        self._mapa_combo_ids = {}
-        valores = []
-        contagem = {}
-        for _oid, nome in nomes:
-            contagem[nome] = contagem.get(nome, 0) + 1
-        for oid, nome in nomes:
-            rotulo = nome if contagem[nome] == 1 else f"{nome} ({oid[:8]})"
-            self._mapa_combo_ids[rotulo] = oid
-            valores.append(rotulo)
-        self.combo_orcamento["values"] = valores
-        rotulo_atual = self._rotulo_orcamento(self.orcamento.id, self.orcamento.nome)
-        if rotulo_atual in valores:
-            self.combo_orcamento.set(rotulo_atual)
-        elif valores:
-            self.combo_orcamento.set(valores[0])
+    def _voltar_para_selecao(self):
+        if self._orcamento_sujo:
+            if not self._persistir_orcamento_atual():
+                return
+        self.on_voltar()
 
-    def _rotulo_orcamento(self, orcamento_id, nome):
-        nomes = listar_nomes(self._dados_arquivo)
-        contagem = {}
-        for _oid, n in nomes:
-            contagem[n] = contagem.get(n, 0) + 1
-        if contagem.get(nome, 0) == 1:
-            return nome
-        return f"{nome} ({orcamento_id[:8]})"
+    def _carregar_orcamento_por_id(self, orcamento_id):
+        registro = obter_orcamento_dict(orcamento_id)
+        if registro is None:
+            raise ValueError(f"Orçamento não encontrado: {orcamento_id}")
+        return dict_para_orcamento(registro)
+
+    def _atualizar_rotulo_nome(self):
+        nome = self.orcamento.nome or "Sem nome"
+        self.label_nome_orcamento.config(text=nome)
 
     def _aplicar_orcamento_na_interface(self):
         self._trocando_orcamento = True
         try:
+            self._atualizar_rotulo_nome()
             estado = self.orcamento.estado_referencia
             if estado and estado in self.ctx.obter_estados():
                 self.combo_estado.set(estado)
@@ -1363,46 +1372,39 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self._trocando_orcamento = False
 
     def _persistir_orcamento_atual(self):
+        if not self._orcamento_sujo:
+            return True
         estado = self._estado_selecionado()
         self.orcamento.definir_estado_referencia(estado)
         try:
             self.orcamento.definir_bdi(self._parse_bdi(self.var_bdi.get()))
         except ValueError:
             pass
-        self._dados_arquivo = atualizar_orcamento_na_lista(self._dados_arquivo, self.orcamento)
-        salvar_arquivo(self._dados_arquivo)
-        self._atualizar_combo_orcamentos()
+        try:
+            atualizar_orcamento_na_lista(self.orcamento)
+            self._orcamento_sujo = False
+            return True
+        except ValueError as exc:
+            self._tratar_erro_salvamento(exc)
+            return False
 
-    def _ao_trocar_orcamento(self, _event=None):
-        if self._trocando_orcamento:
-            return
-        nome = self.combo_orcamento.get().strip()
-        novo_id = self._mapa_combo_ids.get(nome)
-        if not novo_id or novo_id == self.orcamento.id:
-            return
-        self._persistir_orcamento_atual()
-        self._dados_arquivo["orcamento_ativo_id"] = novo_id
-        self.orcamento = self._carregar_orcamento_ativo()
+    def _tratar_erro_salvamento(self, exc: ValueError):
+        mensagem = str(exc)
+        messagebox.showwarning("Orçamento", mensagem, parent=self.winfo_toplevel())
+        if "Recarregue" in mensagem:
+            self._recarregar_do_servidor()
+
+    def _recarregar_do_servidor(self):
+        invalidar_orcamento_cache(self.orcamento.id)
+        self._orcamento_sujo = False
+        self.orcamento = self._carregar_orcamento_por_id(self.orcamento.id)
         self._aplicar_orcamento_na_interface()
         self._atualizar_grade()
 
-    def _adicionar_orcamento(self):
-        nome = perguntar_texto(
-            self.winfo_toplevel(),
-            "Adicionar orçamento",
-            "Nome do novo orçamento:",
-        )
-        if not nome or not nome.strip():
-            return
+    def _registrar_alteracao(self, focar_meta=None):
+        self._orcamento_sujo = True
+        self._preencher_grade(focar_meta)
         self._persistir_orcamento_atual()
-        novo_id = criar_orcamento(self._dados_arquivo, nome)
-        self._dados_arquivo = carregar_arquivo()
-        self._dados_arquivo["orcamento_ativo_id"] = novo_id
-        salvar_arquivo(self._dados_arquivo)
-        self.orcamento = self._carregar_orcamento_ativo()
-        self._atualizar_combo_orcamentos()
-        self._aplicar_orcamento_na_interface()
-        self._atualizar_grade()
 
     def _renomear_orcamento(self):
         nome = perguntar_texto(
@@ -1414,86 +1416,15 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if not nome or not nome.strip():
             return
         try:
-            renomear_orcamento(self._dados_arquivo, self.orcamento.id, nome)
+            registro = renomear_orcamento(self.orcamento.id, nome)
             self.orcamento.definir_nome(nome)
-            self._dados_arquivo = carregar_arquivo()
-            self._atualizar_combo_orcamentos()
-            self.combo_orcamento.set(self._rotulo_orcamento(self.orcamento.id, nome.strip()))
+            self.orcamento.versao = int(registro.get("versao", getattr(self.orcamento, "versao", 1)))
+            self._atualizar_rotulo_nome()
         except ValueError as exc:
-            messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
-
-    def _excluir_orcamento(self):
-        if not confirmar_exclusao_com_espera(
-            self.winfo_toplevel(),
-            "Excluir orçamento",
-            f"Excluir o orçamento \"{self.orcamento.nome}\"?\nEsta ação não pode ser desfeita.",
-            "Excluir orçamento",
-        ):
-            return
-        try:
-            novo_id = excluir_orcamento(self._dados_arquivo, self.orcamento.id)
-            self._dados_arquivo = carregar_arquivo()
-            self._dados_arquivo["orcamento_ativo_id"] = novo_id
-            self.orcamento = self._carregar_orcamento_ativo()
-            self._atualizar_combo_orcamentos()
-            self._aplicar_orcamento_na_interface()
-            self._atualizar_grade()
-        except ValueError as exc:
-            messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
-
-    def _importar_i9(self):
-        def ao_importar(caminho):
-            try:
-                resultado = importar_planilha_i9(
-                    caminho,
-                    listar_composicoes_catalogo(),
-                    self.ctx.sinapi,
-                )
-            except (OSError, ValueError) as exc:
-                messagebox.showerror(
-                    "Importar i9",
-                    str(exc),
-                    parent=self.winfo_toplevel(),
-                )
-                raise
-
-            self._persistir_orcamento_atual()
-            self._dados_arquivo = atualizar_orcamento_na_lista(
-                self._dados_arquivo, resultado.orcamento
-            )
-            salvar_arquivo(self._dados_arquivo)
-            self.orcamento = dict_para_orcamento(
-                obter_orcamento_dict(self._dados_arquivo, resultado.orcamento.id)
-            )
-            self._atualizar_combo_orcamentos()
-            self.combo_orcamento.set(
-                self._rotulo_orcamento(self.orcamento.id, self.orcamento.nome)
-            )
-            self._aplicar_orcamento_na_interface()
-            self._atualizar_grade()
-
-            resumo = (
-                f"Orçamento \"{self.orcamento.nome}\" importado com sucesso.\n"
-                f"{resultado.grupos_importados} etapa(s) e "
-                f"{resultado.itens_importados} item(ns) adicionados."
-            )
-            if resultado.avisos:
-                avisos = "\n".join(f"• {aviso}" for aviso in resultado.avisos[:8])
-                if len(resultado.avisos) > 8:
-                    avisos += f"\n• ... e mais {len(resultado.avisos) - 8} aviso(s)."
-                messagebox.showwarning(
-                    "Importar i9",
-                    f"{resumo}\n\nAvisos:\n{avisos}",
-                    parent=self.winfo_toplevel(),
-                )
-            else:
-                messagebox.showinfo(
-                    "Importar i9",
-                    resumo,
-                    parent=self.winfo_toplevel(),
-                )
-
-        DialogoImportarI9(self.winfo_toplevel(), on_importar=ao_importar)
+            mensagem = str(exc)
+            messagebox.showwarning("Orçamento", mensagem, parent=self.winfo_toplevel())
+            if "Recarregue" in mensagem:
+                self._recarregar_do_servidor()
 
     def _texto_referencia(self):
         ref = self.ctx.sinapi_referencia_rotulo
@@ -1521,13 +1452,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError:
             return
         self.orcamento.definir_bdi(bdi)
-        self._atualizar_grade()
+        self._registrar_alteracao()
 
     def _ao_mudar_estado(self, _event=None):
         if self._trocando_orcamento:
             return
         self.orcamento.definir_estado_referencia(self._estado_selecionado())
-        self._atualizar_grade()
+        self._registrar_alteracao()
 
     def _estado_selecionado(self):
         return estado_do_combo(self.combo_estado.get())
@@ -1564,7 +1495,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Adicionar item", str(exc), parent=self.winfo_toplevel())
             return None
-        self._atualizar_grade(
+        self._registrar_alteracao(
             focar_meta={
                 "tipo": TIPO_SINAPI,
                 "id": item_id,
@@ -1717,7 +1648,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     parent=self.winfo_toplevel(),
                 )
 
-            self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+            self._registrar_alteracao(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
             return True
 
         DialogoNovaEtapa(self.winfo_toplevel(), modelos, ao_confirmar)
@@ -1757,7 +1688,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "Composição própria", str(exc), parent=self.winfo_toplevel()
                 )
                 return
-            self._atualizar_grade(
+            self._registrar_alteracao(
                 focar_meta={
                     "tipo": TIPO_COMPOSICAO_PROPRIA,
                     "id": item_id,
@@ -1792,6 +1723,9 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             "Editar nome da etapa",
             "Novo nome da etapa:",
             valor_inicial=grupo["nome"],
+            largura_entrada=52,
+            minsize=(540, 110),
+            padding=(20, 16),
         )
         if not nome or not nome.strip():
             return
@@ -1800,7 +1734,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
             return
-        self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+        self._registrar_alteracao(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
 
     def _trocar_ordem_etapa(self, grupo_id=None):
         if not grupo_id:
@@ -1841,7 +1775,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     parent=self.winfo_toplevel(),
                 )
                 return
-            self._atualizar_grade(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+            self._registrar_alteracao(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
 
         DialogoTrocarOrdemEtapa(
             self.winfo_toplevel(),
@@ -1867,7 +1801,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Item", str(exc), parent=self.winfo_toplevel())
             return
-        self._atualizar_grade(
+        self._registrar_alteracao(
             focar_meta={"tipo": meta["tipo"], "id": item_id, "grupo_id": meta.get("grupo_id")}
         )
 
@@ -1928,7 +1862,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ):
                 return
             self.orcamento.remover_grupo(grupos[0]["id"])
-            self._atualizar_grade(focar_meta=[])
+            self._registrar_alteracao(focar_meta=[])
             return
 
         if len(itens) > 1:
@@ -1942,7 +1876,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         for meta in itens:
             self.orcamento.remover_item(meta["id"])
 
-        self._atualizar_grade(focar_meta=[])
+        self._registrar_alteracao(focar_meta=[])
 
     def _dialogo_editar_quantidade(self, item_id):
         grupo, item = self.orcamento.obter_item(item_id)
@@ -1957,7 +1891,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "Quantidade", str(exc), parent=self.winfo_toplevel()
                 )
                 return
-            self._atualizar_grade(
+            self._registrar_alteracao(
                 focar_meta={
                     "tipo": item["tipo"],
                     "id": item_id,
@@ -2031,7 +1965,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             except ValueError as exc:
                 messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
                 return
-            self._atualizar_grade(
+            self._registrar_alteracao(
                 focar_meta={
                     "tipo": TIPO_SINAPI,
                     "id": item_id,
@@ -2051,7 +1985,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             except ValueError as exc:
                 messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
                 return
-            self._atualizar_grade(
+            self._registrar_alteracao(
                 focar_meta={
                     "tipo": TIPO_COMPOSICAO_PROPRIA,
                     "id": item_id,
@@ -2118,8 +2052,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             )
         else:
             return
-
-        self._persistir_orcamento_atual()
 
     def _atualizar_grade(self, focar_meta=None):
         self._preencher_grade(focar_meta=focar_meta)
@@ -2253,7 +2185,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             )
         )
         self.grade.finalizar_reconstrucao(fracao, selecoes)
-        self._persistir_orcamento_atual()
 
     def focar(self):
-        pass
+        self.recarregar_orcamento(forcar_rede=False)

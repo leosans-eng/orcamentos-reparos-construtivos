@@ -8,6 +8,7 @@ import subprocess
 import ssl
 import tempfile
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -166,7 +167,7 @@ def download_file(
 
 
 class UpdateDialog(tk.Toplevel):
-    def __init__(self, root: tk.Tk, info: dict, app_version: str):
+    def __init__(self, root: tk.Misc, info: dict, app_version: str):
         super().__init__(root)
         preparar_toplevel(self)
         self.root = root
@@ -216,25 +217,39 @@ class UpdateDialog(tk.Toplevel):
         ttk.Button(
             buttons, text="Abrir pasta", command=self.open_download_folder
         ).pack(side="left", padx=(0, 6))
-        ttk.Button(buttons, text="Depois", command=self.close_dialog).pack(side="right")
+        ttk.Button(
+            buttons,
+            text="Depois",
+            command=lambda: self.close_dialog(recusar=True),
+        ).pack(side="right")
 
-        self.protocol("WM_DELETE_WINDOW", self.close_dialog)
+        self.protocol(
+            "WM_DELETE_WINDOW",
+            lambda: self.close_dialog(recusar=True),
+        )
         self.update_idletasks()
-        self._center_on_parent(root)
+        centralizar_janela(self, root)
 
         self.after(200, self.start_download)
 
-    def _center_on_parent(self, parent: tk.Tk) -> None:
-        centralizar_janela(self, parent)
-
-    def close_dialog(self) -> None:
+    def close_dialog(self, *, recusar: bool = True) -> None:
         self._cancelled = True
-        self.grab_release()
+        if recusar:
+            marcar_atualizacao_adiada()
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
         self.destroy()
 
     def start_download(self) -> None:
-        thread = threading.Thread(target=self._download_worker, daemon=True)
-        thread.start()
+        # Reaproveita download já completo (ex.: login → hub → logout → login).
+        destination = resolve_download_destination(self.info["download"])
+        if destination.is_file() and destination.stat().st_size > 0:
+            self.download_path = destination
+            self._on_download_success()
+            return
+        threading.Thread(target=self._download_worker, daemon=True).start()
 
     def _download_worker(self) -> None:
         destination = resolve_download_destination(self.info["download"])
@@ -252,8 +267,9 @@ class UpdateDialog(tk.Toplevel):
                     text = "Baixando instalador..."
                     mode = "indeterminate"
                     value = 0
-                self.root.after(
-                    0, lambda t=text, m=mode, v=value: self._update_progress(t, m, v)
+                # Agendar no próprio diálogo (não no parent Tk que pode ter morrido).
+                self._agendar_ui(
+                    lambda t=text, m=mode, v=value: self._update_progress(t, m, v)
                 )
 
             download_file(
@@ -267,11 +283,19 @@ class UpdateDialog(tk.Toplevel):
             if not destination.is_file() or destination.stat().st_size == 0:
                 raise OSError("O arquivo baixado está vazio ou não foi criado.")
             self.download_path = destination
-            self.root.after(0, self._on_download_success)
+            self._agendar_ui(self._on_download_success)
         except Exception as exc:
             if not self._cancelled:
                 message = format_download_error(exc)
-                self.root.after(0, lambda msg=message: self._on_download_error(msg))
+                self._agendar_ui(lambda msg=message: self._on_download_error(msg))
+
+    def _agendar_ui(self, callback: Callable[[], None]) -> None:
+        try:
+            if not self.winfo_exists():
+                return
+            self.after(0, callback)
+        except (tk.TclError, RuntimeError):
+            pass
 
     def _update_progress(
         self, text: str, mode: Literal["determinate", "indeterminate"], value: int
@@ -327,12 +351,17 @@ class UpdateDialog(tk.Toplevel):
                 "Erro", f"Não foi possível abrir o instalador:\n{exc}", parent=self
             )
             return
-        self.close_dialog()
-        messagebox.showinfo(
-            "Instalação",
-            "O instalador foi aberto. Feche este programa antes de concluir a instalação.",
-            parent=self.root,
-        )
+        parent = self.root
+        self.close_dialog(recusar=False)
+        try:
+            if parent.winfo_exists():
+                messagebox.showinfo(
+                    "Instalação",
+                    "O instalador foi aberto. Feche este programa antes de concluir a instalação.",
+                    parent=parent,
+                )
+        except tk.TclError:
+            pass
 
     def open_download_folder(self) -> None:
         if not self.download_path:
@@ -344,21 +373,197 @@ class UpdateDialog(tk.Toplevel):
             subprocess.Popen(["xdg-open", str(folder)])
 
 
-def check_for_updates(root: tk.Tk, app_version: str, *, url: str = VERSION_JSON_URL) -> None:
+def check_for_updates(
+    root: tk.Misc, app_version: str, *, url: str = VERSION_JSON_URL
+) -> None:
+    """Atalho: inicia (ou continua) a verificação amarrada a ``root``."""
+    iniciar_verificacao_atualizacao(root, app_version, url=url)
+
+
+def marcar_atualizacao_adiada() -> None:
+    """Usuário clicou em Depois / fechou o diálogo — não oferecer de novo nesta sessão."""
+    with _coordenador_lock:
+        if _coordenador is not None:
+            _coordenador.marcar_adiada()
+
+
+def reiniciar_coordenador_atualizacao() -> None:
+    """Cancela polls e limpa o parent ao destruir a janela (logout)."""
+    with _coordenador_lock:
+        if _coordenador is not None:
+            _coordenador.desligar_ui()
+
+
+def iniciar_verificacao_atualizacao(
+    root: tk.Misc,
+    app_version: str,
+    *,
+    url: str = VERSION_JSON_URL,
+) -> None:
+    """
+    Inicia a busca de atualização (se ainda não começou) e registra ``root``
+    como janela onde o diálogo deve aparecer.
+
+    Pode ser chamado várias vezes (login, depois hub): a busca não se repete;
+    se o usuário adiar (Depois), o aviso não volta até reiniciar o processo.
+    """
     if os.environ.get("SKIP_UPDATE_CHECK", "").strip() in ("1", "true", "yes"):
         return
 
-    def worker() -> None:
+    global _coordenador
+    with _coordenador_lock:
+        if _coordenador is None or _coordenador.app_version != app_version:
+            _coordenador = _UpdateCheckCoordinator(app_version, url=url)
+        coordenador = _coordenador
+
+    coordenador.registrar_janela(root)
+
+
+class _UpdateCheckCoordinator:
+    """
+    Uma única busca em thread de rede.
+
+    A abertura do diálogo é feita só via poll na thread da UI (`after`),
+    porque Tk não permite `after`/`winfo_exists` chamados de outra thread.
+    """
+
+    _POLL_MS = 200
+    _ATRASO_INICIAL_SEC = 1.5
+
+    def __init__(self, app_version: str, *, url: str = VERSION_JSON_URL):
+        self.app_version = app_version
+        self.url = url
+        self._lock = threading.Lock()
+        self._parent: tk.Misc | None = None
+        self._info: dict | None = None
+        self._busca_iniciada = False
+        self._busca_concluida = False
+        self._adiada = False
+        self._ja_oferecida = False
+        self._dialogo: UpdateDialog | None = None
+        self._poll_id: str | None = None
+        self._poll_parent: tk.Misc | None = None
+
+    def marcar_adiada(self) -> None:
+        with self._lock:
+            self._adiada = True
+            self._ja_oferecida = True
+            self._dialogo = None
+        self._cancelar_poll()
+
+    def desligar_ui(self) -> None:
+        """Solta a janela atual sem descartar o resultado da busca."""
+        self._cancelar_poll()
+        with self._lock:
+            self._parent = None
+            self._dialogo = None
+
+    def _cancelar_poll(self) -> None:
+        poll_id = self._poll_id
+        poll_parent = self._poll_parent
+        self._poll_id = None
+        self._poll_parent = None
+        if poll_id is None or poll_parent is None:
+            return
         try:
-            info = fetch_remote_version_info(app_version, url)
-            if info and is_remote_newer(info["version"], app_version):
-                root.after(0, lambda: UpdateDialog(root, info, app_version))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
+            poll_parent.after_cancel(poll_id)
+        except (tk.TclError, ValueError):
             pass
 
-    threading.Thread(target=worker, daemon=True).start()
+    def _janela_viva(self, widget: tk.Misc | None) -> bool:
+        if widget is None:
+            return False
+        try:
+            return bool(widget.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def _dialogo_esta_visivel(self) -> bool:
+        return self._janela_viva(self._dialogo)
+
+    def registrar_janela(self, parent: tk.Misc) -> None:
+        with self._lock:
+            self._parent = parent
+            if self._adiada or self._ja_oferecida:
+                return
+
+        self._iniciar_busca_se_preciso()
+        self._iniciar_poll(parent)
+
+    def _iniciar_busca_se_preciso(self) -> None:
+        with self._lock:
+            if self._busca_iniciada:
+                return
+            self._busca_iniciada = True
+        threading.Thread(target=self._worker, daemon=True).start()
+
+    def _worker(self) -> None:
+        time.sleep(self._ATRASO_INICIAL_SEC)
+        info = None
+        try:
+            remoto = fetch_remote_version_info(self.app_version, self.url)
+            if remoto and is_remote_newer(remoto["version"], self.app_version):
+                info = remoto
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            OSError,
+            ValueError,
+        ):
+            info = None
+
+        with self._lock:
+            self._info = info
+            self._busca_concluida = True
+
+    def _iniciar_poll(self, parent: tk.Misc) -> None:
+        self._cancelar_poll()
+
+        if not self._janela_viva(parent):
+            return
+
+        self._poll_parent = parent
+
+        def tick() -> None:
+            self._poll_id = None
+            try:
+                if not self._janela_viva(parent):
+                    return
+
+                with self._lock:
+                    if self._adiada or self._ja_oferecida:
+                        return
+                    alvo = self._parent
+                    info = self._info
+                    concluida = self._busca_concluida
+                    dialogo_visivel = self._dialogo_esta_visivel()
+
+                if alvo is not parent:
+                    return
+
+                if info is not None and not dialogo_visivel:
+                    try:
+                        dialogo = UpdateDialog(parent, info, self.app_version)
+                        with self._lock:
+                            self._dialogo = dialogo
+                            self._ja_oferecida = True
+                    except (tk.TclError, RuntimeError):
+                        with self._lock:
+                            self._dialogo = None
+                    return
+
+                if not concluida:
+                    self._poll_id = parent.after(self._POLL_MS, tick)
+            except (tk.TclError, RuntimeError):
+                return
+
+        try:
+            self._poll_id = parent.after(self._POLL_MS, tick)
+        except (tk.TclError, RuntimeError):
+            self._poll_id = None
+            self._poll_parent = None
 
 
-def iniciar_verificacao_atualizacao(root: tk.Tk, app_version: str) -> None:
-    """Agenda verificação de atualização após a interface abrir."""
-    root.after(2000, lambda: check_for_updates(root, app_version))
+_coordenador: _UpdateCheckCoordinator | None = None
+_coordenador_lock = threading.Lock()

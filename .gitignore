@@ -16,4 +16,9 @@ sinapi/teste.py
 sinapi/status.json
 *status.json
 docs/
-dados_usuario/
+dados_usuario/orc_api.json
+dados_usuario/orc_sessao.json
+api/orc_dev.db
+api/.env
+api/backups/
+api/

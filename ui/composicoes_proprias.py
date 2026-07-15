@@ -16,14 +16,20 @@ from core.composicoes_proprias_storage import (
     criar,
     excluir,
     listar,
+    obter_cache_catalogo,
     obter_estado_previa_custos,
     obter_por_id,
     salvar_estado_previa_custos,
 )
-from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
+from ui.icones import (
+    criar_botao_inserir_prominente,
+    criar_botao_ttk_com_icone,
+)
 from ui.orcamento_customizado import DialogoBuscaSinapi
+from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
+    ControleAtualizacaoPagina,
     aplicar_icone_janela,
     centralizar_janela,
     confirmar_exclusao_com_espera,
@@ -34,6 +40,7 @@ from ui.widgets import (
     perguntar_texto,
     preparar_toplevel,
     valores_combo_estado,
+    focar_entrada_apos_exibir,
 )
 
 COR_DEPRECIADO = "#fff8e1"
@@ -70,13 +77,17 @@ class DialogoComponenteMercado(tk.Toplevel):
             ("Coeficiente:", "coeficiente"),
         ]
         self.vars = {}
+        self._entrada_inicial = None
         for rotulo, chave in campos:
             linha = tk.Frame(painel, bg="#ececec")
             linha.pack(fill="x", pady=3)
             tk.Label(linha, text=rotulo, width=22, anchor="w", bg="#ececec").pack(side="left")
             var = tk.StringVar(value="1" if chave == "coeficiente" else "")
             self.vars[chave] = var
-            ttk.Entry(linha, textvariable=var, width=36).pack(side="left", fill="x", expand=True)
+            entrada = ttk.Entry(linha, textvariable=var, width=36)
+            entrada.pack(side="left", fill="x", expand=True)
+            if self._entrada_inicial is None:
+                self._entrada_inicial = entrada
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(12, 0))
@@ -90,6 +101,8 @@ class DialogoComponenteMercado(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        if self._entrada_inicial is not None:
+            focar_entrada_apos_exibir(self._entrada_inicial)
 
     def _parse_float(self, texto):
         return float(str(texto).strip().replace(",", "."))
@@ -171,7 +184,7 @@ class DialogoNovaComposicao(tk.Toplevel):
         self.bind("<Return>", lambda _e: self._confirmar())
         self.update_idletasks()
         centralizar_janela(self, parent)
-        self._entrada_inicial.focus_set()
+        focar_entrada_apos_exibir(self._entrada_inicial)
 
     def _confirmar(self):
         codigo = self.vars["codigo"].get().strip()
@@ -210,9 +223,24 @@ class ComposicoesPropriasFrame(tk.Frame):
         super().__init__(parent, bg="#ececec")
         self.ctx = ctx
         self.on_voltar = on_voltar
-        self._dados = carregar()
+        self._dados = {
+            "versao": 1,
+            "composicoes": [],
+            "estado_previa_custos": ESTADO_PREVIA_PADRAO,
+        }
         self._composicao_editando_id = None
         self._icones_botoes = []
+        self._atualizando_lista = False
+        self._suprimir_selecao = False
+        self._recarregador = RecarregadorCatalogo(
+            self,
+            obter_cache=obter_cache_catalogo,
+            carregar_rede=carregar,
+            ao_aplicar=self._aplicar_dados_catalogo,
+            ao_erro=self._ao_erro_recarga_catalogo,
+            ao_inicio=self._ao_inicio_carregamento,
+            ao_fim=self._ao_fim_carregamento,
+        )
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -222,12 +250,46 @@ class ComposicoesPropriasFrame(tk.Frame):
             return "Base não carregada"
         return f"Referência SINAPI: {ref}"
 
+    def _montar_botao_recarregar_cabecalho(self, parent):
+        self._controle_atualizacao = ControleAtualizacaoPagina(
+            parent,
+            command=self.recarregar_catalogo,
+            refs=self._icones_botoes,
+        )
+
+    def _ao_erro_recarga_catalogo(self, mensagem: str, avisar_erro: bool):
+        if avisar_erro:
+            messagebox.showwarning(
+                "Recarregar",
+                mensagem,
+                parent=self.winfo_toplevel(),
+            )
+
+    def _ao_inicio_carregamento(self):
+        if getattr(self, "_controle_atualizacao", None) is not None:
+            self._controle_atualizacao.definir_ativo(True)
+
+    def _ao_fim_carregamento(self):
+        if getattr(self, "_controle_atualizacao", None) is not None:
+            self._controle_atualizacao.definir_ativo(False)
+
+    def _aplicar_dados_catalogo(self, dados: dict):
+        self._dados = dados
+        self._atualizar_listas(calcular_custos_lista=False)
+
+    def recarregar_catalogo(self, *, forcar_rede: bool = True):
+        self._recarregador.solicitar(forcar_rede=forcar_rede, avisar_erro=True)
+
+    def _liberar_supressao_selecao(self):
+        self._suprimir_selecao = False
+
     def _montar(self):
         self.label_referencia = criar_barra_modulo(
             self,
             "Configurar Composições Próprias",
             self.on_voltar,
             texto_referencia=self._texto_referencia(),
+            montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
         )
 
         conteudo = tk.Frame(self, bg="#ececec")
@@ -379,9 +441,86 @@ class ComposicoesPropriasFrame(tk.Frame):
             command=self._remover_componente,
             estilo="Delete.Compact.TButton",
             refs=self._icones_botoes,
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_bt_cmp,
+            text="Item ↑",
+            command=lambda: self._mover_componente(-1),
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_bt_cmp,
+            text="Item ↓",
+            command=lambda: self._mover_componente(1),
+            style="Compact.TButton",
         ).pack(side="left")
 
-        self._atualizar_lista_composicoes()
+    def _atualizar_lista_composicoes(self, *, calcular_custos=True):
+        self._suprimir_selecao = True
+        self._atualizando_lista = True
+        try:
+            selecionado = self._composicao_editando_id
+            self.tree_composicoes.delete(*self.tree_composicoes.get_children())
+            estado = self._estado_selecionado()
+            primeiro_id = None
+            for comp in self._filtrar_composicoes():
+                iid = comp["id"]
+                if primeiro_id is None:
+                    primeiro_id = iid
+                if calcular_custos and estado:
+                    custo, _ = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
+                    custo_txt = _formatar_moeda(custo)
+                elif calcular_custos:
+                    custo_txt = "—"
+                else:
+                    custo_txt = "…"
+                self.tree_composicoes.insert(
+                    "",
+                    "end",
+                    iid=iid,
+                    values=(
+                        comp.get("codigo", ""),
+                        comp.get("nome", ""),
+                        comp.get("unidade", ""),
+                        custo_txt,
+                    ),
+                )
+            if selecionado and self.tree_composicoes.exists(selecionado):
+                self.tree_composicoes.selection_set(selecionado)
+                self.tree_composicoes.focus(selecionado)
+                self._carregar_composicao_na_edicao(selecionado)
+            elif primeiro_id:
+                self.tree_composicoes.selection_set(primeiro_id)
+                self._carregar_composicao_na_edicao(primeiro_id)
+        finally:
+            self._atualizando_lista = False
+            self.after_idle(self._liberar_supressao_selecao)
+        if not calcular_custos:
+            self.after_idle(self._completar_custos_lista_composicoes)
+
+    def _completar_custos_lista_composicoes(self):
+        estado = self._estado_selecionado()
+        for iid in self.tree_composicoes.get_children():
+            comp = obter_por_id(iid, self._dados)
+            if comp is None:
+                continue
+            if estado:
+                custo, _ = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
+                custo_txt = _formatar_moeda(custo)
+            else:
+                custo_txt = "—"
+            valores = list(self.tree_composicoes.item(iid, "values"))
+            if len(valores) >= 4:
+                valores[3] = custo_txt
+                self.tree_composicoes.item(iid, values=valores)
+
+    def _ao_selecionar_composicao(self, _event=None):
+        if self._atualizando_lista or self._suprimir_selecao:
+            return
+        selecionado = self.tree_composicoes.selection()
+        if not selecionado:
+            return
+        self._carregar_composicao_na_edicao(selecionado[0])
 
     def _estado_selecionado(self):
         return estado_do_combo(self.combo_estado.get())
@@ -410,8 +549,8 @@ class ComposicoesPropriasFrame(tk.Frame):
             self._aplicar_estado_previa_inicial(estados)
         self._atualizar_listas()
 
-    def _atualizar_listas(self, _event=None):
-        self._atualizar_lista_composicoes()
+    def _atualizar_listas(self, _event=None, *, calcular_custos_lista=True):
+        self._atualizar_lista_composicoes(calcular_custos=calcular_custos_lista)
         self._atualizar_componentes()
 
     def _filtrar_composicoes(self):
@@ -426,40 +565,6 @@ class ComposicoesPropriasFrame(tk.Frame):
             if texto in codigo or texto in nome:
                 filtradas.append(comp)
         return filtradas
-
-    def _atualizar_lista_composicoes(self):
-        selecionado = self._composicao_editando_id
-        self.tree_composicoes.delete(*self.tree_composicoes.get_children())
-        estado = self._estado_selecionado()
-        primeiro_id = None
-        for comp in self._filtrar_composicoes():
-            custo, _ = calcular_custo_unitario(comp, self.ctx.sinapi, estado)
-            iid = comp["id"]
-            if primeiro_id is None:
-                primeiro_id = iid
-            self.tree_composicoes.insert(
-                "",
-                "end",
-                iid=iid,
-                values=(
-                    comp.get("codigo", ""),
-                    comp.get("nome", ""),
-                    comp.get("unidade", ""),
-                    _formatar_moeda(custo) if estado else "—",
-                ),
-            )
-        if selecionado and self.tree_composicoes.exists(selecionado):
-            self.tree_composicoes.selection_set(selecionado)
-            self.tree_composicoes.focus(selecionado)
-        elif primeiro_id:
-            self.tree_composicoes.selection_set(primeiro_id)
-            self._carregar_composicao_na_edicao(primeiro_id)
-
-    def _ao_selecionar_composicao(self, _event=None):
-        selecionado = self.tree_composicoes.selection()
-        if not selecionado:
-            return
-        self._carregar_composicao_na_edicao(selecionado[0])
 
     def _carregar_composicao_na_edicao(self, composicao_id):
         comp = obter_por_id(composicao_id, self._dados)
@@ -535,9 +640,49 @@ class ComposicoesPropriasFrame(tk.Frame):
             atualizar(comp, self._dados)
         except ValueError as exc:
             messagebox.showwarning("Salvar", str(exc), parent=self.winfo_toplevel())
+            if "Recarregue" in str(exc):
+                self.recarregar_catalogo()
             return
         self._dados = carregar()
         self._atualizar_listas()
+
+    def _mover_componente(self, delta):
+        comp = self._composicao_em_edicao()
+        if comp is None:
+            return
+        selecionado = self.tree_componentes.selection()
+        if not selecionado:
+            messagebox.showinfo(
+                "Mover componente",
+                "Selecione um componente na lista.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        comp_id = selecionado[0]
+        componentes = comp.get("componentes", [])
+        indice = next(
+            (i for i, item in enumerate(componentes) if item.get("id") == comp_id),
+            -1,
+        )
+        if indice < 0:
+            return
+        novo_indice = indice + delta
+        if novo_indice < 0 or novo_indice >= len(componentes):
+            return
+        componentes[indice], componentes[novo_indice] = (
+            componentes[novo_indice],
+            componentes[indice],
+        )
+        try:
+            atualizar(comp, self._dados)
+        except ValueError as exc:
+            messagebox.showwarning("Mover componente", str(exc), parent=self.winfo_toplevel())
+            return
+        self._dados = carregar()
+        self._atualizar_componentes()
+        if self.tree_componentes.exists(comp_id):
+            self.tree_componentes.selection_set(comp_id)
+            self.tree_componentes.focus(comp_id)
 
     def _excluir_composicao(self):
         comp = self._composicao_em_edicao()
@@ -665,4 +810,4 @@ class ComposicoesPropriasFrame(tk.Frame):
         self._atualizar_listas()
 
     def focar(self):
-        pass
+        self.recarregar_catalogo(forcar_rede=False)

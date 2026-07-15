@@ -1,0 +1,881 @@
+{
+  "versao": 5,
+  "estado_previa_custos": "SP",
+  "composicoes": [
+    {
+      "id": "8eb3a911-15dd-4705-a1ee-9f52f354d258",
+      "codigo": "0024",
+      "nome": "VEDAÇÃO DE JANELAS COM SELANTE À BASE DE POLIURETANO",
+      "unidade": "M",
+      "componentes": [
+        {
+          "id": "5be024ea-d490-4fd0-8264-f0c05d29bf02",
+          "tipo": "sinapi",
+          "codigo": "142",
+          "descricao": "SELANTE ELASTICO MONOCOMPONENTE A BASE DE POLIURETANO (PU) PARA JUNTAS DIVERSAS",
+          "unidade": "310ML",
+          "coeficiente": 0.34,
+          "custo_unitario": null
+        },
+        {
+          "id": "fc291727-587e-41f1-81d3-be91d0055d05",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.17,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "6fb8952e-ed0e-4d4f-8279-45a530ae7de6",
+      "codigo": "0033",
+      "nome": "CAIXA DE AREIA 40X40X40CM EM ALVENARIA - EXECUÇÃO",
+      "unidade": "UN",
+      "componentes": [
+        {
+          "id": "bde4ddb4-fe54-48b0-a612-a9992b8b94a9",
+          "tipo": "sinapi",
+          "codigo": "370",
+          "descricao": "AREIA MEDIA - POSTO JAZIDA/FORNECEDOR (RETIRADO NA JAZIDA, SEM TRANSPORTE)",
+          "unidade": "M3",
+          "coeficiente": 0.11,
+          "custo_unitario": null
+        },
+        {
+          "id": "9c25fbd3-ec88-4f0c-b4eb-305269ff04ff",
+          "tipo": "sinapi",
+          "codigo": "4721",
+          "descricao": "PEDRA BRITADA N. 1 (9,5 a 19 MM) POSTO PEDREIRA/FORNECEDOR, SEM FRETE",
+          "unidade": "M3",
+          "coeficiente": 0.031,
+          "custo_unitario": null
+        },
+        {
+          "id": "8202b667-416a-4df4-bbe0-434fa60c135b",
+          "tipo": "sinapi",
+          "codigo": "7271",
+          "descricao": "BLOCO CERAMICO / TIJOLO VAZADO PARA ALVENARIA DE VEDACAO, 8 FUROS NA HORIZONTAL DE 9 X 19 X 19 CM (L X A X C)",
+          "unidade": "UN",
+          "coeficiente": 20.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "9796d9d0-e5d8-4cdc-b96c-d52ad2d49526",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 2.07,
+          "custo_unitario": null
+        },
+        {
+          "id": "f9f3782c-3dc2-41ee-a3d9-a92cabfc0906",
+          "tipo": "sinapi",
+          "codigo": "1379",
+          "descricao": "CIMENTO PORTLAND COMPOSTO CP II-32",
+          "unidade": "KG",
+          "coeficiente": 0.41,
+          "custo_unitario": null
+        },
+        {
+          "id": "2f9f0e5e-b4cf-4ae7-9724-57fc20c0ba85",
+          "tipo": "sinapi",
+          "codigo": "88309",
+          "descricao": "PEDREIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.98,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "c0321236-2b56-4b5f-aa89-4375a58f21a3",
+      "codigo": "0040",
+      "nome": "TRATAMENTO DE TRINCAS COM RESINA ACRILICA",
+      "unidade": "M",
+      "componentes": [
+        {
+          "id": "94ca09ae-086b-49ae-8e80-6162d69a05c3",
+          "tipo": "sinapi",
+          "codigo": "5318",
+          "descricao": "DILUENTE AGUARRAS",
+          "unidade": "L",
+          "coeficiente": 0.12,
+          "custo_unitario": null
+        },
+        {
+          "id": "1f96c8dc-b0c1-49f2-81bc-711b6b838bf0",
+          "tipo": "sinapi",
+          "codigo": "37458",
+          "descricao": "MANGUEIRA CRISTAL, LISA, PVC TRANSPARENTE, 1/2\" X 2 MM",
+          "unidade": "M",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "e07af441-2918-41be-919e-08ee70b4dc1b",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.33,
+          "custo_unitario": null
+        },
+        {
+          "id": "7183a554-7549-4344-befe-988b96d6d3c9",
+          "tipo": "mercado",
+          "codigo": "0014",
+          "descricao": "SELANTE A BASE DE RESINAS ACRILICAS PARA TRINCAS",
+          "unidade": "KG",
+          "coeficiente": 0.3,
+          "custo_unitario": 25.0
+        },
+        {
+          "id": "e62ee0cf-27bc-4524-88b5-32e5338eadde",
+          "tipo": "sinapi",
+          "codigo": "88309",
+          "descricao": "PEDREIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.33,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "29ae9130-7401-442b-955e-f6cbc520971c",
+      "codigo": "12",
+      "nome": "RAMPA DE ACESSO COM PISO PODOTÁTIL",
+      "unidade": "M2",
+      "componentes": [
+        {
+          "id": "beedae86-b6ce-4430-ae1e-32308eac9ca8",
+          "tipo": "sinapi",
+          "codigo": "3777",
+          "descricao": "LONA PLASTICA PESADA PRETA, E = 150 MICRA",
+          "unidade": "M2",
+          "coeficiente": 1.128,
+          "custo_unitario": null
+        },
+        {
+          "id": "10bcab27-9a09-47cf-9f96-9f497b417023",
+          "tipo": "sinapi",
+          "codigo": "4517",
+          "descricao": "SARRAFO *2,5 X 7,5* CM EM PINUS, MISTA OU EQUIVALENTE DA REGIAO - BRUTA",
+          "unidade": "M",
+          "coeficiente": 0.2,
+          "custo_unitario": null
+        },
+        {
+          "id": "ca5e8252-f254-4809-ae30-a1d978b046d8",
+          "tipo": "sinapi",
+          "codigo": "6189",
+          "descricao": "TABUA NAO APARELHADA *2,5 X 30* CM, EM MACARANDUBA/MASSARANDUBA, ANGELIM OU EQUIVALENTE DA REGIAO - BRUTA",
+          "unidade": "M",
+          "coeficiente": 0.125,
+          "custo_unitario": null
+        },
+        {
+          "id": "5b37584d-448a-4d28-ba40-3e748c960026",
+          "tipo": "sinapi",
+          "codigo": "7156",
+          "descricao": "TELA DE ACO SOLDADA NERVURADA, CA-60, Q-196, (3,11 KG/M2), DIAMETRO DO FIO = 5,0 MM, LARGURA = 2,45 M, ESPACAMENTO DA MALHA = 10 X 10 CM",
+          "unidade": "M2",
+          "coeficiente": 1.1224,
+          "custo_unitario": null
+        },
+        {
+          "id": "1156f009-49c9-4cdc-91c5-399b952c47df",
+          "tipo": "sinapi",
+          "codigo": "88262",
+          "descricao": "CARPINTEIRO DE FORMAS COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.2707,
+          "custo_unitario": null
+        },
+        {
+          "id": "7ea768d4-ebd0-4da4-a854-0154bdf5b30f",
+          "tipo": "sinapi",
+          "codigo": "88309",
+          "descricao": "PEDREIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.3866,
+          "custo_unitario": null
+        },
+        {
+          "id": "19bb38be-20f4-471c-9212-d2eadc6db392",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.6574,
+          "custo_unitario": null
+        },
+        {
+          "id": "0e9cc64c-d480-4376-b056-f7f7a4bc0d0c",
+          "tipo": "sinapi",
+          "codigo": "94964",
+          "descricao": "CONCRETO FCK = 20MPA, TRAÇO 1:2,7:3 (EM MASSA SECA DE CIMENTO/ AREIA MÉDIA/ BRITA 1) - PREPARO MECÂNICO COM BETONEIRA 400 L. AF_05/2021",
+          "unidade": "M3",
+          "coeficiente": 0.1455,
+          "custo_unitario": null
+        },
+        {
+          "id": "208bc042-0e14-4fba-bb41-5af1ccc5a6b1",
+          "tipo": "sinapi",
+          "codigo": "36178",
+          "descricao": "PISO TATIL / PODOTATIL, LADRILHO HIDRAULICO/CONCRETO, *40 X 40* CM, E= 2,5* CM, PADRAO TATIL ALERTA OU DIRECIONAL, COR NATURAL",
+          "unidade": "UN",
+          "coeficiente": 2.5,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "48783251-7c26-45b7-9388-94c9f4618b61",
+      "codigo": "30",
+      "nome": "CAIXA DE INSPEÇÃO EM CONCRETO PRÉ-MOLDADO QUADRADA 60 X 60 CM COM TAMPA H= 60CM - FORNECIMENTO E INSTALACAO",
+      "unidade": "UN",
+      "componentes": [
+        {
+          "id": "1a903739-ed4d-4fbf-a92c-a5940c85effc",
+          "tipo": "sinapi",
+          "codigo": "370",
+          "descricao": "AREIA MEDIA - POSTO JAZIDA/FORNECEDOR (RETIRADO NA JAZIDA, SEM TRANSPORTE)",
+          "unidade": "M3",
+          "coeficiente": 0.002,
+          "custo_unitario": null
+        },
+        {
+          "id": "2994b367-e092-4981-912a-02f95b14bc67",
+          "tipo": "sinapi",
+          "codigo": "1379",
+          "descricao": "CIMENTO PORTLAND COMPOSTO CP II-32",
+          "unidade": "KG",
+          "coeficiente": 2.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "0a861800-da40-4f89-a396-77904e824b08",
+          "tipo": "sinapi",
+          "codigo": "41629",
+          "descricao": "CAIXA DE CONCRETO ARMADO PRE-MOLDADO, COM FUNDO E TAMPA, DIMENSOES DE 0,60 X 0,60 X 0,50 M",
+          "unidade": "UN",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "057afeb7-5649-4173-a747-710a188012a2",
+          "tipo": "sinapi",
+          "codigo": "88248",
+          "descricao": "AUXILIAR DE ENCANADOR OU BOMBEIRO HIDRÁULICO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "5e061a49-62f2-4d00-a552-923c95c4356a",
+          "tipo": "sinapi",
+          "codigo": "88267",
+          "descricao": "ENCANADOR OU BOMBEIRO HIDRÁULICO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "0828d2b0-a5ec-4242-96cb-7a9ba66d9595",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 1.5,
+          "custo_unitario": null
+        },
+        {
+          "id": "4ccde7de-6373-4ce6-b788-712eb4e9d815",
+          "tipo": "sinapi",
+          "codigo": "88309",
+          "descricao": "PEDREIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 1.5,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "721a1522-5036-4638-9192-69ab6895de33",
+      "codigo": "39",
+      "nome": "TABEIRA DE MADEIRA LEI, 1A QUALIDADE, 2,5X30,0CM PARA BEIRAL DE TELHADO",
+      "unidade": "M",
+      "componentes": [
+        {
+          "id": "61603d66-5288-45d0-a654-6db6e714878e",
+          "tipo": "sinapi",
+          "codigo": "3992",
+          "descricao": "TABUA APARELHADA *2,5 X 30* CM, EM MACARANDUBA/MASSARANDUBA, ANGELIM OU EQUIVALENTE DA REGIAO",
+          "unidade": "M",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "2ae6eae3-37cb-40fa-bc7b-3c7064ae573b",
+          "tipo": "sinapi",
+          "codigo": "5066",
+          "descricao": "PREGO DE ACO POLIDO COM CABECA 12 X 12",
+          "unidade": "KG",
+          "coeficiente": 0.05,
+          "custo_unitario": null
+        },
+        {
+          "id": "91489492-00a5-4f79-8be8-4936c33a2c36",
+          "tipo": "sinapi",
+          "codigo": "88239",
+          "descricao": "AJUDANTE DE CARPINTEIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.4,
+          "custo_unitario": null
+        },
+        {
+          "id": "0df95f48-09c5-4c5b-9b8b-038477e891a9",
+          "tipo": "sinapi",
+          "codigo": "88262",
+          "descricao": "CARPINTEIRO DE FORMAS COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.15,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "6a5cb243-8b73-4315-8621-42bb25948511",
+      "codigo": "47",
+      "nome": "PROJETOS E LAUDOS DE REFORMA",
+      "unidade": "H",
+      "componentes": [
+        {
+          "id": "7c147578-e164-4455-aee9-23328089f145",
+          "tipo": "sinapi",
+          "codigo": "90778",
+          "descricao": "ENGENHEIRO CIVIL DE OBRA PLENO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "7d259e2e-e56b-43f0-8e71-861a8f7bfdc1",
+      "codigo": "48",
+      "nome": "ADMINISTRAÇÃO LOCAL",
+      "unidade": "H",
+      "componentes": [
+        {
+          "id": "f8e4acd6-e7cd-4a74-9e31-616576ac0641",
+          "tipo": "sinapi",
+          "codigo": "90778",
+          "descricao": "ENGENHEIRO CIVIL DE OBRA PLENO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "d6a73695-fd3c-4fb6-9c54-74223b710acd",
+          "tipo": "sinapi",
+          "codigo": "90780",
+          "descricao": "MESTRE DE OBRAS COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "9515419c-470f-4ba4-b197-d0dbf02a1dd4",
+      "codigo": "49",
+      "nome": "ALUGUEL DE ANDAIME FACHADEIRO",
+      "unidade": "M²xMês",
+      "componentes": [
+        {
+          "id": "043186ea-2cba-4393-923f-9bd53b03c4e2",
+          "tipo": "sinapi",
+          "codigo": "20193",
+          "descricao": "LOCACAO DE ANDAIME METALICO TIPO FACHADEIRO, PECAS COM APROXIMADAMENTE 1,20 M DE LARGURA E 2,0 M DE ALTURA, INCLUINDO DIAGONAIS EM X, BARRAS DE LIGACAO, SAPATAS E DEMAIS ITENS NECESSARIOS A MONTAGEM (NAO INCLUI INSTALACAO)",
+          "unidade": "M2XMES",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "7fc96239-626a-4102-b384-e674dc142be0",
+          "tipo": "sinapi",
+          "codigo": "6111",
+          "descricao": "SERVENTE DE OBRAS (HORISTA)",
+          "unidade": "H",
+          "coeficiente": 0.059,
+          "custo_unitario": null
+        },
+        {
+          "id": "2988fb61-2307-40eb-94d7-84d04bc415fc",
+          "tipo": "sinapi",
+          "codigo": "88278",
+          "descricao": "MONTADOR DE ESTRUTURAS METÁLICAS COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.3,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "44bd1d5b-0bde-439b-9a38-a40a5f6cec06",
+      "codigo": "55",
+      "nome": "TRATAMENTO DE FISSURAS E TRINCAS COM ADESIVO ESTRUTURAL E TELA DE REFORÇO",
+      "unidade": "M",
+      "componentes": [
+        {
+          "id": "69d1b464-7853-4ef9-9e31-ac4fd703d32e",
+          "tipo": "sinapi",
+          "codigo": "5318",
+          "descricao": "DILUENTE AGUARRAS",
+          "unidade": "L",
+          "coeficiente": 0.12,
+          "custo_unitario": null
+        },
+        {
+          "id": "1608a814-e849-4fc5-8463-87ba0a06f8fa",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.6,
+          "custo_unitario": null
+        },
+        {
+          "id": "d13e788a-d0c1-4d45-a5b5-5d109d0f6ea4",
+          "tipo": "sinapi",
+          "codigo": "97631",
+          "descricao": "DEMOLIÇÃO DE ARGAMASSAS, DE FORMA MANUAL, SEM REAPROVEITAMENTO. AF_09/2023",
+          "unidade": "M2",
+          "coeficiente": 0.6,
+          "custo_unitario": null
+        },
+        {
+          "id": "86ee3072-3b17-41b6-8900-0ed56607403a",
+          "tipo": "sinapi",
+          "codigo": "87777",
+          "descricao": "EMBOÇO OU MASSA ÚNICA EM ARGAMASSA TRAÇO 1:2:8, PREPARO MANUAL, APLICADA MANUALMENTE EM PANOS DE FACHADA COM PRESENÇA DE VÃOS, ESPESSURA DE 25 MM. AF_08/2022",
+          "unidade": "M2",
+          "coeficiente": 0.6,
+          "custo_unitario": null
+        },
+        {
+          "id": "160cb026-a38a-4413-b062-ee55adb881ff",
+          "tipo": "sinapi",
+          "codigo": "34558",
+          "descricao": "TELA DE ACO SOLDADA GALVANIZADA/ZINCADA PARA ALVENARIA, FIO D = *1,20 A 1,70* MM, MALHA 15 X 15 MM, (C X L) *50 X 10,5* CM",
+          "unidade": "M",
+          "coeficiente": 1.0,
+          "custo_unitario": null
+        },
+        {
+          "id": "a1343102-e018-4857-ba48-85c30755818c",
+          "tipo": "sinapi",
+          "codigo": "157",
+          "descricao": "ADESIVO ESTRUTURAL A BASE DE RESINA EPOXI PARA INJECAO EM TRINCAS, BICOMPONENTE, BAIXA VISCOSIDADE",
+          "unidade": "KG",
+          "coeficiente": 0.65,
+          "custo_unitario": null
+        },
+        {
+          "id": "68cc8de2-055d-44ed-9949-a30a31f6a0e1",
+          "tipo": "sinapi",
+          "codigo": "88309",
+          "descricao": "PEDREIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.6,
+          "custo_unitario": null
+        },
+        {
+          "id": "a53ffa28-1777-44f1-9274-69c29ed0c490",
+          "tipo": "sinapi",
+          "codigo": "43465",
+          "descricao": "FERRAMENTAS - FAMILIA PEDREIRO - HORISTA (ENCARGOS COMPLEMENTARES - COLETADO CAIXA)",
+          "unidade": "H",
+          "coeficiente": 0.6,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "73bcfcd9-2b38-4053-9f6b-80e2d65f30e4",
+      "codigo": "56",
+      "nome": "TRATAMENTO DE FISSURAS E TRINCAS COM ADESIVO ESTRUTURAL EM PAREDES DE CONCRETO ARMADO",
+      "unidade": "M",
+      "componentes": [
+        {
+          "id": "eba19176-2d81-4244-99e1-b241aae7be16",
+          "tipo": "sinapi",
+          "codigo": "5318",
+          "descricao": "DILUENTE AGUARRAS",
+          "unidade": "L",
+          "coeficiente": 0.12,
+          "custo_unitario": null
+        },
+        {
+          "id": "0dba9f45-35ae-4960-a9b8-7c9a49fc8c95",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.75,
+          "custo_unitario": null
+        },
+        {
+          "id": "2e721b37-d489-4efb-bf37-80f5fccca3a5",
+          "tipo": "sinapi",
+          "codigo": "157",
+          "descricao": "ADESIVO ESTRUTURAL A BASE DE RESINA EPOXI PARA INJECAO EM TRINCAS, BICOMPONENTE, BAIXA VISCOSIDADE",
+          "unidade": "KG",
+          "coeficiente": 0.65,
+          "custo_unitario": null
+        },
+        {
+          "id": "5c9489d3-67f5-465f-abbc-48e63a1727ef",
+          "tipo": "sinapi",
+          "codigo": "36887",
+          "descricao": "TELA DE FIBRA DE VIDRO, ACABAMENTO ANTI-ALCALINO, MALHA 10 X 10 MM",
+          "unidade": "M2",
+          "coeficiente": 0.5,
+          "custo_unitario": null
+        },
+        {
+          "id": "c39008c8-0ea9-4fe9-8569-853b1b9943dd",
+          "tipo": "sinapi",
+          "codigo": "98555",
+          "descricao": "IMPERMEABILIZAÇÃO DE SUPERFÍCIE COM ARGAMASSA POLIMÉRICA / MEMBRANA ACRÍLICA, 3 DEMÃOS. AF_09/2023",
+          "unidade": "M2",
+          "coeficiente": 0.6,
+          "custo_unitario": null
+        },
+        {
+          "id": "247fff17-845d-44e1-bc2c-3dbc31ebea72",
+          "tipo": "sinapi",
+          "codigo": "88309",
+          "descricao": "PEDREIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.75,
+          "custo_unitario": null
+        },
+        {
+          "id": "5561d9e7-7865-4364-8fba-3aceb44522ac",
+          "tipo": "sinapi",
+          "codigo": "43465",
+          "descricao": "FERRAMENTAS - FAMILIA PEDREIRO - HORISTA (ENCARGOS COMPLEMENTARES - COLETADO CAIXA)",
+          "unidade": "H",
+          "coeficiente": 0.75,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "9d683073-0c2c-4358-8e26-f8a693c95d0e",
+      "codigo": "57",
+      "nome": "RASGO LINEAR EM FACHADAS PARA DE JUNTAS DE MOVIMENTAÇÃO",
+      "unidade": "M",
+      "componentes": [
+        {
+          "id": "e6b2e34c-5199-40d4-a851-05ebf1ddf69e",
+          "tipo": "sinapi",
+          "codigo": "88242",
+          "descricao": "AJUDANTE DE PEDREIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.1,
+          "custo_unitario": null
+        },
+        {
+          "id": "ac7307f9-4ac6-442f-8688-5c69ab6dafd3",
+          "tipo": "sinapi",
+          "codigo": "88309",
+          "descricao": "PEDREIRO COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.3,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "105e442b-f4d3-43b6-938d-8fdd10bf1a8a",
+      "codigo": "58",
+      "nome": "COMPOSIÇÃO PARAMÉTRICA PARA EXECUÇÃO DE ESTRUTURAS DE CONCRETO ARMADO, EFICICAÇÕES HABITACIONAIS, FCK = 25MPA",
+      "unidade": "M3",
+      "componentes": [
+        {
+          "id": "176028fe-39b9-4944-b3ac-9988fd098707",
+          "tipo": "sinapi",
+          "codigo": "92419",
+          "descricao": "MONTAGEM E DESMONTAGEM DE FÔRMA DE PILARES RETANGULARES E ESTRUTURAS SIMILARES, PÉ-DIREITO SIMPLES, EM CHAPA DE MADEIRA COMPENSADA RESINADA, 4 UTILIZAÇÕES. AF_09/2020",
+          "unidade": "M2",
+          "coeficiente": 1.5027,
+          "custo_unitario": null
+        },
+        {
+          "id": "2aab9e0a-699d-46be-8871-846c075c6d2f",
+          "tipo": "sinapi",
+          "codigo": "92455",
+          "descricao": "MONTAGEM E DESMONTAGEM DE FÔRMA DE VIGA, ESCORAMENTO COM GARFO DE MADEIRA, PÉ-DIREITO SIMPLES, EM CHAPA DE MADEIRA RESINADA, 4 UTILIZAÇÕES. AF_09/2020",
+          "unidade": "M2",
+          "coeficiente": 2.0916,
+          "custo_unitario": null
+        },
+        {
+          "id": "32e04300-1b53-435c-9641-5b9474264802",
+          "tipo": "sinapi",
+          "codigo": "92514",
+          "descricao": "MONTAGEM E DESMONTAGEM DE FÔRMA DE LAJE MACIÇA, PÉ-DIREITO SIMPLES, EM CHAPA DE MADEIRA COMPENSADA RESINADA, 4 UTILIZAÇÕES. AF_09/2020",
+          "unidade": "M2",
+          "coeficiente": 5.0823,
+          "custo_unitario": null
+        },
+        {
+          "id": "bce0cae4-b516-4b3c-bfde-882b73cb0dd8",
+          "tipo": "sinapi",
+          "codigo": "92759",
+          "descricao": "ARMAÇÃO DE PILAR OU VIGA DE ESTRUTURA CONVENCIONAL DE CONCRETO ARMADO UTILIZANDO AÇO CA-60 DE 5,0 MM - MONTAGEM. AF_06/2022",
+          "unidade": "KG",
+          "coeficiente": 2.6967,
+          "custo_unitario": null
+        },
+        {
+          "id": "3c983e24-1961-4d90-84d5-5e4d42d90275",
+          "tipo": "sinapi",
+          "codigo": "92760",
+          "descricao": "ARMAÇÃO DE PILAR OU VIGA DE ESTRUTURA CONVENCIONAL DE CONCRETO ARMADO UTILIZANDO AÇO CA-50 DE 6,3 MM - MONTAGEM. AF_06/2022",
+          "unidade": "KG",
+          "coeficiente": 1.0504,
+          "custo_unitario": null
+        },
+        {
+          "id": "8a585ad0-0d0c-4312-9189-55aebc4ae113",
+          "tipo": "sinapi",
+          "codigo": "92761",
+          "descricao": "ARMAÇÃO DE PILAR OU VIGA DE ESTRUTURA CONVENCIONAL DE CONCRETO ARMADO UTILIZANDO AÇO CA-50 DE 8,0 MM - MONTAGEM. AF_06/2022",
+          "unidade": "KG",
+          "coeficiente": 0.554,
+          "custo_unitario": null
+        },
+        {
+          "id": "efd88764-5fcf-4226-906b-c99e100991b8",
+          "tipo": "sinapi",
+          "codigo": "92762",
+          "descricao": "ARMAÇÃO DE PILAR OU VIGA DE ESTRUTURA CONVENCIONAL DE CONCRETO ARMADO UTILIZANDO AÇO CA-50 DE 10,0 MM - MONTAGEM. AF_06/2022",
+          "unidade": "KG",
+          "coeficiente": 19.8152,
+          "custo_unitario": null
+        },
+        {
+          "id": "d2818cbc-37f0-40e3-a59d-3bb4e300f3f2",
+          "tipo": "sinapi",
+          "codigo": "92763",
+          "descricao": "ARMAÇÃO DE PILAR OU VIGA DE ESTRUTURA CONVENCIONAL DE CONCRETO ARMADO UTILIZANDO AÇO CA-50 DE 12,5 MM - MONTAGEM. AF_06/2022",
+          "unidade": "KG",
+          "coeficiente": 4.6157,
+          "custo_unitario": null
+        },
+        {
+          "id": "e9d57074-dc5c-4d85-a373-b3b0fcc1bba0",
+          "tipo": "sinapi",
+          "codigo": "92768",
+          "descricao": "ARMAÇÃO DE LAJE DE ESTRUTURA CONVENCIONAL DE CONCRETO ARMADO UTILIZANDO AÇO CA-60 DE 5,0 MM - MONTAGEM. AF_06/2022",
+          "unidade": "KG",
+          "coeficiente": 8.0102,
+          "custo_unitario": null
+        },
+        {
+          "id": "95b771be-7d83-4dcd-9863-0ba58624ca96",
+          "tipo": "sinapi",
+          "codigo": "92769",
+          "descricao": "ARMAÇÃO DE LAJE DE ESTRUTURA CONVENCIONAL DE CONCRETO ARMADO UTILIZANDO AÇO CA-50 DE 6,3 MM - MONTAGEM. AF_06/2022",
+          "unidade": "KG",
+          "coeficiente": 13.8202,
+          "custo_unitario": null
+        },
+        {
+          "id": "809bca5d-5f3d-433d-8163-c10e2bc964f4",
+          "tipo": "sinapi",
+          "codigo": "92770",
+          "descricao": "ARMAÇÃO DE LAJE DE ESTRUTURA CONVENCIONAL DE CONCRETO ARMADO UTILIZANDO AÇO CA-50 DE 8,0 MM - MONTAGEM. AF_06/2022",
+          "unidade": "KG",
+          "coeficiente": 8.5686,
+          "custo_unitario": null
+        },
+        {
+          "id": "b6e2e329-294d-413a-a27b-41524e868de3",
+          "tipo": "sinapi",
+          "codigo": "96542",
+          "descricao": "FABRICAÇÃO, MONTAGEM E DESMONTAGEM DE FÔRMA PARA VIGA BALDRAME, EM CHAPA DE MADEIRA COMPENSADA RESINADA, E=17 MM, 4 UTILIZAÇÕES. AF_01/2024",
+          "unidade": "M2",
+          "coeficiente": 3.5856,
+          "custo_unitario": null
+        },
+        {
+          "id": "ae590465-99e2-444a-9ac5-dded178daf9c",
+          "tipo": "sinapi",
+          "codigo": "96543",
+          "descricao": "ARMAÇÃO DE BLOCO UTILIZANDO AÇO CA-60 DE 5 MM - MONTAGEM. AF_01/2024",
+          "unidade": "KG",
+          "coeficiente": 0.4461,
+          "custo_unitario": null
+        },
+        {
+          "id": "37ed4523-6031-4031-9e5e-6bda990f5dc9",
+          "tipo": "sinapi",
+          "codigo": "96544",
+          "descricao": "ARMAÇÃO DE BLOCO UTILIZANDO AÇO CA-50 DE 6,3 MM - MONTAGEM. AF_01/2024",
+          "unidade": "KG",
+          "coeficiente": 0.406,
+          "custo_unitario": null
+        },
+        {
+          "id": "ae77396c-b8ed-4123-92c9-2b29ad7c91c4",
+          "tipo": "sinapi",
+          "codigo": "96545",
+          "descricao": "ARMAÇÃO DE BLOCO UTILIZANDO AÇO CA-50 DE 8 MM - MONTAGEM. AF_01/2024",
+          "unidade": "KG",
+          "coeficiente": 0.406,
+          "custo_unitario": null
+        },
+        {
+          "id": "5ce5414f-e7da-4fb6-a787-ecee23a9eeea",
+          "tipo": "sinapi",
+          "codigo": "96546",
+          "descricao": "ARMAÇÃO DE BLOCO UTILIZANDO AÇO CA-50 DE 10 MM - MONTAGEM. AF_01/2024",
+          "unidade": "KG",
+          "coeficiente": 6.1683,
+          "custo_unitario": null
+        },
+        {
+          "id": "ac100985-20c8-4120-bb08-d11d2a75b373",
+          "tipo": "sinapi",
+          "codigo": "96557",
+          "descricao": "CONCRETAGEM DE BLOCO DE COROAMENTO OU VIGA BALDRAME, FCK 30 MPA, COM USO DE BOMBA - LANÇAMENTO, ADENSAMENTO E ACABAMENTO. AF_01/2024",
+          "unidade": "M3",
+          "coeficiente": 0.0931,
+          "custo_unitario": null
+        },
+        {
+          "id": "c39781b5-0c5f-4ca7-8c8f-5e11d1eedcfa",
+          "tipo": "sinapi",
+          "codigo": "103672",
+          "descricao": "CONCRETAGEM DE PILARES, FCK = 25 MPA, COM USO DE BOMBA - LANÇAMENTO, ADENSAMENTO E ACABAMENTO. AF_02/2022_PS",
+          "unidade": "M3",
+          "coeficiente": 0.1445,
+          "custo_unitario": null
+        },
+        {
+          "id": "7047e35a-2c14-42b9-8337-4058fe05b1ba",
+          "tipo": "sinapi",
+          "codigo": "103675",
+          "descricao": "CONCRETAGEM DE VIGAS E LAJES, FCK=25 MPA, PARA LAJES MACIÇAS OU NERVURADAS COM USO DE BOMBA - LANÇAMENTO, ADENSAMENTO E ACABAMENTO. AF_02/2022_PS",
+          "unidade": "M3",
+          "coeficiente": 0.7623,
+          "custo_unitario": null
+        }
+      ]
+    },
+    {
+      "id": "134b3fdf-d52f-4580-b715-dabd01de7e41",
+      "codigo": "59",
+      "nome": "SINALIZAÇÃO VISUAL DE DEGRAU, CONFORME ABNT NBR 9050, INCLUSO INSTALAÇÃO",
+      "unidade": "UN",
+      "componentes": [
+        {
+          "id": "18bcf911-6c02-4bcb-8026-0e184513a121",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.05,
+          "custo_unitario": null
+        },
+        {
+          "id": "1c7b5f1b-8ec5-4833-a4e5-76a4897b4192",
+          "tipo": "mercado",
+          "codigo": "24",
+          "descricao": "SINALIZAÇÃO VISUAL PARA DEGRAUS 20X3CM",
+          "unidade": "UN",
+          "coeficiente": 1.0,
+          "custo_unitario": 6.0
+        }
+      ]
+    },
+    {
+      "id": "ba92a061-2fd1-4396-a16b-272f1f502de6",
+      "codigo": "61",
+      "nome": "APLICAÇÃO DE PELÍCULA PROTETORA PARA CONTROLE SOLAR, G35",
+      "unidade": "M2",
+      "componentes": [
+        {
+          "id": "1a3ee800-331f-4b70-a232-bc0ee70bd926",
+          "tipo": "sinapi",
+          "codigo": "88316",
+          "descricao": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+          "unidade": "H",
+          "coeficiente": 0.25,
+          "custo_unitario": null
+        },
+        {
+          "id": "61c4c6c9-4eb2-4b2a-b859-7acf260e0495",
+          "tipo": "mercado",
+          "codigo": "25",
+          "descricao": "PELÍCULA PROTETORA PARA CONTROLE SOLAR, G35",
+          "unidade": "M2",
+          "coeficiente": 1.0,
+          "custo_unitario": 15.49
+        }
+      ]
+    },
+    {
+      "id": "41793fa5-fcf0-4447-967f-436d0dd6e578",
+      "codigo": "Proprio46",
+      "nome": "REMOÇÃO DE RUFO/PINGADEIRA",
+      "unidade": "M",
+      "componentes": [
+        {
+          "id": "0875d3a2-ac5a-47f3-b25b-e717d2e9cc5a",
+          "tipo": "sinapi",
+          "codigo": "6111",
+          "descricao": "SERVENTE DE OBRAS (HORISTA)",
+          "unidade": "H",
+          "coeficiente": 0.01,
+          "custo_unitario": null
+        },
+        {
+          "id": "6d360e39-83bc-4d46-880e-091aecb49d2e",
+          "tipo": "sinapi",
+          "codigo": "36487",
+          "descricao": "GUINCHO ELETRICO DE COLUNA, CAPACIDADE 400 KG, COM MOTO FREIO, MOTOR TRIFASICO DE 1,25 CV",
+          "unidade": "UN",
+          "coeficiente": 0.001,
+          "custo_unitario": null
+        },
+        {
+          "id": "98aa2552-0222-4619-9724-9ec307332c20",
+          "tipo": "sinapi",
+          "codigo": "93281",
+          "descricao": "GUINCHO ELÉTRICO DE COLUNA, CAPACIDADE 400 KG, COM MOTO FREIO, MOTOR TRIFÁSICO DE 1,25 CV - CHP DIURNO. AF_03/2016",
+          "unidade": "CHP",
+          "coeficiente": 0.01,
+          "custo_unitario": null
+        },
+        {
+          "id": "7ec459d5-32f6-4f86-898d-8af94c671e12",
+          "tipo": "sinapi",
+          "codigo": "93282",
+          "descricao": "GUINCHO ELÉTRICO DE COLUNA, CAPACIDADE 400 KG, COM MOTO FREIO, MOTOR TRIFÁSICO DE 1,25 CV - CHI DIURNO. AF_03/2016",
+          "unidade": "CHI",
+          "coeficiente": 0.01,
+          "custo_unitario": null
+        }
+      ]
+    }
+  ]
+}

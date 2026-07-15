@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+from core.api_client import get_client
 from ui.dialogo_configuracoes import abrir_dialogo_configuracoes
 from ui.icones import criar_icone_svg
 from ui.widgets import (
@@ -17,10 +18,11 @@ ALTURA_ICONE_CARTAO = 20
 
 
 class HubFrame(tk.Frame):
-    def __init__(self, parent, ctx, on_selecionar_modulo):
+    def __init__(self, parent, ctx, on_selecionar_modulo, on_logout=None):
         super().__init__(parent, bg="#ececec")
         self.ctx = ctx
         self.on_selecionar_modulo = on_selecionar_modulo
+        self.on_logout = on_logout
         self._cache_icones = {}
         self._refs_icones = []
         self._montar()
@@ -112,30 +114,74 @@ class HubFrame(tk.Frame):
             icone_titulo="cog-outline",
         )
 
-        self._montar_botao_configuracoes()
+        self._montar_botoes_rodape()
 
-    def _montar_botao_configuracoes(self):
-        icone = criar_icone_svg(
+    def _montar_botoes_rodape(self):
+        icone_cfg = criar_icone_svg(
             self,
             "settings-outline",
             altura=16,
             cor="#006699",
         )
-        self._refs_icones.append(icone)
+        self._refs_icones.append(icone_cfg)
 
-        btn = ttk.Button(
+        btn_cfg = ttk.Button(
             self,
             text="Configurações",
-            image=icone,
+            image=icone_cfg,
             compound="left",
             command=self._abrir_configuracoes,
             style="Compact.TButton",
         )
-        btn.place(relx=1.0, rely=1.0, anchor="se", x=-14, y=-10)
+        btn_cfg.place(relx=1.0, rely=1.0, anchor="se", x=-14, y=-10)
+
+        if self.on_logout is not None:
+            rodape_usuario = tk.Frame(self, bg="#ececec")
+            rodape_usuario.place(relx=0.0, rely=1.0, anchor="sw", x=14, y=-10)
+
+            icone_logout = criar_icone_svg(
+                self,
+                "log-out-outline",
+                altura=16,
+                cor="#c62828",
+            )
+            self._refs_icones.append(icone_logout)
+            btn_logout = ttk.Button(
+                rodape_usuario,
+                text="Logout",
+                image=icone_logout,
+                compound="left",
+                command=self._logout,
+                style="Delete.Compact.TButton",
+            )
+            btn_logout.pack(side="left")
+
+            icone_person = criar_icone_svg(
+                self,
+                "person",
+                altura=16,
+                cor="#555555",
+            )
+            self._refs_icones.append(icone_person)
+            tk.Label(rodape_usuario, image=icone_person, bg="#ececec").pack(
+                side="left", padx=(10, 4)
+            )
+            usuario = get_client().username or "—"
+            tk.Label(
+                rodape_usuario,
+                text=usuario,
+                font=("Arial", 9),
+                fg="#555555",
+                bg="#ececec",
+            ).pack(side="left")
 
     def _abrir_configuracoes(self):
         janela = self.winfo_toplevel()
         abrir_dialogo_configuracoes(janela, self.ctx)
+
+    def _logout(self):
+        if self.on_logout is not None:
+            self.on_logout()
 
     def _criar_cartao(
         self,

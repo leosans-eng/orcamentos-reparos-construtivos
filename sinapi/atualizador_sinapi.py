@@ -203,7 +203,11 @@ def gerar_url(ano, mes):
 def _formatar_codigos_resposta(response):
     codigos = [str(r.status_code) for r in response.history]
     codigos.append(str(response.status_code))
-    return " -> ".join(codigos)
+    resumidos: list[str] = []
+    for codigo in codigos:
+        if not resumidos or resumidos[-1] != codigo:
+            resumidos.append(codigo)
+    return " -> ".join(resumidos)
 
 
 def _codigos_de_excecao(exc):

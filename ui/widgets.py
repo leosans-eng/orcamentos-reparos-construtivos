@@ -1,6 +1,7 @@
 import ctypes
 import sys
 import tkinter as tk
+from datetime import datetime, timedelta, timezone
 from tkinter import ttk
 
 from app_paths import icon_path
@@ -13,6 +14,21 @@ COR_TITULO_PADRAO = "#006699"
 COR_TITULO_HOVER = "#004466"
 
 PLACEHOLDER_ESTADO = "— Selecione —"
+FUSO_HORARIO_BRASIL = timezone(timedelta(hours=-3))
+
+
+def formatar_data_iso_brasil(iso_texto: str) -> str:
+    """Formata data/hora ISO (UTC) para exibição em GMT-3."""
+    if not iso_texto:
+        return "—"
+    try:
+        texto = str(iso_texto).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(texto)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(FUSO_HORARIO_BRASIL).strftime("%d/%m/%Y %H:%M")
+    except ValueError:
+        return str(iso_texto)
 
 
 def valores_combo_estado(estados):
@@ -143,12 +159,32 @@ def centralizar_janela(janela, parent=None):
             pass
 
 
+def focar_entrada_apos_exibir(entrada, *, selecionar=False):
+    """Coloca o foco no campo após a janela ser exibida e centralizada."""
+    def aplicar():
+        try:
+            if not entrada.winfo_exists():
+                return
+            entrada.focus_set()
+            if selecionar:
+                entrada.select_range(0, "end")
+                entrada.icursor("end")
+        except tk.TclError:
+            pass
+
+    entrada.after_idle(aplicar)
+
+
 def perguntar_texto(
     parent,
     titulo,
     mensagem,
     valor_inicial="",
     texto_ok="OK",
+    *,
+    largura_entrada=44,
+    minsize=None,
+    padding=(16, 14),
 ):
     """Diálogo de entrada de texto com ícone do ORC (substitui simpledialog.askstring)."""
     resultado: list[str | None] = [None]
@@ -158,10 +194,12 @@ def perguntar_texto(
     aplicar_icone_janela(dialog)
     dialog.transient(parent)
     dialog.grab_set()
-    dialog.resizable(False, False)
+    dialog.resizable(bool(minsize), False)
+    if minsize:
+        dialog.minsize(*minsize)
     dialog.configure(bg="#ececec")
 
-    painel = tk.Frame(dialog, bg="#ececec", padx=16, pady=14)
+    painel = tk.Frame(dialog, bg="#ececec", padx=padding[0], pady=padding[1])
     painel.pack(fill="both", expand=True)
 
     tk.Label(
@@ -173,10 +211,8 @@ def perguntar_texto(
     ).pack(fill="x", pady=(0, 8))
 
     var_texto = tk.StringVar(value=valor_inicial)
-    entrada = ttk.Entry(painel, textvariable=var_texto, width=44)
+    entrada = ttk.Entry(painel, textvariable=var_texto, width=largura_entrada)
     entrada.pack(fill="x", pady=(0, 12))
-    entrada.focus_set()
-    entrada.select_range(0, "end")
 
     botoes = ttk.Frame(painel)
     botoes.pack(fill="x")
@@ -199,6 +235,7 @@ def perguntar_texto(
     entrada.bind("<Escape>", lambda _e: cancelar())
     dialog.protocol("WM_DELETE_WINDOW", cancelar)
     centralizar_janela(dialog, parent)
+    focar_entrada_apos_exibir(entrada, selecionar=True)
     parent.wait_window(dialog)
     return resultado[0]
 
@@ -222,8 +259,16 @@ def _configurar_botao_colorido(style, nome, *, background, active, pressed, padd
     )
     style.map(
         nome,
-        background=[("active", active), ("pressed", pressed)],
-        foreground=[("active", "black"), ("pressed", "black")],
+        background=[
+            ("disabled", "#e0e0e0"),
+            ("active", active),
+            ("pressed", pressed),
+        ],
+        foreground=[
+            ("disabled", "#9e9e9e"),
+            ("active", "black"),
+            ("pressed", "black"),
+        ],
     )
 
 
@@ -481,7 +526,7 @@ def criar_botao_voltar(parent, command, bg_parent="#ececec"):
     )
     lbl = tk.Label(
         btn,
-        text="← Voltar ao início",
+        text="← Voltar",
         font=("Arial", 10, "bold"),
         fg=COR_TITULO_PADRAO,
         bg=COR_FUNDO_CARTAO,
@@ -500,6 +545,39 @@ def criar_botao_voltar(parent, command, bg_parent="#ececec"):
     return btn
 
 
+def vincular_tooltip(widget, texto: str):
+    """Exibe texto ao passar o mouse (tooltip simples)."""
+    estado = {"janela": None}
+
+    def _mostrar(_event):
+        if estado["janela"] is not None:
+            return
+        x = widget.winfo_rootx() + widget.winfo_width() // 2
+        y = widget.winfo_rooty() + widget.winfo_height() + 4
+        janela = tk.Toplevel(widget)
+        janela.wm_overrideredirect(True)
+        janela.wm_geometry(f"+{x}+{y}")
+        tk.Label(
+            janela,
+            text=texto,
+            background="#ffffe0",
+            relief="solid",
+            borderwidth=1,
+            font=("Arial", 9),
+            padx=6,
+            pady=3,
+        ).pack()
+        estado["janela"] = janela
+
+    def _esconder(_event):
+        if estado["janela"] is not None:
+            estado["janela"].destroy()
+            estado["janela"] = None
+
+    widget.bind("<Enter>", _mostrar)
+    widget.bind("<Leave>", _esconder)
+
+
 def criar_barra_modulo(
     parent,
     titulo,
@@ -507,6 +585,8 @@ def criar_barra_modulo(
     *,
     texto_referencia=None,
     montar_acoes_antes_referencia=None,
+    montar_acoes_apos_titulo=None,
+    montar_acoes_antes_titulo=None,
     bg="#ececec",
 ):
     """Barra superior: Voltar ao início, título da página e referência opcional na mesma linha."""
@@ -515,13 +595,19 @@ def criar_barra_modulo(
 
     criar_botao_voltar(barra, on_voltar, bg_parent=bg).pack(side="left")
 
+    if montar_acoes_antes_titulo is not None:
+        montar_acoes_antes_titulo(barra)
+
     tk.Label(
         barra,
         text=titulo,
         font=("Arial", 14, "bold"),
         fg=COR_TITULO_PADRAO,
         bg=bg,
-    ).pack(side="left", padx=(12, 8))
+    ).pack(side="left", padx=(12, 4))
+
+    if montar_acoes_apos_titulo is not None:
+        montar_acoes_apos_titulo(barra)
 
     label_referencia = None
     if texto_referencia is not None or montar_acoes_antes_referencia is not None:
@@ -542,3 +628,56 @@ def criar_barra_modulo(
             montar_acoes_antes_referencia(lado_direito)
 
     return label_referencia
+
+
+class ControleAtualizacaoPagina:
+    """Botão 'Atualizar página' com barrinha de progresso ao lado."""
+
+    def __init__(self, parent, *, command, refs, bg="#ececec"):
+        from ui.icones import criar_botao_ttk_so_icone
+
+        self.botao = criar_botao_ttk_so_icone(
+            parent,
+            nome_icone="sync-outline",
+            command=command,
+            estilo="Compact.TButton",
+            cor_icone="#006699",
+            refs=refs,
+        )
+        self.botao.pack(side="left", padx=(0, 6))
+        vincular_tooltip(self.botao, "Atualizar página")
+
+        self.barra = ttk.Progressbar(
+            parent,
+            mode="indeterminate",
+            length=72,
+        )
+        self.label = tk.Label(
+            parent,
+            text="",
+            bg=bg,
+            fg="#666666",
+            font=("Arial", 8),
+        )
+
+    def definir_ativo(self, ativo: bool):
+        if ativo:
+            self.botao.state(["disabled"])
+            if not self.barra.winfo_ismapped():
+                self.barra.pack(side="left", padx=(0, 6))
+            if not self.label.winfo_ismapped():
+                self.label.pack(side="left", padx=(0, 8))
+            self.label.config(text="Atualizando…")
+            self.barra.start(12)
+            return
+
+        try:
+            self.barra.stop()
+        except tk.TclError:
+            pass
+        if self.barra.winfo_ismapped():
+            self.barra.pack_forget()
+        if self.label.winfo_ismapped():
+            self.label.pack_forget()
+        self.label.config(text="")
+        self.botao.state(["!disabled"])

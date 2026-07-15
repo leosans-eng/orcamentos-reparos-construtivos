@@ -1,50 +1,62 @@
-"""Persistência das etapas pré-definidas do usuário (dados_usuario)."""
+"""Persistência das etapas pré-definidas via API."""
 
 from __future__ import annotations
 
-import json
 from copy import deepcopy
 
-from app_paths import etapas_predefinidas_path
-
-from core.etapas_predefinidas import nova_etapa_predefinida
+from core.api_client import get_client
+from core.api_exceptions import ApiError, ConflitoVersaoError
 
 VERSAO_ARQUIVO = 1
 
+_catalogo_cache: dict | None = None
 
-def _dados_iniciais() -> dict:
-    return {
-        "versao": VERSAO_ARQUIVO,
-        "etapas": [],
-    }
+
+def _tratar_erro_api(exc: ApiError) -> None:
+    if isinstance(exc, ConflitoVersaoError):
+        raise ValueError(exc.mensagem) from exc
+    raise ValueError(exc.mensagem) from exc
+
+
+def limpar_cache():
+    global _catalogo_cache
+    _catalogo_cache = None
+
+
+def _invalidar_cache():
+    limpar_cache()
+
+
+def _aplicar_catalogo(dados: dict) -> dict:
+    global _catalogo_cache
+    _catalogo_cache = deepcopy(dados)
+    return _catalogo_cache
+
+
+def obter_cache_catalogo() -> dict | None:
+    if _catalogo_cache is None:
+        return None
+    return deepcopy(_catalogo_cache)
 
 
 def carregar() -> dict:
-    caminho = etapas_predefinidas_path()
-    if not caminho.is_file():
-        dados = _dados_iniciais()
-        salvar(dados)
-        return dados
-
-    with open(caminho, "r", encoding="utf-8") as arquivo:
-        dados = json.load(arquivo)
-
-    if not isinstance(dados.get("etapas"), list):
-        dados = _dados_iniciais()
-        salvar(dados)
-    return dados
+    try:
+        dados = get_client().get_etapas_catalogo()
+    except ApiError as exc:
+        _tratar_erro_api(exc)
+    return _aplicar_catalogo(dados)
 
 
 def salvar(dados: dict) -> None:
-    caminho = etapas_predefinidas_path()
-    caminho.parent.mkdir(parents=True, exist_ok=True)
-    with open(caminho, "w", encoding="utf-8") as arquivo:
-        json.dump(dados, arquivo, ensure_ascii=False, indent=2)
+    _aplicar_catalogo(dados)
 
 
 def listar(dados=None) -> list:
     if dados is None:
-        dados = carregar()
+        if _catalogo_cache is None:
+            dados = carregar()
+        else:
+            dados = _catalogo_cache
     return deepcopy(dados.get("etapas", []))
 
 
@@ -56,20 +68,19 @@ def obter_por_id(etapa_id, dados=None) -> dict | None:
 
 
 def criar(nome: str, dados=None) -> str:
-    if dados is None:
-        dados = carregar()
     nome = str(nome).strip()
     if not nome:
         raise ValueError("Informe o nome da etapa.")
-    etapa = nova_etapa_predefinida(nome)
-    dados.setdefault("etapas", []).append(etapa)
-    salvar(dados)
+    try:
+        etapa = get_client().criar_etapa(nome)
+    except ApiError as exc:
+        _tratar_erro_api(exc)
+    _invalidar_cache()
+    carregar()
     return etapa["id"]
 
 
 def atualizar(etapa: dict, dados=None) -> str:
-    if dados is None:
-        dados = carregar()
     etapa_id = etapa.get("id")
     if not etapa_id:
         raise ValueError("Etapa sem identificador.")
@@ -77,20 +88,30 @@ def atualizar(etapa: dict, dados=None) -> str:
     if not nome:
         raise ValueError("Informe o nome da etapa.")
 
-    for indice, existente in enumerate(dados.get("etapas", [])):
-        if existente.get("id") == etapa_id:
-            dados["etapas"][indice] = deepcopy(etapa)
-            salvar(dados)
-            return etapa_id
+    versao = etapa.get("versao")
+    if versao is None:
+        existente = obter_por_id(etapa_id, dados)
+        versao = existente.get("versao", 1) if existente else 1
 
-    raise ValueError("Etapa não encontrada.")
+    payload = deepcopy(etapa)
+    payload.pop("versao", None)
+
+    try:
+        get_client().atualizar_etapa(str(etapa_id), payload, int(versao))
+    except ApiError as exc:
+        _tratar_erro_api(exc)
+
+    _invalidar_cache()
+    carregar()
+    return etapa_id
 
 
 def excluir(etapa_id, dados=None) -> None:
-    if dados is None:
-        dados = carregar()
-    antes = len(dados.get("etapas", []))
-    dados["etapas"] = [e for e in dados.get("etapas", []) if e.get("id") != etapa_id]
-    if len(dados["etapas"]) == antes:
+    if obter_por_id(etapa_id, dados) is None:
         raise ValueError("Etapa não encontrada.")
-    salvar(dados)
+    try:
+        get_client().excluir_etapa(str(etapa_id))
+    except ApiError as exc:
+        _tratar_erro_api(exc)
+    _invalidar_cache()
+    carregar()

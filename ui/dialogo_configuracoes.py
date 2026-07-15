@@ -1,10 +1,15 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
-from ui.icones import criar_botao_ttk_com_icone, criar_icone_svg
+from core.api_client import get_client
+from core.api_config import carregar_config, salvar_config
+from core.api_exceptions import ApiError
+from ui.dialogo_admin_usuarios import abrir_dialogo_admin_usuarios, usuario_atual_eh_admin
+from ui.icones import criar_botao_ttk_com_icone
 from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
+    focar_entrada_apos_exibir,
     preparar_toplevel,
 )
 
@@ -14,6 +19,147 @@ _CORES_STATUS = {
     "Crítico": "#c62828",
     "Verificando...": "#006699",
 }
+
+
+def _formatar_http_status(http: str) -> str:
+    if not http or http == "—":
+        return ""
+    partes: list[str] = []
+    for trecho in http.replace("->", " ").split():
+        codigo = trecho.strip()
+        if codigo and codigo not in partes:
+            partes.append(codigo)
+    if not partes:
+        return ""
+    if len(partes) == 1:
+        return f"HTTP {partes[0]}"
+    return f"HTTP {' -> '.join(partes)}"
+
+
+class DialogoTrocarSenha(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        preparar_toplevel(self)
+        self._refs_icones: list = []
+        self.title("Trocar senha")
+        aplicar_icone_janela(self)
+        self.configure(bg="#ececec")
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+
+        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
+        painel.pack(fill="both", expand=True)
+
+        tk.Label(
+            painel,
+            text="Trocar senha",
+            font=("Arial", 12, "bold"),
+            fg="#333333",
+            bg="#ececec",
+        ).pack(anchor="w", pady=(0, 12))
+
+        form = tk.Frame(
+            painel,
+            bg="#ffffff",
+            highlightbackground="#cccccc",
+            highlightthickness=1,
+        )
+        form.pack(fill="x")
+        inner = tk.Frame(form, bg="#ffffff", padx=14, pady=12)
+        inner.pack(fill="x")
+
+        self.var_atual = tk.StringVar()
+        self.var_nova = tk.StringVar()
+        self.var_confirmar = tk.StringVar()
+
+        self._entrada_atual = self._campo(inner, "Senha atual:", self.var_atual, 0)
+        self._campo(inner, "Nova senha:", self.var_nova, 2)
+        entrada_confirmar = self._campo(inner, "Confirmar nova senha:", self.var_confirmar, 4)
+        entrada_confirmar.bind("<Return>", lambda _e: self._confirmar())
+
+        self._lbl_erro = tk.Label(
+            painel,
+            text="",
+            font=("Arial", 9),
+            fg="#c62828",
+            bg="#ececec",
+            wraplength=320,
+            justify="left",
+        )
+        self._lbl_erro.pack(anchor="w", pady=(10, 8))
+
+        botoes = ttk.Frame(painel)
+        botoes.pack(fill="x")
+        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
+            side="right"
+        )
+        criar_botao_ttk_com_icone(
+            botoes,
+            texto="Salvar",
+            nome_icone="save-outline",
+            command=self._confirmar,
+            estilo="Add.TButton",
+            refs=self._refs_icones,
+        ).pack(side="right", padx=(0, 8))
+
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.update_idletasks()
+        centralizar_janela(self, parent)
+        focar_entrada_apos_exibir(self._entrada_atual)
+
+    def _campo(self, parent, rotulo, variavel, linha):
+        tk.Label(
+            parent,
+            text=rotulo,
+            bg="#ffffff",
+            fg="#555555",
+            font=("Arial", 9),
+        ).grid(row=linha, column=0, sticky="w", pady=(0 if linha == 0 else 8, 4))
+        entrada = ttk.Entry(parent, textvariable=variavel, width=32, show="•")
+        entrada.grid(row=linha + 1, column=0, sticky="ew")
+        return entrada
+
+    def _confirmar(self):
+        senha_atual = self.var_atual.get()
+        senha_nova = self.var_nova.get()
+        confirmar = self.var_confirmar.get()
+        if not senha_atual:
+            self._lbl_erro.config(text="Informe a senha atual.")
+            return
+        if not senha_nova:
+            self._lbl_erro.config(text="Informe a nova senha.")
+            return
+        if len(senha_nova) < 6:
+            self._lbl_erro.config(text="A nova senha deve ter pelo menos 6 caracteres.")
+            return
+        if senha_nova != confirmar:
+            self._lbl_erro.config(text="A confirmação não confere com a nova senha.")
+            return
+
+        try:
+            get_client().trocar_senha(senha_atual, senha_nova)
+        except ApiError as exc:
+            self._lbl_erro.config(text=exc.mensagem)
+            return
+
+        config = carregar_config()
+        if config.get("salvar_senha"):
+            salvar_config(
+                config.get("base_url", ""),
+                salvar_usuario=config.get("salvar_usuario", False),
+                salvar_senha=True,
+                usuario=config.get("usuario", ""),
+                senha=senha_nova,
+            )
+
+        messagebox.showinfo(
+            "Trocar senha",
+            "Senha alterada com sucesso.",
+            parent=self,
+        )
+        self.destroy()
 
 
 class DialogoConfiguracoes(tk.Toplevel):
@@ -95,8 +241,70 @@ class DialogoConfiguracoes(tk.Toplevel):
             font=("Arial", 8),
             fg="#777777",
             bg="#ffffff",
+            wraplength=220,
+            justify="left",
         )
         self._lbl_http.pack(anchor="w")
+
+        secao_conta = tk.Frame(
+            painel, bg="#ffffff", highlightbackground="#cccccc", highlightthickness=1
+        )
+        secao_conta.pack(fill="x", pady=(0, 12))
+        conta_inner = tk.Frame(secao_conta, bg="#ffffff", padx=14, pady=12)
+        conta_inner.pack(fill="x")
+
+        tk.Label(
+            conta_inner,
+            text="Conta",
+            font=("Arial", 10, "bold"),
+            fg="#006699",
+            bg="#ffffff",
+        ).pack(anchor="w", pady=(0, 10))
+
+        usuario = get_client().username or "—"
+        tk.Label(
+            conta_inner,
+            text=f"Usuário conectado: {usuario}",
+            font=("Arial", 9),
+            fg="#555555",
+            bg="#ffffff",
+        ).pack(anchor="w", pady=(0, 8))
+
+        ttk.Button(
+            conta_inner,
+            text="Trocar senha",
+            command=self._trocar_senha,
+            style="Compact.TButton",
+        ).pack(anchor="w")
+
+        if usuario_atual_eh_admin():
+            secao_admin = tk.Frame(
+                painel, bg="#ffffff", highlightbackground="#cccccc", highlightthickness=1
+            )
+            secao_admin.pack(fill="x", pady=(0, 12))
+            admin_inner = tk.Frame(secao_admin, bg="#ffffff", padx=14, pady=12)
+            admin_inner.pack(fill="x")
+
+            tk.Label(
+                admin_inner,
+                text="Administração",
+                font=("Arial", 10, "bold"),
+                fg="#006699",
+                bg="#ffffff",
+            ).pack(anchor="w", pady=(0, 6))
+            tk.Label(
+                admin_inner,
+                text="Gerencie usuários, senhas e permissões.",
+                font=("Arial", 9),
+                fg="#555555",
+                bg="#ffffff",
+            ).pack(anchor="w", pady=(0, 8))
+            ttk.Button(
+                admin_inner,
+                text="Administrar usuários",
+                command=self._abrir_admin_usuarios,
+                style="Compact.TButton",
+            ).pack(anchor="w")
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(4, 0))
@@ -119,6 +327,12 @@ class DialogoConfiguracoes(tk.Toplevel):
         self.update_idletasks()
         centralizar_janela(self, parent)
 
+    def _trocar_senha(self):
+        DialogoTrocarSenha(self)
+
+    def _abrir_admin_usuarios(self):
+        abrir_dialogo_admin_usuarios(self)
+
     def _atualizar_status(self):
         status = "—"
         http = "—"
@@ -131,7 +345,7 @@ class DialogoConfiguracoes(tk.Toplevel):
         self._lbl_status.config(text=status, fg=cor)
 
         if http and http != "—":
-            self._lbl_http.config(text=f"HTTP {http}")
+            self._lbl_http.config(text=_formatar_http_status(http))
         else:
             self._lbl_http.config(text="")
 

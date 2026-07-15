@@ -46,6 +46,30 @@ def altura_icone_botao_compact(master: tk.Misc, estilo: str = "Compact.TButton")
     return altura_icone_botao(master, estilo)
 
 
+def criar_botao_ttk_so_icone(
+    parent: tk.Misc,
+    *,
+    nome_icone: str,
+    command,
+    estilo: str = "Compact.TButton",
+    cor_icone: str | None = None,
+    refs: list | None = None,
+) -> ttk.Button:
+    """Cria ttk.Button apenas com ícone SVG."""
+    if cor_icone is None:
+        cor_icone = "#000000"
+    altura = altura_icone_botao(parent, estilo)
+    icone = criar_icone_svg(parent, nome_icone, altura=altura, cor=cor_icone)
+    if refs is not None:
+        refs.append(icone)
+    return ttk.Button(
+        parent,
+        image=icone,
+        command=command,
+        style=estilo,
+    )
+
+
 def criar_botao_ttk_com_icone(
     parent: tk.Misc,
     *,

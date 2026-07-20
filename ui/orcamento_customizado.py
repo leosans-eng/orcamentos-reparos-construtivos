@@ -16,6 +16,7 @@ from core.orcamento_customizado import (
     OrcamentoCustomizado,
     custo_unitario_com_bdi,
     item_indisponivel_na_base,
+    item_usa_estado_alternativo,
     rotulo_item,
     rotulo_tipo_sinapi,
     sincronizar_precos_sinapi_no_orcamento,
@@ -34,6 +35,7 @@ from core.sinapi_busca import (
     TIPO_INSUMO,
     TIPO_TODOS,
     VALORES_FILTRO_TIPO,
+    estados_com_codigo,
     nome_tipo_sinapi,
     obter_item_sinapi,
     obter_unidades_sinapi,
@@ -138,17 +140,131 @@ class DialogoEditarQuantidade(tk.Toplevel):
         ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
             side="right", padx=(6, 0)
         )
-        ttk.Button(botoes, text="Confirmar", command=self._confirmar, style="Add.TButton").pack(
+        ttk.Button(botoes, text="OK", command=self._confirmar, style="Add.TButton").pack(
             side="right"
         )
 
-        self.bind("<Escape>", lambda _e: self.destroy())
-        self.update_idletasks()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
         centralizar_janela(self, parent)
-        focar_entrada_apos_exibir(self._entrada_quantidade, selecionar=True)
+        focar_entrada_apos_exibir(entrada, selecionar=True)
 
     def _confirmar(self):
         self.on_confirmar(self.var_quantidade.get())
+        self.destroy()
+
+
+class DialogoEstadoItemSinapi(tk.Toplevel):
+    """Escolhe a UF de preço de um item sem alterar o estado do orçamento."""
+
+    def __init__(
+        self,
+        parent,
+        descricao_item,
+        codigo,
+        estados_disponiveis,
+        estado_atual,
+        estado_orcamento,
+        on_confirmar,
+    ):
+        super().__init__(parent)
+        preparar_toplevel(self)
+        self.on_confirmar = on_confirmar
+        self.estados_disponiveis = list(estados_disponiveis)
+        self.estado_orcamento = str(estado_orcamento or "").strip()
+        self.title("Estado do item (UF)")
+        aplicar_icone_janela(self)
+        self.configure(bg="#ececec")
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+
+        largura_wrap = min(560, max(280, parent.winfo_screenwidth() - 120))
+        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel.pack(fill="both", expand=True)
+
+        tk.Label(
+            painel,
+            text=f"Código {codigo}",
+            font=("Arial", 9, "bold"),
+            fg="#444444",
+            bg="#ececec",
+            anchor="w",
+        ).pack(fill="x")
+        tk.Label(
+            painel,
+            text=descricao_item,
+            font=("Arial", 9),
+            fg="#333333",
+            bg="#f5fafc",
+            justify="left",
+            anchor="w",
+            wraplength=largura_wrap,
+            padx=8,
+            pady=8,
+        ).pack(fill="x", pady=(4, 8))
+
+        msg_orc = (
+            f"Estado do orçamento: {self.estado_orcamento}."
+            if self.estado_orcamento
+            else "Orçamento sem estado de referência."
+        )
+        tk.Label(
+            painel,
+            text=(
+                f"{msg_orc}\n"
+                "Altere apenas a UF deste item para usar o preço de outro estado "
+                "(ex.: item existente só na SINAPI SP)."
+            ),
+            bg="#ececec",
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 10))
+
+        linha = tk.Frame(painel, bg="#ececec")
+        linha.pack(fill="x", pady=(0, 12))
+        tk.Label(linha, text="UF do item:", bg="#ececec").pack(side="left")
+        self.combo_estado = ttk.Combobox(
+            linha,
+            values=self.estados_disponiveis,
+            width=8,
+            state="readonly",
+        )
+        self.combo_estado.pack(side="left", padx=(8, 0))
+        estado_inicial = str(estado_atual or "").strip()
+        if estado_inicial in self.estados_disponiveis:
+            self.combo_estado.set(estado_inicial)
+        elif self.estado_orcamento in self.estados_disponiveis:
+            self.combo_estado.set(self.estado_orcamento)
+        elif "SP" in self.estados_disponiveis:
+            self.combo_estado.set("SP")
+        elif self.estados_disponiveis:
+            self.combo_estado.set(self.estados_disponiveis[0])
+
+        botoes = ttk.Frame(painel)
+        botoes.pack(fill="x")
+        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
+            side="right", padx=(6, 0)
+        )
+        ttk.Button(
+            botoes, text="Aplicar", command=self._confirmar, style="Add.TButton"
+        ).pack(side="right")
+
+        self.bind("<Return>", lambda _e: self._confirmar())
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        centralizar_janela(self, parent)
+        self.combo_estado.focus_set()
+
+    def _confirmar(self):
+        estado = str(self.combo_estado.get() or "").strip()
+        if not estado:
+            messagebox.showwarning(
+                "Estado do item",
+                "Selecione um estado.",
+                parent=self,
+            )
+            return
+        self.on_confirmar(estado)
         self.destroy()
 
 
@@ -1213,6 +1329,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             text="Item ↓",
             command=lambda: self._mover_item(1),
             style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_etapas_2,
+            text="Estado do item (UF)",
+            command=self._alterar_estado_item,
+            style="Compact.TButton",
         ).pack(side="left")
 
         frame_inserir = tk.LabelFrame(
@@ -1263,6 +1385,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             text=(
                 "Estrutura do orçamento  ·  Duplo clique: nº da etapa (reordenar), "
                 "descrição da etapa (renomear), código/qtd. do item (editar)  ·  "
+                "Estado do item (UF): preço de outra UF (SINAPI ou composição) sem mudar o orçamento  ·  "
                 "Ctrl/Shift+clique: seleção múltipla  ·  Delete: remover"
             ),
             bg="#ececec",
@@ -1479,7 +1602,17 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         return parse_decimal_br(texto)
 
     def _inserir_item_sinapi(
-        self, grupo_id, codigo, descricao, unidade, custo, quantidade, estado, tipo_sinapi=""
+        self,
+        grupo_id,
+        codigo,
+        descricao,
+        unidade,
+        custo,
+        quantidade,
+        estado,
+        tipo_sinapi="",
+        *,
+        estado_fixado=False,
     ):
         try:
             item_id = self.orcamento.adicionar_item_sinapi(
@@ -1491,6 +1624,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 quantidade,
                 estado,
                 tipo_sinapi,
+                estado_fixado=estado_fixado,
             )
         except ValueError as exc:
             messagebox.showwarning("Adicionar item", str(exc), parent=self.winfo_toplevel())
@@ -1504,6 +1638,11 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         return item_id
 
+    def _estado_item_deve_fixar(self, estado_item):
+        estado_item = str(estado_item or "").strip()
+        estado_orc = self._estado_selecionado()
+        return bool(estado_item) and estado_item != estado_orc
+
     def _abrir_busca_sinapi(self):
         grupo_id = self._grupo_id_selecionado()
         if not grupo_id:
@@ -1515,8 +1654,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             return
 
         def ao_confirmar(codigo, descricao, unidade, custo, quantidade, estado, tipo_sinapi=""):
-            if estado and estado in self.ctx.obter_estados():
-                self.combo_estado.set(estado)
             self._inserir_item_sinapi(
                 grupo_id,
                 codigo,
@@ -1526,6 +1663,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 quantidade,
                 estado,
                 tipo_sinapi,
+                estado_fixado=self._estado_item_deve_fixar(estado),
             )
 
         DialogoBuscaSinapi(
@@ -1576,31 +1714,70 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             return
 
         linha = obter_item_sinapi(self.ctx.sinapi, codigo, estado)
-        if linha is None:
+        if linha is not None:
+            try:
+                custo = float(linha.get("custo", 0))
+            except (TypeError, ValueError):
+                custo = 0.0
+            item_id = self._inserir_item_sinapi(
+                grupo_id,
+                linha.get("codigo", codigo),
+                linha.get("descricao", ""),
+                linha.get("unidade", ""),
+                custo,
+                quantidade,
+                estado,
+                str(linha.get("tipo", "")).strip().upper()[:1],
+            )
+            if item_id:
+                self.var_codigo_rapido.set("")
+            return
+
+        estados_alt = estados_com_codigo(self.ctx.sinapi, codigo)
+        if not estados_alt:
             messagebox.showwarning(
                 "Inserir rápido",
-                f"Código {codigo} não encontrado para o estado {estado}.",
+                f"Código {codigo} não encontrado em nenhum estado da base.",
                 parent=self.winfo_toplevel(),
             )
             return
 
-        try:
-            custo = float(linha.get("custo", 0))
-        except (TypeError, ValueError):
-            custo = 0.0
+        def ao_escolher_uf(uf):
+            linha_alt = obter_item_sinapi(self.ctx.sinapi, codigo, uf)
+            if linha_alt is None:
+                messagebox.showwarning(
+                    "Inserir rápido",
+                    f"Código {codigo} não encontrado para o estado {uf}.",
+                    parent=self.winfo_toplevel(),
+                )
+                return
+            try:
+                custo_alt = float(linha_alt.get("custo", 0))
+            except (TypeError, ValueError):
+                custo_alt = 0.0
+            item_id = self._inserir_item_sinapi(
+                grupo_id,
+                linha_alt.get("codigo", codigo),
+                linha_alt.get("descricao", ""),
+                linha_alt.get("unidade", ""),
+                custo_alt,
+                quantidade,
+                uf,
+                str(linha_alt.get("tipo", "")).strip().upper()[:1],
+                estado_fixado=True,
+            )
+            if item_id:
+                self.var_codigo_rapido.set("")
 
-        item_id = self._inserir_item_sinapi(
-            grupo_id,
-            linha.get("codigo", codigo),
-            linha.get("descricao", ""),
-            linha.get("unidade", ""),
-            custo,
-            quantidade,
+        DialogoEstadoItemSinapi(
+            self.winfo_toplevel(),
+            f"Código {codigo} ausente em {estado}. Escolha outra UF para o preço.",
+            codigo,
+            estados_alt,
+            "SP" if "SP" in estados_alt else estados_alt[0],
             estado,
-            str(linha.get("tipo", "")).strip().upper()[:1],
+            ao_escolher_uf,
         )
-        if item_id:
-            self.var_codigo_rapido.set("")
 
     def _novo_grupo(self):
         from core.etapas_predefinidas import aplicar_etapa_no_orcamento
@@ -1906,6 +2083,83 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ao_confirmar,
         )
 
+    def _alterar_estado_item(self):
+        meta = self._meta_selecionada()
+        if not meta or meta["tipo"] not in (TIPO_SINAPI, TIPO_COMPOSICAO_PROPRIA):
+            messagebox.showinfo(
+                "Estado do item",
+                "Selecione um item SINAPI ou composição própria para alterar a UF.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        if len(self.grade.obter_metas_selecionadas()) > 1:
+            messagebox.showinfo(
+                "Estado do item",
+                "Selecione apenas um item.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        item_id = meta["id"]
+        grupo, item = self.orcamento.obter_item(item_id)
+        if item is None:
+            return
+
+        estado_orc = self._estado_selecionado()
+        if meta["tipo"] == TIPO_SINAPI:
+            estados_alt = estados_com_codigo(self.ctx.sinapi, item["codigo"])
+            if not estados_alt:
+                messagebox.showwarning(
+                    "Estado do item",
+                    f"Código {item['codigo']} não encontrado em nenhum estado da base.",
+                    parent=self.winfo_toplevel(),
+                )
+                return
+            codigo_rotulo = item["codigo"]
+            estado_atual = item.get("estado") or estado_orc
+        else:
+            estados_alt = self.ctx.obter_estados()
+            if not estados_alt:
+                messagebox.showwarning(
+                    "Estado do item",
+                    "Nenhum estado disponível na base SINAPI.",
+                    parent=self.winfo_toplevel(),
+                )
+                return
+            codigo_rotulo = item.get("codigo", "") or "Composição própria"
+            estado_atual = item.get("estado") or estado_orc
+
+        def ao_confirmar(uf):
+            try:
+                if meta["tipo"] == TIPO_SINAPI:
+                    self.orcamento.definir_estado_item_sinapi(
+                        item_id, uf, self.ctx.sinapi
+                    )
+                else:
+                    self.orcamento.definir_estado_item_composicao(item_id, uf)
+            except ValueError as exc:
+                messagebox.showwarning(
+                    "Estado do item", str(exc), parent=self.winfo_toplevel()
+                )
+                return
+            self._registrar_alteracao(
+                focar_meta={
+                    "tipo": meta["tipo"],
+                    "id": item_id,
+                    "grupo_id": grupo["id"] if grupo else meta.get("grupo_id"),
+                }
+            )
+
+        DialogoEstadoItemSinapi(
+            self.winfo_toplevel(),
+            rotulo_item(item),
+            codigo_rotulo,
+            estados_alt,
+            estado_atual,
+            estado_orc,
+            ao_confirmar,
+        )
+
     def _texto_item_para_substituicao(self, item):
         estado = self._estado_selecionado()
         catalogo = listar_composicoes_catalogo()
@@ -1956,11 +2210,16 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         catalogo = listar_composicoes_catalogo()
 
         def ao_substituir_sinapi(codigo, descricao, unidade, custo, _quantidade, estado, tipo_sinapi=""):
-            if estado and estado in self.ctx.obter_estados():
-                self.combo_estado.set(estado)
             try:
                 self.orcamento.substituir_item_sinapi(
-                    item_id, codigo, descricao, unidade, custo, estado, tipo_sinapi
+                    item_id,
+                    codigo,
+                    descricao,
+                    unidade,
+                    custo,
+                    estado,
+                    tipo_sinapi,
+                    estado_fixado=self._estado_item_deve_fixar(estado),
                 )
             except ValueError as exc:
                 messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
@@ -2130,6 +2389,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     indisponivel = item_indisponivel_na_base(
                         item, self.ctx.sinapi, catalogo, estado_atual
                     )
+                    usa_uf_alt = item_usa_estado_alternativo(
+                        item, estado_atual, catalogo
+                    )
+                    descricao = item["descricao"]
+                    if usa_uf_alt and item.get("estado_fixado"):
+                        descricao = f"{descricao}  [{item.get('estado', '')}]"
                     self.grade.adicionar_linha(
                         meta={
                             "tipo": TIPO_SINAPI,
@@ -2140,7 +2405,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                             "item": num_item,
                             "codigo": item["codigo"],
                             "tipo_ic": rotulo_tipo_sinapi(item, self.ctx.sinapi),
-                            "descricao": item["descricao"],
+                            "descricao": descricao,
                             "quantidade": _formatar_quantidade(item["quantidade"]),
                             "unidade": item["unidade"],
                             "custo_unit": _formatar_moeda(custo),
@@ -2149,6 +2414,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                         },
                         estilo="item",
                         alerta_depreciado=indisponivel,
+                        alerta_estado_alternativo=usa_uf_alt and not indisponivel,
                     )
                 else:
                     custo_unit, tem_depreciado = custo_composicao_propria_item(
@@ -2156,6 +2422,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     )
                     custo_bdi = custo_unitario_com_bdi(custo_unit, bdi)
                     total = custo_bdi * item["quantidade"]
+                    usa_uf_alt = item_usa_estado_alternativo(
+                        item, estado_atual, catalogo
+                    )
+                    descricao = item.get("nome", "")
+                    if item.get("estado_fixado") and item.get("estado"):
+                        descricao = f"{descricao}  [{item.get('estado', '')}]"
                     self.grade.adicionar_linha(
                         meta={
                             "tipo": TIPO_COMPOSICAO_PROPRIA,
@@ -2166,7 +2438,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                             "item": num_item,
                             "codigo": item.get("codigo", ""),
                             "tipo_ic": "",
-                            "descricao": item.get("nome", ""),
+                            "descricao": descricao,
                             "quantidade": _formatar_quantidade(item["quantidade"]),
                             "unidade": item["unidade"],
                             "custo_unit": _formatar_moeda(custo_unit) if estado_atual else "—",
@@ -2175,6 +2447,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                         },
                         estilo="composicao",
                         alerta_depreciado=tem_depreciado,
+                        alerta_estado_alternativo=usa_uf_alt and not tem_depreciado,
                     )
 
         bdi_txt = _formatar_bdi(bdi)

@@ -13,7 +13,9 @@ def _novo_id():
     return str(uuid.uuid4())
 
 
-def novo_componente_sinapi(codigo, descricao, unidade, coeficiente):
+def novo_componente_sinapi(
+    codigo, descricao, unidade, coeficiente, *, estado="", estado_fixado=False
+):
     return {
         "id": _novo_id(),
         "tipo": TIPO_COMPONENTE_SINAPI,
@@ -22,6 +24,8 @@ def novo_componente_sinapi(codigo, descricao, unidade, coeficiente):
         "unidade": str(unidade).strip(),
         "coeficiente": float(coeficiente),
         "custo_unitario": None,
+        "estado": str(estado or "").strip(),
+        "estado_fixado": bool(estado_fixado),
     }
 
 
@@ -45,6 +49,54 @@ def nova_composicao(codigo, nome, unidade, componentes=None):
         "unidade": str(unidade).strip(),
         "componentes": deepcopy(componentes) if componentes else [],
     }
+
+
+def estado_efetivo_componente(componente, estado_referencia="") -> str:
+    """UF usada para preço/disponibilidade de um componente SINAPI."""
+    if componente.get("tipo") != TIPO_COMPONENTE_SINAPI:
+        return str(estado_referencia or "").strip()
+    if componente.get("estado_fixado"):
+        estado_item = str(componente.get("estado", "")).strip()
+        if estado_item:
+            return estado_item
+    return str(estado_referencia or "").strip()
+
+
+def componente_usa_estado_alternativo(componente, estado_referencia="") -> bool:
+    if componente.get("tipo") != TIPO_COMPONENTE_SINAPI or not componente.get(
+        "estado_fixado"
+    ):
+        return False
+    estado_item = str(componente.get("estado", "")).strip()
+    estado_ref = str(estado_referencia or "").strip()
+    return bool(estado_item) and estado_item != estado_ref
+
+
+def definir_estado_componente_sinapi(
+    componente, estado, sinapi, *, estado_referencia="", fixar=None
+):
+    """Define a UF de preço de um componente SINAPI da composição."""
+    if componente.get("tipo") != TIPO_COMPONENTE_SINAPI:
+        raise ValueError("Apenas componentes SINAPI possuem estado próprio.")
+    estado = str(estado or "").strip()
+    if not estado:
+        raise ValueError("Informe o estado.")
+    linha = obter_item_sinapi(sinapi, componente.get("codigo", ""), estado)
+    if linha is None:
+        raise ValueError(
+            f"Código {componente.get('codigo', '')} não encontrado para o estado {estado}."
+        )
+    descricao = str(linha.get("descricao", "")).strip()
+    if descricao:
+        componente["descricao"] = descricao
+    unidade = str(linha.get("unidade", "")).strip()
+    if unidade:
+        componente["unidade"] = unidade
+    componente["estado"] = estado
+    if fixar is None:
+        fixar = estado != str(estado_referencia or "").strip()
+    componente["estado_fixado"] = bool(fixar)
+    return componente
 
 
 def obter_composicao_por_id(catalogo, composicao_id):
@@ -92,10 +144,13 @@ def calcular_custo_unitario(composicao, sinapi_df, estado):
                 unitario = 0.0
             custo += unitario * coeficiente
         elif tipo == TIPO_COMPONENTE_SINAPI:
-            if not estado:
+            estado_comp = estado_efetivo_componente(componente, estado)
+            if not estado_comp:
                 tem_depreciado = True
                 continue
-            linha = obter_item_sinapi(sinapi_df, componente.get("codigo", ""), estado)
+            linha = obter_item_sinapi(
+                sinapi_df, componente.get("codigo", ""), estado_comp
+            )
             if linha is None:
                 tem_depreciado = True
                 continue
@@ -109,16 +164,22 @@ def calcular_custo_unitario(composicao, sinapi_df, estado):
 
 
 def verificar_componentes_depreciados(composicao, sinapi_df, estado):
-    """Lista ids de componentes SINAPI ausentes na base para o estado."""
-    if not composicao or not estado:
+    """Lista ids de componentes SINAPI ausentes na UF efetiva."""
+    if not composicao:
         return []
 
     depreciados = []
-    estado = str(estado).strip()
+    estado = str(estado or "").strip()
     for componente in composicao.get("componentes", []):
         if componente.get("tipo") != TIPO_COMPONENTE_SINAPI:
             continue
-        linha = obter_item_sinapi(sinapi_df, componente.get("codigo", ""), estado)
+        estado_comp = estado_efetivo_componente(componente, estado)
+        if not estado_comp:
+            depreciados.append(componente.get("id"))
+            continue
+        linha = obter_item_sinapi(
+            sinapi_df, componente.get("codigo", ""), estado_comp
+        )
         if linha is None:
             depreciados.append(componente.get("id"))
     return depreciados
@@ -138,4 +199,9 @@ def custo_composicao_propria_item(item, catalogo, sinapi, estado):
             except (TypeError, ValueError):
                 pass
         return 0.0, True
-    return calcular_custo_unitario(composicao, sinapi, estado)
+    estado_calc = str(estado or "").strip()
+    if item.get("estado_fixado"):
+        estado_item = str(item.get("estado", "")).strip()
+        if estado_item:
+            estado_calc = estado_item
+    return calcular_custo_unitario(composicao, sinapi, estado_calc)

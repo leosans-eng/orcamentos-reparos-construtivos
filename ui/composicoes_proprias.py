@@ -5,6 +5,8 @@ from core.composicoes_proprias import (
     TIPO_COMPONENTE_MERCADO,
     TIPO_COMPONENTE_SINAPI,
     calcular_custo_unitario,
+    componente_usa_estado_alternativo,
+    definir_estado_componente_sinapi,
     novo_componente_mercado,
     novo_componente_sinapi,
     verificar_componentes_depreciados,
@@ -21,11 +23,12 @@ from core.composicoes_proprias_storage import (
     obter_por_id,
     salvar_estado_previa_custos,
 )
+from core.sinapi_busca import estados_com_codigo
 from ui.icones import (
     criar_botao_inserir_prominente,
     criar_botao_ttk_com_icone,
 )
-from ui.orcamento_customizado import DialogoBuscaSinapi
+from ui.orcamento_customizado import DialogoBuscaSinapi, DialogoEstadoItemSinapi
 from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
@@ -44,6 +47,7 @@ from ui.widgets import (
 )
 
 COR_DEPRECIADO = "#fff8e1"
+COR_ESTADO_ALTERNATIVO = "#e8f4fc"
 
 
 def _formatar_moeda(valor):
@@ -415,6 +419,9 @@ class ComposicoesPropriasFrame(tk.Frame):
         self.tree_componentes.column("coeficiente", width=64, anchor="e", stretch=False)
         self.tree_componentes.column("tipo", width=72, anchor="center", stretch=False)
         self.tree_componentes.tag_configure("depreciado", background=COR_DEPRECIADO)
+        self.tree_componentes.tag_configure(
+            "estado_alternativo", background=COR_ESTADO_ALTERNATIVO
+        )
         scroll_cmp = ttk.Scrollbar(painel_comp, orient="vertical", command=self.tree_componentes.yview)
         self.tree_componentes.configure(yscrollcommand=scroll_cmp.set)
         self.tree_componentes.pack(side="left", fill="both", expand=True)
@@ -452,6 +459,12 @@ class ComposicoesPropriasFrame(tk.Frame):
             linha_bt_cmp,
             text="Item ↓",
             command=lambda: self._mover_componente(1),
+            style="Compact.TButton",
+        ).pack(side="left", padx=(0, 4))
+        ttk.Button(
+            linha_bt_cmp,
+            text="Estado do componente (UF)",
+            command=self._alterar_estado_componente,
             style="Compact.TButton",
         ).pack(side="left")
 
@@ -591,20 +604,101 @@ class ComposicoesPropriasFrame(tk.Frame):
         for componente in comp.get("componentes", []):
             tipo = componente.get("tipo", "")
             rotulo_tipo = "SINAPI" if tipo == TIPO_COMPONENTE_SINAPI else "Mercado"
-            tags = ("depreciado",) if componente.get("id") in depreciados else ()
+            descricao = componente.get("descricao", "")
+            if componente_usa_estado_alternativo(componente, estado):
+                descricao = f"{descricao}  [{componente.get('estado', '')}]"
+            if componente.get("id") in depreciados:
+                tags = ("depreciado",)
+            elif componente_usa_estado_alternativo(componente, estado):
+                tags = ("estado_alternativo",)
+            else:
+                tags = ()
             self.tree_componentes.insert(
                 "",
                 "end",
                 iid=componente["id"],
                 values=(
                     componente.get("codigo", ""),
-                    componente.get("descricao", ""),
+                    descricao,
                     componente.get("unidade", ""),
                     _formatar_quantidade(componente.get("coeficiente", 0)),
                     rotulo_tipo,
                 ),
                 tags=tags,
             )
+
+    def _alterar_estado_componente(self):
+        comp = self._composicao_em_edicao()
+        if comp is None:
+            messagebox.showinfo(
+                "Estado do componente",
+                "Selecione uma composição primeiro.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        selecionado = self.tree_componentes.selection()
+        if not selecionado:
+            messagebox.showinfo(
+                "Estado do componente",
+                "Selecione um componente SINAPI na lista.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        comp_id = selecionado[0]
+        componente = next(
+            (c for c in comp.get("componentes", []) if c.get("id") == comp_id),
+            None,
+        )
+        if componente is None:
+            return
+        if componente.get("tipo") != TIPO_COMPONENTE_SINAPI:
+            messagebox.showinfo(
+                "Estado do componente",
+                "Apenas componentes SINAPI possuem UF de preço.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        estados_alt = estados_com_codigo(self.ctx.sinapi, componente.get("codigo", ""))
+        if not estados_alt:
+            messagebox.showwarning(
+                "Estado do componente",
+                f"Código {componente.get('codigo', '')} não encontrado em nenhum estado da base.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        estado_ref = self._estado_selecionado()
+
+        def ao_confirmar(uf):
+            try:
+                definir_estado_componente_sinapi(
+                    componente,
+                    uf,
+                    self.ctx.sinapi,
+                    estado_referencia=estado_ref,
+                )
+                atualizar(comp, self._dados)
+            except ValueError as exc:
+                messagebox.showwarning(
+                    "Estado do componente", str(exc), parent=self.winfo_toplevel()
+                )
+                return
+            self._dados = carregar()
+            self._atualizar_listas()
+            if self.tree_componentes.exists(comp_id):
+                self.tree_componentes.selection_set(comp_id)
+                self.tree_componentes.focus(comp_id)
+
+        DialogoEstadoItemSinapi(
+            self.winfo_toplevel(),
+            f"{componente.get('codigo', '')} — {componente.get('descricao', '')}",
+            componente.get("codigo", ""),
+            estados_alt,
+            componente.get("estado") or estado_ref,
+            estado_ref,
+            ao_confirmar,
+        )
 
     def _nova_composicao(self):
         def ao_confirmar(codigo, nome, unidade):
@@ -722,7 +816,7 @@ class ComposicoesPropriasFrame(tk.Frame):
             )
             return
 
-        def ao_escolher(codigo, descricao, unidade, _custo, _quantidade, _estado, _tipo_sinapi=""):
+        def ao_escolher(codigo, descricao, unidade, _custo, _quantidade, estado, _tipo_sinapi=""):
             coef_texto = perguntar_texto(
                 self.winfo_toplevel(),
                 "Coeficiente",
@@ -742,7 +836,17 @@ class ComposicoesPropriasFrame(tk.Frame):
                     parent=self.winfo_toplevel(),
                 )
                 return
-            componente = novo_componente_sinapi(codigo, descricao, unidade, coeficiente)
+            estado_ref = self._estado_selecionado()
+            estado_item = str(estado or "").strip()
+            estado_fixado = bool(estado_item) and estado_item != estado_ref
+            componente = novo_componente_sinapi(
+                codigo,
+                descricao,
+                unidade,
+                coeficiente,
+                estado=estado_item if estado_fixado else estado_ref,
+                estado_fixado=estado_fixado,
+            )
             comp.setdefault("componentes", []).append(componente)
             try:
                 atualizar(comp, self._dados)

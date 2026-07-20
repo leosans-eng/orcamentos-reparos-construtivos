@@ -140,7 +140,12 @@ def _descricao_item(item) -> str:
     if item["tipo"] == TIPO_SINAPI:
         return str(item.get("descricao", "")).strip()
     if item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
-        return str(item.get("nome", "")).strip()
+        descricao = str(item.get("nome", "")).strip()
+        if item.get("estado_fixado"):
+            estado = str(item.get("estado", "")).strip()
+            if estado:
+                return f"{descricao} [{estado}]" if descricao else f"[{estado}]"
+        return descricao
     return ""
 
 

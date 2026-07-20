@@ -354,6 +354,7 @@ class DialogoNovaEtapa(tk.Toplevel):
         preparar_toplevel(self)
         self.on_confirmar = on_confirmar
         self._modelos_por_nome = {m["nome"]: m for m in modelos}
+        self._opcoes_modelo = [ETAPA_EM_BRANCO] + [m["nome"] for m in modelos]
         self.title("Nova etapa")
         aplicar_icone_janela(self)
         self.configure(bg="#ececec")
@@ -378,42 +379,271 @@ class DialogoNovaEtapa(tk.Toplevel):
 
         tk.Label(
             painel,
-            text="Modelo (opcional):",
+            text="Modelo (opcional) — digite para filtrar:",
             bg="#ececec",
             anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
-        opcoes = [ETAPA_EM_BRANCO] + [m["nome"] for m in modelos]
         self.var_modelo = tk.StringVar(value=ETAPA_EM_BRANCO)
-        self.combo_modelo = ttk.Combobox(
-            painel,
-            textvariable=self.var_modelo,
-            values=opcoes,
-            state="readonly",
-            width=50,
-        )
-        self.combo_modelo.pack(fill="x", pady=(0, 10))
-        self.combo_modelo.bind("<<ComboboxSelected>>", self._ao_mudar_modelo)
+        self._popup_modelo = None
+        self._lista_modelo = None
+        self._ignorando_foco_modelo = False
+
+        frame_modelo = tk.Frame(painel, bg="#ececec")
+        frame_modelo.pack(fill="x", pady=(0, 10))
+        self.entrada_modelo = ttk.Entry(frame_modelo, textvariable=self.var_modelo)
+        self.entrada_modelo.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            frame_modelo,
+            text="▼",
+            width=3,
+            command=self._ao_botao_lista_modelo,
+        ).pack(side="left", padx=(4, 0))
+
+        self.entrada_modelo.bind("<ButtonRelease-1>", self._ao_clicar_modelo)
+        self.entrada_modelo.bind("<KeyRelease>", self._ao_digitar_modelo)
+        self.entrada_modelo.bind("<Down>", self._ao_seta_baixo_modelo)
+        self.entrada_modelo.bind("<Return>", self._ao_return_modelo)
+        self.entrada_modelo.bind("<Escape>", self._ao_escape_modelo)
+        self.entrada_modelo.bind("<FocusOut>", self._ao_foco_sair_modelo)
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
+        ttk.Button(botoes, text="Cancelar", command=self._fechar, style="Delete.TButton").pack(
             side="right", padx=(6, 0)
         )
         ttk.Button(botoes, text="Criar", command=self._confirmar, style="Add.TButton").pack(
             side="right"
         )
 
-        self.bind("<Escape>", lambda _e: self.destroy())
+        self.bind("<Escape>", self._ao_escape_janela)
         self.bind("<Return>", lambda _e: self._confirmar())
+        self.protocol("WM_DELETE_WINDOW", self._fechar)
         self.update_idletasks()
         centralizar_janela(self, parent)
         focar_entrada_apos_exibir(entrada_nome)
 
-    def _ao_mudar_modelo(self, _event=None):
-        modelo = self.var_modelo.get().strip()
-        if modelo and modelo != ETAPA_EM_BRANCO:
-            self.var_nome.set(modelo)
+    def _consulta_filtro_modelo(self) -> str:
+        texto = self.var_modelo.get().strip()
+        if not texto or texto == ETAPA_EM_BRANCO:
+            return ""
+        return texto.casefold()
+
+    def _opcoes_filtradas_modelo(self, forcar_todas: bool = False):
+        if forcar_todas:
+            return list(self._opcoes_modelo)
+        consulta = self._consulta_filtro_modelo()
+        if not consulta:
+            return list(self._opcoes_modelo)
+        return [
+            opcao
+            for opcao in self._opcoes_modelo
+            if consulta in opcao.casefold()
+        ]
+
+    def _popup_modelo_ativo(self) -> bool:
+        return (
+            self._popup_modelo is not None
+            and bool(self._popup_modelo.winfo_exists())
+        )
+
+    def _posicionar_popup_modelo(self):
+        if not self._popup_modelo_ativo():
+            return
+        self.update_idletasks()
+        x = self.entrada_modelo.winfo_rootx()
+        y = self.entrada_modelo.winfo_rooty() + self.entrada_modelo.winfo_height()
+        largura = max(self.entrada_modelo.winfo_width(), 280)
+        self._popup_modelo.geometry(f"{largura}x180+{x}+{y}")
+
+    def _criar_popup_modelo(self):
+        popup = tk.Toplevel(self)
+        popup.overrideredirect(True)
+        popup.transient(self)
+        popup.configure(bg="#ffffff")
+        lista = tk.Listbox(
+            popup,
+            height=8,
+            exportselection=False,
+            activestyle="dotbox",
+            font=("Segoe UI", 9),
+            bg="#ffffff",
+            relief="solid",
+            borderwidth=1,
+        )
+        scroll = ttk.Scrollbar(popup, orient="vertical", command=lista.yview)
+        lista.configure(yscrollcommand=scroll.set)
+        lista.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        lista.bind("<ButtonRelease-1>", self._ao_escolher_modelo)
+        lista.bind("<Return>", self._ao_escolher_modelo)
+        lista.bind("<Escape>", lambda _e: self._esconder_lista_modelo())
+        self._popup_modelo = popup
+        self._lista_modelo = lista
+
+    def _mostrar_lista_modelo(self, forcar_todas: bool = False):
+        opcoes = self._opcoes_filtradas_modelo(forcar_todas=forcar_todas)
+        self._ignorando_foco_modelo = True
+        try:
+            if not self._popup_modelo_ativo():
+                self._criar_popup_modelo()
+            self._lista_modelo.delete(0, "end")
+            for opcao in opcoes:
+                self._lista_modelo.insert("end", opcao)
+            if opcoes:
+                self._lista_modelo.selection_clear(0, "end")
+                self._lista_modelo.selection_set(0)
+                self._lista_modelo.activate(0)
+                self._lista_modelo.see(0)
+            self._posicionar_popup_modelo()
+            self._popup_modelo.deiconify()
+            self._popup_modelo.lift()
+        finally:
+            # Mantém o cursor na caixa para digitar sem precisar clicar de novo.
+            try:
+                self.entrada_modelo.focus_set()
+            except tk.TclError:
+                pass
+            self.after(200, self._liberar_foco_modelo)
+
+    def _liberar_foco_modelo(self):
+        self._ignorando_foco_modelo = False
+
+    def _esconder_lista_modelo(self):
+        if self._popup_modelo_ativo():
+            try:
+                self._popup_modelo.destroy()
+            except tk.TclError:
+                pass
+        self._popup_modelo = None
+        self._lista_modelo = None
+
+    def _selecionar_texto_modelo(self):
+        try:
+            self.entrada_modelo.focus_set()
+            self.entrada_modelo.selection_range(0, "end")
+            self.entrada_modelo.icursor("end")
+        except tk.TclError:
+            pass
+
+    def _ao_clicar_modelo(self, _event=None):
+        self.after_idle(self._abrir_modelo_no_clique)
+
+    def _abrir_modelo_no_clique(self):
+        # Lista completa no clique; seleção do texto depois do foco estabilizar.
+        self._mostrar_lista_modelo(forcar_todas=True)
+        self.after_idle(self._selecionar_texto_modelo)
+
+    def _ao_botao_lista_modelo(self):
+        self._mostrar_lista_modelo(forcar_todas=True)
+        self.after_idle(self._selecionar_texto_modelo)
+
+    def _ao_seta_baixo_modelo(self, _event=None):
+        self._mostrar_lista_modelo()
+        if self._popup_modelo_ativo() and self._lista_modelo.size() > 0:
+            self._ignorando_foco_modelo = True
+            self._lista_modelo.focus_set()
+            self.after(50, lambda: setattr(self, "_ignorando_foco_modelo", False))
+        return "break"
+
+    def _ao_return_modelo(self, _event=None):
+        if self._popup_modelo_ativo() and self._lista_modelo is not None and self._lista_modelo.size() > 0:
+            if not self._lista_modelo.curselection():
+                self._lista_modelo.selection_set(0)
+            self._ao_escolher_modelo()
+            return "break"
+        return None
+
+    def _ao_escape_modelo(self, _event=None):
+        if self._popup_modelo_ativo():
+            self._esconder_lista_modelo()
+            return "break"
+        return None
+
+    def _ao_escape_janela(self, _event=None):
+        if self._popup_modelo_ativo():
+            self._esconder_lista_modelo()
+            return "break"
+        self._fechar()
+        return "break"
+
+    def _ao_foco_sair_modelo(self, _event=None):
+        if self._ignorando_foco_modelo:
+            return
+        self.after(120, self._esconder_lista_se_foco_fora)
+
+    def _esconder_lista_se_foco_fora(self):
+        if self._ignorando_foco_modelo:
+            return
+        foco = self.focus_get()
+        if foco is self.entrada_modelo or foco is self._lista_modelo:
+            return
+        self._esconder_lista_modelo()
+
+    def _ao_digitar_modelo(self, event=None):
+        if event is not None and event.keysym in (
+            "Up",
+            "Down",
+            "Left",
+            "Right",
+            "Return",
+            "Tab",
+            "Escape",
+            "Shift_L",
+            "Shift_R",
+            "Control_L",
+            "Control_R",
+            "Home",
+            "End",
+        ):
+            return
+        self._mostrar_lista_modelo(forcar_todas=False)
+
+    def _ao_escolher_modelo(self, _event=None):
+        if not self._popup_modelo_ativo():
+            return
+        selecao = self._lista_modelo.curselection()
+        if not selecao:
+            return
+        valor = self._lista_modelo.get(selecao[0])
+        self.var_modelo.set(valor)
+        self._esconder_lista_modelo()
+        if valor and valor != ETAPA_EM_BRANCO:
+            self.var_nome.set(valor)
+        self.entrada_modelo.focus_set()
+        self.entrada_modelo.selection_range(0, "end")
+
+    def _fechar(self):
+        self._esconder_lista_modelo()
+        self.destroy()
+
+    def _resolver_modelo(self, texto: str):
+        texto = (texto or "").strip()
+        if not texto or texto == ETAPA_EM_BRANCO:
+            return None
+        texto_fold = texto.casefold()
+        for nome, etapa in self._modelos_por_nome.items():
+            if nome.casefold() == texto_fold:
+                return etapa
+        comeca = [
+            (nome, etapa)
+            for nome, etapa in self._modelos_por_nome.items()
+            if nome.casefold().startswith(texto_fold)
+        ]
+        if len(comeca) == 1:
+            return comeca[0][1]
+        contem = [
+            (nome, etapa)
+            for nome, etapa in self._modelos_por_nome.items()
+            if texto_fold in nome.casefold()
+        ]
+        if len(contem) == 1:
+            return contem[0][1]
+        if comeca:
+            return comeca[0][1]
+        if contem:
+            return contem[0][1]
+        return None
 
     def _confirmar(self):
         nome = self.var_nome.get().strip()
@@ -425,12 +655,21 @@ class DialogoNovaEtapa(tk.Toplevel):
             )
             return
 
-        modelo = self.var_modelo.get().strip()
+        modelo_digitado = self.var_modelo.get().strip()
         etapa_id = None
-        if modelo and modelo != ETAPA_EM_BRANCO:
-            etapa = self._modelos_por_nome.get(modelo)
-            if etapa is not None:
-                etapa_id = etapa["id"]
+        if modelo_digitado and modelo_digitado != ETAPA_EM_BRANCO:
+            etapa = self._resolver_modelo(modelo_digitado)
+            if etapa is None:
+                messagebox.showwarning(
+                    "Nova etapa",
+                    f"Nenhum modelo encontrado para '{modelo_digitado}'.\n"
+                    "Digite mais letras, escolha um item da lista ou use "
+                    f'"{ETAPA_EM_BRANCO}".',
+                    parent=self,
+                )
+                return
+            etapa_id = etapa["id"]
+            self.var_modelo.set(etapa["nome"])
 
         if self.on_confirmar(nome, etapa_id):
             self.destroy()
@@ -1385,7 +1624,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             text=(
                 "Estrutura do orçamento  ·  Duplo clique: nº da etapa (reordenar), "
                 "descrição da etapa (renomear), código/qtd. do item (editar)  ·  "
-                "Estado do item (UF): preço de outra UF (SINAPI ou composição) sem mudar o orçamento  ·  "
                 "Ctrl/Shift+clique: seleção múltipla  ·  Delete: remover"
             ),
             bg="#ececec",

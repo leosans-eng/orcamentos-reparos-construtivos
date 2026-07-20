@@ -86,14 +86,6 @@ A partir da **1.3.0**, composições próprias, etapas pré-definidas e orçamen
 
 Assim, qualquer computador com o ORC instalado e autenticado na mesma URL de API enxerga e atualiza o **mesmo conjunto de dados**.
 
-```bat
-cd api
-copy .env.example .env
-run_dev.bat
-```
-
-No desktop ORC, informe a URL `http://IP_DO_SERVIDOR:8000` na tela de login.
-
 ## Requisitos
 
 - **Windows** 10 ou superior
@@ -130,8 +122,6 @@ python app.py
 ```
 
 > **Nota:** na primeira execução, o app tentará baixar a base SINAPI. Se não houver conexão, coloque manualmente um CSV processado em `sinapi/sinapi_processado/` ou um arquivo `sinapi_precos.csv` na raiz do projeto como fallback. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`.
-
-## Dados do usuário
 
 ## Dados: o que é compartilhado e o que fica no PC
 

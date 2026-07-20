@@ -295,6 +295,23 @@ def obter_item_sinapi(sinapi, codigo, estado):
     return base.obter_linha(codigo, estado)
 
 
+def estados_com_codigo(sinapi, codigo) -> list[str]:
+    """UFs em que o código SINAPI possui preço na base carregada."""
+    base = _as_base(sinapi)
+    codigo = str(codigo or "").strip()
+    if base.empty or not codigo:
+        return []
+    precos = base.precos
+    if precos.empty:
+        return []
+    mask = precos["codigo"].astype(str).str.strip() == codigo
+    if not mask.any():
+        return []
+    return sorted(
+        precos.loc[mask, "estado"].dropna().astype(str).str.strip().unique().tolist()
+    )
+
+
 def item_sinapi_ausente(sinapi, codigo, estado) -> bool:
     """True quando o código não existe na base SINAPI para o estado selecionado."""
     if not str(estado or "").strip():

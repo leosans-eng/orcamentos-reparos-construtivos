@@ -7,7 +7,7 @@ from copy import deepcopy
 
 from core.composicoes_proprias import obter_composicao_por_id
 from core.composicoes_proprias_storage import obter_por_codigo
-from core.sinapi_busca import obter_item_sinapi
+from core.sinapi_busca import estados_com_codigo, obter_item_sinapi
 
 TIPO_ITEM_SINAPI = "sinapi"
 TIPO_ITEM_PROPRIA = "propria"
@@ -88,6 +88,8 @@ def aplicar_etapa_no_orcamento(
             tipo_sinapi = str(ref.get("tipo_sinapi", "")).strip().upper()[:1]
 
             custo = 0.0
+            estado_item = estado
+            estado_fixado = False
             if estado:
                 linha = obter_item_sinapi(sinapi, codigo, estado)
                 if linha is not None:
@@ -104,10 +106,43 @@ def aplicar_etapa_no_orcamento(
                         if tipo_ic in ("I", "C"):
                             tipo_sinapi = tipo_ic
                 else:
-                    avisos.append(
-                        f"SINAPI {codigo} não encontrado na base para {estado}; "
-                        "item adicionado com custo zero."
-                    )
+                    estados_alt = estados_com_codigo(sinapi, codigo)
+                    estado_fallback = None
+                    if "SP" in estados_alt:
+                        estado_fallback = "SP"
+                    elif estados_alt:
+                        estado_fallback = estados_alt[0]
+                    if estado_fallback:
+                        linha = obter_item_sinapi(sinapi, codigo, estado_fallback)
+                        if linha is not None:
+                            try:
+                                custo = float(linha.get("custo", 0))
+                            except (TypeError, ValueError):
+                                custo = 0.0
+                            if not descricao:
+                                descricao = str(linha.get("descricao", "")).strip()
+                            if not unidade:
+                                unidade = str(linha.get("unidade", "")).strip()
+                            if not tipo_sinapi:
+                                tipo_ic = str(linha.get("tipo", "")).strip().upper()[:1]
+                                if tipo_ic in ("I", "C"):
+                                    tipo_sinapi = tipo_ic
+                            estado_item = estado_fallback
+                            estado_fixado = True
+                            avisos.append(
+                                f"SINAPI {codigo} ausente em {estado}; "
+                                f"usando preço de {estado_fallback}."
+                            )
+                        else:
+                            avisos.append(
+                                f"SINAPI {codigo} não encontrado na base para {estado}; "
+                                "item adicionado com custo zero."
+                            )
+                    else:
+                        avisos.append(
+                            f"SINAPI {codigo} não encontrado na base para {estado}; "
+                            "item adicionado com custo zero."
+                        )
             else:
                 avisos.append(
                     f"SINAPI {codigo} adicionado sem estado de referência (custo zero)."
@@ -120,8 +155,9 @@ def aplicar_etapa_no_orcamento(
                 unidade,
                 custo,
                 quantidade,
-                estado,
+                estado_item,
                 tipo_sinapi,
+                estado_fixado=estado_fixado,
             )
         elif tipo == TIPO_ITEM_PROPRIA:
             codigo = str(ref.get("codigo", "")).strip()

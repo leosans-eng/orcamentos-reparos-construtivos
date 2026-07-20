@@ -22,9 +22,12 @@ from core.formatador_sinapi.comum import (
     planilha_ativa,
     sanitizar_nome_arquivo,
 )
-from core.orcamento_customizado import TIPO_COMPOSICAO_PROPRIA, TIPO_SINAPI
+from core.orcamento_customizado import (
+    TIPO_COMPOSICAO_PROPRIA,
+    TIPO_SINAPI,
+    sincronizar_precos_sinapi_no_orcamento,
+)
 from core.planilha_sintetica import gerar_planilha_sintetica
-from core.sinapi_busca import obter_item_sinapi
 
 COLUNAS_PLANILHA = [
     "Código SINAPI",
@@ -102,27 +105,7 @@ def _aplicar_formato_moeda_celula(celula) -> None:
 
 
 def sincronizar_precos_sinapi(orcamento, sinapi, estado: str) -> None:
-    if not estado:
-        return
-    for grupo in orcamento.grupos:
-        for item in grupo.get("itens", []):
-            if item["tipo"] != TIPO_SINAPI:
-                continue
-            if item.get("estado") == estado:
-                continue
-            linha = obter_item_sinapi(sinapi, item["codigo"], estado)
-            if linha is None:
-                continue
-            try:
-                item["custo_unitario"] = float(
-                    linha.get("custo", item["custo_unitario"])
-                )
-            except (TypeError, ValueError):
-                pass
-            tipo = str(linha.get("tipo", "")).strip().upper()[:1]
-            if tipo in ("I", "C"):
-                item["tipo_sinapi"] = tipo
-            item["estado"] = estado
+    sincronizar_precos_sinapi_no_orcamento(orcamento, sinapi, estado)
 
 
 def _custo_unitario_item(item, catalogo, sinapi, estado: str) -> float:
@@ -138,7 +121,12 @@ def _custo_unitario_item(item, catalogo, sinapi, estado: str) -> float:
 
 def _descricao_item(item) -> str:
     if item["tipo"] == TIPO_SINAPI:
-        return str(item.get("descricao", "")).strip()
+        descricao = str(item.get("descricao", "")).strip()
+        if item.get("estado_fixado"):
+            estado = str(item.get("estado", "")).strip()
+            if estado:
+                return f"{descricao} [{estado}]" if descricao else f"[{estado}]"
+        return descricao
     if item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
         descricao = str(item.get("nome", "")).strip()
         if item.get("estado_fixado"):

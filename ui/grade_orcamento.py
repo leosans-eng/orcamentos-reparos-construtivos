@@ -28,6 +28,7 @@ COR_ITEM_SELECAO = "#d2d6da"
 COR_BORDA = "#cccccc"
 COR_COMPOSICAO = "#7b5e00"
 COR_ALERTA_DEPRECIADO = "#fff8e1"
+COR_ESTADO_ALTERNATIVO = "#e8f4fc"
 COR_TEXTO = "#333333"
 
 
@@ -200,12 +201,21 @@ class GradeOrcamento(tk.Frame):
                 self._ancora_indice = None
                 self._atualizar_destaques()
 
-    def adicionar_linha(self, meta, valores, estilo="item", alerta_depreciado=False):
+    def adicionar_linha(
+        self,
+        meta,
+        valores,
+        estilo="item",
+        alerta_depreciado=False,
+        alerta_estado_alternativo=False,
+    ):
         idx = len(self._linhas)
         cor_fundo = COR_GRUPO if estilo == "grupo" else COR_FUNDO
         if alerta_depreciado and estilo != "grupo":
             cor_fundo = COR_ALERTA_DEPRECIADO
             self._tem_itens_depreciados = True
+        elif alerta_estado_alternativo and estilo != "grupo":
+            cor_fundo = COR_ESTADO_ALTERNATIVO
         elif estilo != "grupo" and idx % 2 == 1:
             cor_fundo = "#f7f9fa"
 

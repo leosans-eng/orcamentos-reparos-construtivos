@@ -320,6 +320,61 @@ def parse_decimal_br(texto) -> float:
     return float(normalizado)
 
 
+def parse_quantidade_expressao(texto) -> float:
+    """
+    Interpreta quantidade com suporte a expressão aritmética simples.
+
+    Exemplos: ``12,5``, ``10*15``, ``2+3*4``, ``(1,5+2)*3``.
+    Aceita ``+ - * /`` e parênteses; vírgula como decimal.
+    """
+    import ast
+    import operator as op
+    import re
+
+    bruto = str(texto).strip().replace(" ", "")
+    if not bruto:
+        raise ValueError("valor vazio")
+
+    # Sem operadores: mantém regra brasileira (ponto de milhar + vírgula decimal).
+    if not re.search(r"[+\-*/()]", bruto):
+        return parse_decimal_br(bruto)
+
+    # Em expressões, vírgula é sempre decimal (sem milhar).
+    expressao = bruto.replace(",", ".")
+    if not re.fullmatch(r"[0-9+\-*/().]+", expressao):
+        raise ValueError("expressão inválida")
+
+    operadores = {
+        ast.Add: op.add,
+        ast.Sub: op.sub,
+        ast.Mult: op.mul,
+        ast.Div: op.truediv,
+        ast.USub: op.neg,
+        ast.UAdd: op.pos,
+    }
+
+    def _avaliar(no):
+        if isinstance(no, ast.Expression):
+            return _avaliar(no.body)
+        if isinstance(no, ast.Constant) and isinstance(no.value, (int, float)):
+            return float(no.value)
+        if isinstance(no, ast.UnaryOp) and type(no.op) in operadores:
+            return operadores[type(no.op)](_avaliar(no.operand))
+        if isinstance(no, ast.BinOp) and type(no.op) in operadores:
+            esquerdo = _avaliar(no.left)
+            direito = _avaliar(no.right)
+            if isinstance(no.op, ast.Div) and direito == 0:
+                raise ValueError("divisão por zero")
+            return operadores[type(no.op)](esquerdo, direito)
+        raise ValueError("expressão inválida")
+
+    try:
+        arvore = ast.parse(expressao, mode="eval")
+        return float(_avaliar(arvore))
+    except (SyntaxError, TypeError, KeyError, RecursionError) as exc:
+        raise ValueError("expressão inválida") from exc
+
+
 def configurar_estilos_ttk(root):
     """Estilos achatados de botões (mesmo padrão do Gerador de Relatórios Fotográficos)."""
     if getattr(root, "_orc_estilos_ttk", False):

@@ -91,6 +91,29 @@ def _consulta_parece_codigo(consulta):
     return bool(limpo) and limpo.isdigit()
 
 
+def _normalizar_codigo(codigo) -> str:
+    return normalizar_texto(codigo).replace(".", "")
+
+
+def _pontuar_codigo(codigo, consulta_codigo: str) -> int:
+    """
+    Prioriza código exato, depois prefixo (142 → 1427), depois substring (103142).
+    """
+    codigo_norm = _normalizar_codigo(codigo)
+    if not consulta_codigo or not codigo_norm:
+        return 0
+    if codigo_norm == consulta_codigo:
+        return 100_000
+    if codigo_norm.startswith(consulta_codigo):
+        # Entre prefixos, códigos mais curtos (mais próximos do digitado) vêm antes.
+        return 50_000 - (len(codigo_norm) - len(consulta_codigo))
+    pos = codigo_norm.find(consulta_codigo)
+    if pos >= 0:
+        # Substring no meio/fim fica bem abaixo dos prefixos.
+        return 10_000 - pos * 100 - (len(codigo_norm) - len(consulta_codigo)) * 10
+    return 0
+
+
 def _as_base(sinapi: SinapiBase) -> SinapiBase:
     return sinapi
 
@@ -111,14 +134,8 @@ def _mascara_grupos(descricoes_norm, grupos):
 
 
 def _pontuar_linha(codigo, descricao, grupos, consulta_norm):
-    score = 0
-    codigo_norm = normalizar_texto(codigo).replace(".", "")
     consulta_codigo = re.sub(r"[\s.]", "", consulta_norm)
-
-    if consulta_codigo and consulta_codigo == codigo_norm:
-        score += 1000
-    elif consulta_codigo and consulta_codigo in codigo_norm:
-        score += 500
+    score = _pontuar_codigo(codigo, consulta_codigo)
 
     desc_norm = normalizar_texto(descricao)
     for grupo in grupos:
@@ -127,6 +144,34 @@ def _pontuar_linha(codigo, descricao, grupos, consulta_norm):
                 score += 10 + len(termo)
                 break
     return score
+
+
+def _ordenar_por_relevancia(resultados, consulta):
+    """Ordena o DataFrame filtrado com o código exato / mais próximo no topo."""
+    if resultados.empty:
+        return resultados
+    texto = consulta.strip()
+    resultados = resultados.copy()
+    if _consulta_parece_codigo(texto):
+        consulta_codigo = re.sub(r"[\s.]", "", texto)
+        resultados["_score"] = resultados["codigo"].map(
+            lambda c: _pontuar_codigo(c, consulta_codigo)
+        )
+    else:
+        tokens = tokenizar_consulta(texto)
+        consulta_norm = normalizar_texto(texto)
+        grupos = [expandir_token(t) for t in tokens]
+        resultados["_score"] = resultados.apply(
+            lambda row: _pontuar_linha(
+                row["codigo"], row["descricao"], grupos, consulta_norm
+            ),
+            axis=1,
+        )
+    resultados = pd.DataFrame(resultados).sort_values(
+        by=["_score", "codigo"],
+        ascending=[False, True],
+    )
+    return resultados.drop(columns=["_score"])
 
 
 def _unidades_do_dataframe(df):
@@ -229,16 +274,7 @@ def pesquisar_sinapi(sinapi, estado, consulta, unidade=None, tipo=None, limite=2
     if resultados.empty:
         return vazio, "Nenhum insumo ou composição encontrada. Tente sinônimos ou menos palavras.", unidades
 
-    if not _consulta_parece_codigo(texto):
-        consulta_norm = normalizar_texto(texto)
-        grupos = [expandir_token(t) for t in tokens]
-        resultados = resultados.copy()
-        resultados["_score"] = resultados.apply(
-            lambda row: _pontuar_linha(row["codigo"], row["descricao"], grupos, consulta_norm),
-            axis=1,
-        )
-        resultados = pd.DataFrame(resultados).sort_values(by="_score", ascending=False)
-        resultados = resultados.drop(columns=["_score"])
+    resultados = _ordenar_por_relevancia(resultados, texto)
 
     resultados = _filtrar_por_tipo(resultados, tipo)
     if not isinstance(resultados, pd.DataFrame) or resultados.empty:

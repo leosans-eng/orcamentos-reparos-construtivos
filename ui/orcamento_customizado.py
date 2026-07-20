@@ -42,9 +42,10 @@ from core.sinapi_busca import (
     pesquisar_sinapi,
     tipo_sinapi_para_filtro,
 )
+from ui.calculadora import abrir_calculadora
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
-from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone
+from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone, criar_icone_svg
 from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
@@ -60,7 +61,8 @@ from ui.widgets import (
     formatar_decimal_br,
     formatar_moeda_br,
     formatar_quantidade_edicao,
-    parse_decimal_br,
+    parse_quantidade_expressao,
+    vincular_tooltip,
 )
 
 DEBOUNCE_BUSCA_MS = 250
@@ -124,16 +126,25 @@ class DialogoEditarQuantidade(tk.Toplevel):
         ).pack(fill="x", pady=(4, 12))
 
         linha_qtd = tk.Frame(painel, bg="#ececec")
-        linha_qtd.pack(fill="x", pady=(0, 12))
+        linha_qtd.pack(fill="x", pady=(0, 4))
         tk.Label(linha_qtd, text="Nova quantidade:", bg="#ececec").pack(side="left")
         self.var_quantidade = tk.StringVar(
             value=formatar_quantidade_edicao(quantidade_atual)
         )
-        entrada = ttk.Entry(linha_qtd, textvariable=self.var_quantidade, width=14)
+        entrada = ttk.Entry(linha_qtd, textvariable=self.var_quantidade, width=18)
         entrada.pack(side="left", padx=(8, 0))
         self._entrada_quantidade = entrada
         entrada.bind("<Return>", lambda _e: self._confirmar())
         entrada.bind("<Escape>", lambda _e: self.destroy())
+
+        tk.Label(
+            painel,
+            text="Dica: use expressões — ex.: 12,5*15  ou  2+3*4",
+            font=("Arial", 8),
+            fg="#666666",
+            bg="#ececec",
+            anchor="w",
+        ).pack(fill="x", pady=(0, 10))
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
@@ -1073,7 +1084,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         return tipo_sinapi_para_filtro(selecao)
 
     def _parse_quantidade(self, texto):
-        return parse_decimal_br(texto)
+        return parse_quantidade_expressao(texto)
 
     def _confirmar(self, fechar=False):
         selecionado = self.tree.selection()
@@ -1379,7 +1390,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         )
 
     def _parse_quantidade(self, texto):
-        return parse_decimal_br(texto)
+        return parse_quantidade_expressao(texto)
 
     def _confirmar(self):
         selecionado = self.tree.selection()
@@ -1509,6 +1520,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         frame_direita = tk.Frame(linha_cabecalho, bg="#ececec")
         frame_direita.pack(side="right")
 
+        self._montar_botao_calculadora(frame_direita)
+
         tk.Label(frame_direita, text="BDI (%):", bg="#ececec").pack(side="left")
         self.var_bdi = tk.StringVar(value=_formatar_bdi(BDI_PADRAO))
         self.var_bdi.trace_add("write", self._ao_alterar_bdi)
@@ -1611,7 +1624,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         entrada_cod.pack(side="left", padx=(4, 8))
         tk.Label(linha_inserir_2, text="Qtd.:", bg="#ececec").pack(side="left")
         self.var_qtd_rapido = tk.StringVar(value="1")
-        entrada_qtd = ttk.Entry(linha_inserir_2, textvariable=self.var_qtd_rapido, width=8)
+        entrada_qtd = ttk.Entry(linha_inserir_2, textvariable=self.var_qtd_rapido, width=10)
         entrada_qtd.pack(side="left", padx=(4, 8))
         ttk.Button(
             linha_inserir_2, text="Inserir", command=self._inserir_rapido, style="Compact.TButton"
@@ -1821,6 +1834,37 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.orcamento.definir_estado_referencia(self._estado_selecionado())
         self._registrar_alteracao()
 
+    def _abrir_calculadora(self):
+        abrir_calculadora(self.winfo_toplevel())
+
+    def _montar_botao_calculadora(self, parent):
+        """Botão flat só com ícone — mesmo visual de Gerar Planilha / Abrir SINAPI."""
+        kwargs = {
+            "command": self._abrir_calculadora,
+            "bg": "#ececec",
+            "activebackground": "#dfe8ec",
+            "relief": "flat",
+            "bd": 0,
+            "padx": 4,
+            "pady": 0,
+            "cursor": "hand2",
+            "highlightthickness": 0,
+        }
+        try:
+            icone = criar_icone_svg(
+                parent, "calculator-outline", altura=20, cor="#006699"
+            )
+            self._icones_botoes.append(icone)
+            kwargs["image"] = icone
+        except (ImportError, FileNotFoundError, tk.TclError, OSError):
+            kwargs["text"] = "Calc"
+            kwargs["font"] = ("Arial", 9)
+            kwargs["fg"] = "#006699"
+            kwargs["activeforeground"] = "#006699"
+        botao = tk.Button(parent, **kwargs)
+        botao.pack(side="left", padx=(0, 10))
+        vincular_tooltip(botao, "Abrir Calculadora")
+
     def _estado_selecionado(self):
         return estado_do_combo(self.combo_estado.get())
 
@@ -1837,7 +1881,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         return self.grade.obter_grupo_id_selecionado()
 
     def _parse_quantidade(self, texto):
-        return parse_decimal_br(texto)
+        return parse_quantidade_expressao(texto)
 
     def _inserir_item_sinapi(
         self,

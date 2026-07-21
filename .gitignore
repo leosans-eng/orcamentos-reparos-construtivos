@@ -18,6 +18,7 @@ sinapi/status.json
 docs/
 dados_usuario/orc_api.json
 dados_usuario/orc_sessao.json
+dados_usuario/orcamentos_customizados.json
 api/orc_dev.db
 api/.env
 api/backups/

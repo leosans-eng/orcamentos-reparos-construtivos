@@ -1636,7 +1636,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             conteudo,
             text=(
                 "Estrutura do orçamento  ·  Duplo clique: nº da etapa (reordenar), "
-                "descrição da etapa (renomear), código/qtd. do item (editar)  ·  "
+                "nome da etapa (editar no local), código/qtd. do item (editar)  ·  "
                 "Ctrl/Shift+clique: seleção múltipla  ·  Delete: remover"
             ),
             bg="#ececec",
@@ -1649,8 +1649,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             painel_grade,
             on_duplo_clique_qtd=self._dialogo_editar_quantidade,
             on_duplo_clique_codigo=self._editar_item_sinapi,
-            on_duplo_clique_descricao_grupo=self._renomear_grupo,
             on_duplo_clique_item_grupo=self._trocar_ordem_etapa,
+            on_salvar_nome_grupo=self._salvar_nome_grupo_inline,
             on_tecla_delete=lambda _e: self._remover_selecionado(silencioso=True),
         )
         self.grade.pack(fill="both", expand=True)
@@ -2163,37 +2163,52 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ao_confirmar,
         )
 
-    def _renomear_grupo(self, grupo_id=None):
-        if not grupo_id:
-            meta = self._meta_selecionada()
-            if not meta or meta["tipo"] != TIPO_GRUPO:
-                messagebox.showinfo(
-                    "Editar nome da etapa",
-                    "Selecione uma etapa na estrutura do orçamento.",
-                    parent=self.winfo_toplevel(),
-                )
-                return
-            grupo_id = meta["id"]
-        grupo = self.orcamento.obter_grupo(grupo_id)
-        if grupo is None:
-            return
-        nome = perguntar_texto(
-            self.winfo_toplevel(),
-            "Editar nome da etapa",
-            "Novo nome da etapa:",
-            valor_inicial=grupo["nome"],
-            largura_entrada=52,
-            minsize=(540, 110),
-            padding=(20, 16),
-        )
-        if not nome or not nome.strip():
-            return
+    def _salvar_nome_grupo_inline(self, grupo_id, nome) -> bool:
+        nome = str(nome or "").strip()
+        if not nome:
+            messagebox.showwarning(
+                "Etapa",
+                "Informe o nome da etapa.",
+                parent=self.winfo_toplevel(),
+            )
+            return False
         try:
             self.orcamento.renomear_grupo(grupo_id, nome)
         except ValueError as exc:
             messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
-            return
+            return False
         self._registrar_alteracao(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+        return True
+
+    def _dialogo_editar_quantidade(self, item_id):
+        grupo, item = self.orcamento.obter_item(item_id)
+        if item is None:
+            return
+
+        def ao_confirmar(texto):
+            try:
+                self.orcamento.atualizar_quantidade(
+                    item_id, self._parse_quantidade(texto)
+                )
+            except ValueError as exc:
+                messagebox.showwarning(
+                    "Quantidade", str(exc), parent=self.winfo_toplevel()
+                )
+                return
+            self._registrar_alteracao(
+                focar_meta={
+                    "tipo": item["tipo"],
+                    "id": item_id,
+                    "grupo_id": grupo["id"] if grupo else None,
+                }
+            )
+
+        DialogoEditarQuantidade(
+            self.winfo_toplevel(),
+            rotulo_item(item),
+            item["quantidade"],
+            ao_confirmar,
+        )
 
     def _trocar_ordem_etapa(self, grupo_id=None):
         if not grupo_id:
@@ -2336,34 +2351,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self.orcamento.remover_item(meta["id"])
 
         self._registrar_alteracao(focar_meta=[])
-
-    def _dialogo_editar_quantidade(self, item_id):
-        grupo, item = self.orcamento.obter_item(item_id)
-        if item is None:
-            return
-
-        def ao_confirmar(texto):
-            try:
-                self.orcamento.atualizar_quantidade(item_id, self._parse_quantidade(texto))
-            except ValueError as exc:
-                messagebox.showwarning(
-                    "Quantidade", str(exc), parent=self.winfo_toplevel()
-                )
-                return
-            self._registrar_alteracao(
-                focar_meta={
-                    "tipo": item["tipo"],
-                    "id": item_id,
-                    "grupo_id": grupo["id"] if grupo else None,
-                }
-            )
-
-        DialogoEditarQuantidade(
-            self.winfo_toplevel(),
-            rotulo_item(item),
-            item["quantidade"],
-            ao_confirmar,
-        )
 
     def _alterar_estado_item(self):
         meta = self._meta_selecionada()

@@ -43,6 +43,7 @@ class GradeOrcamento(tk.Frame):
         on_duplo_clique_descricao_grupo=None,
         on_duplo_clique_item_grupo=None,
         on_tecla_delete=None,
+        on_salvar_nome_grupo=None,
     ):
         super().__init__(parent, bg="#ececec")
         self.on_duplo_clique_qtd = on_duplo_clique_qtd
@@ -50,6 +51,7 @@ class GradeOrcamento(tk.Frame):
         self.on_duplo_clique_descricao_grupo = on_duplo_clique_descricao_grupo
         self.on_duplo_clique_item_grupo = on_duplo_clique_item_grupo
         self.on_tecla_delete = on_tecla_delete
+        self.on_salvar_nome_grupo = on_salvar_nome_grupo
         self._linhas = []
         self._selecao_metas: list[dict] = []
         self._ancora_indice: int | None = None
@@ -57,6 +59,7 @@ class GradeOrcamento(tk.Frame):
         self._largura_descricao = 280
         self._reconstruindo = False
         self._fracao_scroll_salva = 0.0
+        self._edicao: dict | None = None
         self._montar()
 
     def _montar(self):
@@ -157,6 +160,7 @@ class GradeOrcamento(tk.Frame):
         self._atualizar_scrollregion()
 
     def limpar(self):
+        self._encerrar_edicao_inline(descartar=True)
         for linha in self._linhas:
             linha["frame"].destroy()
         self._linhas.clear()
@@ -253,7 +257,7 @@ class GradeOrcamento(tk.Frame):
                     lbl.config(cursor="hand2")
                     lbl.bind(
                         "<Double-1>",
-                        lambda _e, m=meta: self._duplo_clique_descricao_grupo(m),
+                        lambda _e, m=meta, l=lbl: self._iniciar_edicao_nome_grupo(m, l),
                     )
             elif chave == "codigo" and estilo != "grupo":
                 lbl = tk.Label(
@@ -353,6 +357,141 @@ class GradeOrcamento(tk.Frame):
             "<Button-1>",
             lambda event, i=indice_linha: self._ao_clicar_linha(i, event),
         )
+
+    def _encerrar_edicao_inline(self, *, descartar=False):
+        edicao = self._edicao
+        if edicao is None:
+            return
+        self._edicao = None
+        entrada = edicao.get("entrada")
+        label = edicao.get("label")
+        if entrada is not None:
+            try:
+                entrada.destroy()
+            except tk.TclError:
+                pass
+        if label is not None and not descartar:
+            try:
+                label.grid(**edicao["grid"])
+            except tk.TclError:
+                pass
+
+    def _iniciar_edicao_inline(self, label, meta, modo: str, valor_inicial: str):
+        if self._reconstruindo:
+            return
+        self._encerrar_edicao_inline(descartar=False)
+        try:
+            info = label.grid_info()
+        except tk.TclError:
+            return
+        grid = {k: info[k] for k in ("row", "column", "sticky", "padx", "pady")}
+        label.grid_remove()
+
+        parent = label.master
+        entrada = tk.Entry(
+            parent,
+            font=("Arial", 9),
+            bg="#ffffff",
+            fg="#222222",
+            relief="solid",
+            bd=1,
+            highlightthickness=1,
+            highlightbackground="#006699",
+            highlightcolor="#006699",
+        )
+        entrada.insert(0, valor_inicial)
+        entrada.selection_range(0, tk.END)
+        entrada.grid(**grid)
+        entrada.focus_set()
+
+        self._edicao = {
+            "entrada": entrada,
+            "label": label,
+            "meta": dict(meta),
+            "modo": modo,
+            "grid": grid,
+            "confirmando": False,
+        }
+
+        entrada.bind("<Return>", lambda _e: self._confirmar_edicao_inline())
+        entrada.bind("<KP_Enter>", lambda _e: self._confirmar_edicao_inline())
+        entrada.bind("<Escape>", lambda _e: self._cancelar_edicao_inline())
+        entrada.bind("<FocusOut>", lambda _e: self._ao_focus_out_edicao())
+
+    def _ao_focus_out_edicao(self):
+        edicao = self._edicao
+        if edicao is None or edicao.get("confirmando"):
+            return
+        job = edicao.get("focus_out_job")
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except (tk.TclError, ValueError):
+                pass
+        edicao["focus_out_job"] = self.after(50, self._confirmar_edicao_inline)
+
+    def _cancelar_edicao_inline(self):
+        edicao = self._edicao
+        if edicao is None:
+            return
+        edicao["confirmando"] = True
+        job = edicao.get("focus_out_job")
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except (tk.TclError, ValueError):
+                pass
+        texto_original = edicao["label"].cget("text")
+        self._encerrar_edicao_inline(descartar=False)
+        try:
+            edicao["label"].config(text=texto_original)
+        except tk.TclError:
+            pass
+        return "break"
+
+    def _confirmar_edicao_inline(self):
+        edicao = self._edicao
+        if edicao is None or edicao.get("confirmando"):
+            return "break"
+        edicao["confirmando"] = True
+        job = edicao.get("focus_out_job")
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except (tk.TclError, ValueError):
+                pass
+            edicao["focus_out_job"] = None
+        texto = edicao["entrada"].get()
+        meta = edicao["meta"]
+        modo = edicao["modo"]
+        ok = False
+        try:
+            if modo == "nome_grupo" and self.on_salvar_nome_grupo:
+                ok = bool(self.on_salvar_nome_grupo(meta.get("id"), texto))
+            else:
+                ok = True
+        except Exception:
+            ok = False
+        if ok:
+            self._edicao = None
+            try:
+                edicao["entrada"].destroy()
+            except tk.TclError:
+                pass
+        else:
+            edicao["confirmando"] = False
+            try:
+                edicao["entrada"].focus_set()
+                edicao["entrada"].selection_range(0, tk.END)
+            except tk.TclError:
+                self._encerrar_edicao_inline(descartar=False)
+        return "break"
+
+    def _iniciar_edicao_nome_grupo(self, meta, label):
+        if self.on_salvar_nome_grupo is None:
+            self._duplo_clique_descricao_grupo(meta)
+            return
+        self._iniciar_edicao_inline(label, meta, "nome_grupo", label.cget("text"))
 
     def _duplo_clique_qtd(self, meta):
         if self.on_duplo_clique_qtd and meta.get("tipo") != TIPO_GRUPO:

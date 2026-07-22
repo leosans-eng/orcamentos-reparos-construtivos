@@ -139,7 +139,7 @@ class DialogoEditarQuantidade(tk.Toplevel):
 
         tk.Label(
             painel,
-            text="Dica: use expressões — ex.: 12,5*15  ou  2+3*4",
+            text="É possível usar expressões como 12,5*15  ou  2+3*4",
             font=("Arial", 8),
             fg="#666666",
             bg="#ececec",

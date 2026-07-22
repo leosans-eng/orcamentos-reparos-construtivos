@@ -1,4 +1,5 @@
 import tkinter as tk
+from copy import deepcopy
 from tkinter import messagebox, ttk
 
 from app_paths import asset_path
@@ -67,6 +68,8 @@ from ui.widgets import (
 
 DEBOUNCE_BUSCA_MS = 250
 UNIDADE_TODAS = "Todas"
+HISTORICO_MAX = 40
+DESCRICAO_BDI = "BDI alterado"
 
 
 def _formatar_moeda(valor):
@@ -1431,6 +1434,11 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._orcamento_id = orcamento_id
         self._trocando_orcamento = False
         self._orcamento_sujo = False
+        self._aplicando_historico = False
+        self._historico_undo = []
+        self._historico_redo = []
+        self._snapshot_base = None
+        self._binds_historico = []
         self._icone_excel_export = None
         self._icones_botoes = []
         self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
@@ -1445,6 +1453,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
+
+    def destroy(self):
+        self._desvincular_atalhos_historico()
+        super().destroy()
 
     def _montar_botao_recarregar_cabecalho(self, parent):
         self._controle_atualizacao = ControleAtualizacaoPagina(
@@ -1474,6 +1486,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.orcamento = dict_para_orcamento(registro)
         self._aplicar_orcamento_na_interface()
         self._atualizar_grade()
+        self._reiniciar_historico()
 
     def recarregar_orcamento(self, *, forcar_rede: bool = True):
         if self._orcamento_sujo and forcar_rede:
@@ -1667,6 +1680,39 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         linha_total = tk.Frame(rodape_orc, bg="#f5fafc")
         linha_total.pack(fill="x")
 
+        container_historico = tk.Frame(linha_total, bg="#f5fafc")
+        container_historico.pack(side="left", padx=10, pady=6)
+
+        self.btn_desfazer = ttk.Button(
+            container_historico,
+            text="Desfazer",
+            command=self._desfazer,
+            style="Compact.TButton",
+            state="disabled",
+        )
+        self.btn_desfazer.pack(side="left", padx=(0, 4))
+        vincular_tooltip(self.btn_desfazer, "Desfazer (Ctrl+Z)")
+
+        self.btn_refazer = ttk.Button(
+            container_historico,
+            text="Refazer",
+            command=self._refazer,
+            style="Compact.TButton",
+            state="disabled",
+        )
+        self.btn_refazer.pack(side="left", padx=(0, 10))
+        vincular_tooltip(self.btn_refazer, "Refazer (Ctrl+Y)")
+
+        self.label_ultima_acao = tk.Label(
+            container_historico,
+            text="",
+            font=("Arial", 9),
+            fg="#555555",
+            bg="#f5fafc",
+            anchor="w",
+        )
+        self.label_ultima_acao.pack(side="left")
+
         container_total = tk.Frame(linha_total, bg="#f5fafc")
         container_total.pack(side="right", padx=10, pady=8)
 
@@ -1704,6 +1750,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         self._aplicar_orcamento_na_interface()
         self._atualizar_grade()
+        self._reiniciar_historico()
+        self._vincular_atalhos_historico()
 
     def definir_orcamento(self, orcamento_id):
         if orcamento_id and orcamento_id != getattr(self.orcamento, "id", None):
@@ -1715,6 +1763,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
         self._aplicar_orcamento_na_interface()
         self._atualizar_grade()
+        self._reiniciar_historico()
 
     def _voltar_para_selecao(self):
         if self._orcamento_sujo:
@@ -1774,10 +1823,149 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.orcamento = self._carregar_orcamento_por_id(self.orcamento.id)
         self._aplicar_orcamento_na_interface()
         self._atualizar_grade()
+        self._reiniciar_historico()
 
-    def _registrar_alteracao(self, focar_meta=None):
+    def _capturar_snapshot(self):
+        return {
+            "grupos": deepcopy(self.orcamento.grupos),
+            "bdi_percent": float(self.orcamento.bdi_percent),
+            "estado_referencia": str(self.orcamento.estado_referencia or ""),
+        }
+
+    def _reiniciar_historico(self):
+        self._historico_undo.clear()
+        self._historico_redo.clear()
+        self._snapshot_base = self._capturar_snapshot()
+        self._definir_feedback_acao("")
+        self._atualizar_botoes_historico()
+
+    def _definir_feedback_acao(self, texto):
+        if not hasattr(self, "label_ultima_acao"):
+            return
+        texto = str(texto or "").strip()
+        self.label_ultima_acao.config(
+            text=f"Última ação: {texto}" if texto else ""
+        )
+
+    def _atualizar_botoes_historico(self):
+        if not hasattr(self, "btn_desfazer"):
+            return
+        self.btn_desfazer.config(
+            state="normal" if self._historico_undo else "disabled"
+        )
+        self.btn_refazer.config(
+            state="normal" if self._historico_redo else "disabled"
+        )
+
+    def _empilhar_historico(self, antes, depois, descricao):
+        if (
+            self._historico_undo
+            and descricao == DESCRICAO_BDI
+            and self._historico_undo[-1]["descricao"] == DESCRICAO_BDI
+        ):
+            self._historico_undo[-1]["depois"] = depois
+        else:
+            self._historico_undo.append(
+                {"antes": antes, "depois": depois, "descricao": descricao}
+            )
+            if len(self._historico_undo) > HISTORICO_MAX:
+                del self._historico_undo[0 : len(self._historico_undo) - HISTORICO_MAX]
+        self._historico_redo.clear()
+        self._atualizar_botoes_historico()
+
+    def _aplicar_snapshot_historico(self, snap, feedback):
+        self._aplicando_historico = True
+        try:
+            self.orcamento.grupos = deepcopy(snap["grupos"])
+            self.orcamento.bdi_percent = float(snap["bdi_percent"])
+            self.orcamento.estado_referencia = str(snap.get("estado_referencia") or "")
+            self._aplicar_orcamento_na_interface()
+            self._orcamento_sujo = True
+            self._preencher_grade()
+            self._snapshot_base = self._capturar_snapshot()
+            self._definir_feedback_acao(feedback)
+            self._atualizar_botoes_historico()
+            self._persistir_orcamento_atual()
+        finally:
+            self._aplicando_historico = False
+
+    def _desfazer(self):
+        if not self._historico_undo or self._aplicando_historico:
+            return
+        entrada = self._historico_undo.pop()
+        self._historico_redo.append(entrada)
+        self._aplicar_snapshot_historico(
+            entrada["antes"], f"Desfeita — {entrada['descricao']}"
+        )
+
+    def _refazer(self):
+        if not self._historico_redo or self._aplicando_historico:
+            return
+        entrada = self._historico_redo.pop()
+        self._historico_undo.append(entrada)
+        self._aplicar_snapshot_historico(
+            entrada["depois"], f"Refeita — {entrada['descricao']}"
+        )
+
+    def _widget_pertence_ao_editor(self, widget):
+        atual = widget
+        while atual is not None:
+            if atual is self:
+                return True
+            try:
+                atual = atual.master
+            except (tk.TclError, AttributeError):
+                return False
+        return False
+
+    def _ao_tecla_desfazer(self, event):
+        if not self._widget_pertence_ao_editor(event.widget):
+            return
+        if self._foco_em_campo_edicao():
+            return
+        self._desfazer()
+        return "break"
+
+    def _ao_tecla_refazer(self, event):
+        if not self._widget_pertence_ao_editor(event.widget):
+            return
+        if self._foco_em_campo_edicao():
+            return
+        self._refazer()
+        return "break"
+
+    def _vincular_atalhos_historico(self):
+        self._desvincular_atalhos_historico()
+        top = self.winfo_toplevel()
+        pares = (
+            ("<Control-z>", self._ao_tecla_desfazer),
+            ("<Control-Z>", self._ao_tecla_desfazer),
+            ("<Control-y>", self._ao_tecla_refazer),
+            ("<Control-Y>", self._ao_tecla_refazer),
+            ("<Control-Shift-z>", self._ao_tecla_refazer),
+            ("<Control-Shift-Z>", self._ao_tecla_refazer),
+        )
+        for sequencia, callback in pares:
+            func_id = top.bind(sequencia, callback, add="+")
+            self._binds_historico.append((top, sequencia, func_id))
+
+    def _desvincular_atalhos_historico(self):
+        for widget, sequencia, func_id in self._binds_historico:
+            try:
+                widget.unbind(sequencia, func_id)
+            except tk.TclError:
+                pass
+        self._binds_historico.clear()
+
+    def _registrar_alteracao(self, focar_meta=None, *, descricao="Alteração"):
+        antes = self._snapshot_base
         self._orcamento_sujo = True
         self._preencher_grade(focar_meta)
+        depois = self._capturar_snapshot()
+        if antes is not None and not self._aplicando_historico:
+            self._empilhar_historico(antes, depois, descricao)
+            self._definir_feedback_acao(descricao)
+        self._snapshot_base = depois
         self._persistir_orcamento_atual()
 
     def _renomear_orcamento(self):
@@ -1819,20 +2007,20 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         return valor
 
     def _ao_alterar_bdi(self, *_args):
-        if self._trocando_orcamento:
+        if self._trocando_orcamento or self._aplicando_historico:
             return
         try:
             bdi = self._parse_bdi(self.var_bdi.get())
         except ValueError:
             return
         self.orcamento.definir_bdi(bdi)
-        self._registrar_alteracao()
+        self._registrar_alteracao(descricao=DESCRICAO_BDI)
 
     def _ao_mudar_estado(self, _event=None):
-        if self._trocando_orcamento:
+        if self._trocando_orcamento or self._aplicando_historico:
             return
         self.orcamento.definir_estado_referencia(self._estado_selecionado())
-        self._registrar_alteracao()
+        self._registrar_alteracao(descricao="Estado do orçamento alterado")
 
     def _abrir_calculadora(self):
         abrir_calculadora(self.winfo_toplevel())
@@ -1876,6 +2064,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if self.label_referencia is not None:
             self.label_referencia.config(text=self._texto_referencia())
         self._atualizar_grade()
+        if not self._aplicando_historico:
+            self._snapshot_base = self._capturar_snapshot()
 
     def _grupo_id_selecionado(self):
         return self.grade.obter_grupo_id_selecionado()
@@ -1916,7 +2106,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 "tipo": TIPO_SINAPI,
                 "id": item_id,
                 "grupo_id": grupo_id,
-            }
+            },
+            descricao="Item SINAPI inserido",
         )
         return item_id
 
@@ -2107,7 +2298,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     parent=self.winfo_toplevel(),
                 )
 
-            self._registrar_alteracao(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+            self._registrar_alteracao(
+                focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id},
+                descricao="Etapa criada",
+            )
             return True
 
         DialogoNovaEtapa(self.winfo_toplevel(), modelos, ao_confirmar)
@@ -2152,7 +2346,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "tipo": TIPO_COMPOSICAO_PROPRIA,
                     "id": item_id,
                     "grupo_id": grupo_id,
-                }
+                },
+                descricao="Composição própria inserida",
             )
 
         DialogoBuscaComposicaoPropria(
@@ -2177,7 +2372,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         except ValueError as exc:
             messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
             return False
-        self._registrar_alteracao(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+        self._registrar_alteracao(
+            focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id},
+            descricao="Etapa renomeada",
+        )
         return True
 
     def _dialogo_editar_quantidade(self, item_id):
@@ -2200,7 +2398,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "tipo": item["tipo"],
                     "id": item_id,
                     "grupo_id": grupo["id"] if grupo else None,
-                }
+                },
+                descricao="Quantidade alterada",
             )
 
         DialogoEditarQuantidade(
@@ -2249,7 +2448,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     parent=self.winfo_toplevel(),
                 )
                 return
-            self._registrar_alteracao(focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id})
+            self._registrar_alteracao(
+                focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id},
+                descricao="Ordem da etapa alterada",
+            )
 
         DialogoTrocarOrdemEtapa(
             self.winfo_toplevel(),
@@ -2276,7 +2478,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             messagebox.showwarning("Item", str(exc), parent=self.winfo_toplevel())
             return
         self._registrar_alteracao(
-            focar_meta={"tipo": meta["tipo"], "id": item_id, "grupo_id": meta.get("grupo_id")}
+            focar_meta={"tipo": meta["tipo"], "id": item_id, "grupo_id": meta.get("grupo_id")},
+            descricao="Item reordenado",
         )
 
     def _meta_selecionada(self):
@@ -2336,7 +2539,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ):
                 return
             self.orcamento.remover_grupo(grupos[0]["id"])
-            self._registrar_alteracao(focar_meta=[])
+            self._registrar_alteracao(focar_meta=[], descricao="Etapa removida")
             return
 
         if len(itens) > 1:
@@ -2350,7 +2553,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         for meta in itens:
             self.orcamento.remover_item(meta["id"])
 
-        self._registrar_alteracao(focar_meta=[])
+        descricao_remocao = (
+            "Itens removidos" if len(itens) > 1 else "Item removido"
+        )
+        self._registrar_alteracao(focar_meta=[], descricao=descricao_remocao)
 
     def _alterar_estado_item(self):
         meta = self._meta_selecionada()
@@ -2416,7 +2622,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "tipo": meta["tipo"],
                     "id": item_id,
                     "grupo_id": grupo["id"] if grupo else meta.get("grupo_id"),
-                }
+                },
+                descricao="UF do item alterada",
             )
 
         DialogoEstadoItemSinapi(
@@ -2498,7 +2705,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "tipo": TIPO_SINAPI,
                     "id": item_id,
                     "grupo_id": meta.get("grupo_id"),
-                }
+                },
+                descricao="Item substituído",
             )
 
         def ao_substituir_propria(comp, _quantidade):
@@ -2518,7 +2726,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     "tipo": TIPO_COMPOSICAO_PROPRIA,
                     "id": item_id,
                     "grupo_id": meta.get("grupo_id"),
-                }
+                },
+                descricao="Item substituído",
             )
 
         DialogoBuscaSinapi(

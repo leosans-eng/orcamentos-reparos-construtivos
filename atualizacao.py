@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import ssl
 import tempfile
@@ -28,6 +29,10 @@ VERSION_JSON_URL = (
 INSTALLER_FALLBACK_NAME = "ORC_Instalador.exe"
 REQUEST_TIMEOUT_SEC = 60
 CHUNK_SIZE = 256 * 1024
+# Instalador PyInstaller+Inno costuma ter vários MB; evita reaproveitar .exe parcial.
+MIN_INSTALLER_BYTES = 1_000_000
+UI_POLL_MS = 100
+PROGRESS_UI_INTERVAL_SEC = 0.25
 
 
 def parse_version(value: str) -> tuple[int, ...]:
@@ -121,6 +126,13 @@ def resolve_download_destination(url: str) -> Path:
     return download_folder() / filename
 
 
+def installer_parece_completo(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size >= MIN_INSTALLER_BYTES
+    except OSError:
+        return False
+
+
 def create_ssl_context() -> ssl.SSLContext:
     """Usa certificados do certifi (incluso no .exe) para evitar falha de SSL em outros PCs."""
     ca_bundle = certifi.where()
@@ -141,12 +153,20 @@ def download_file(
     *,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> None:
+    """Baixa para ``destination.part`` e renomeia ao concluir (mais seguro com antivírus)."""
     request = urllib.request.Request(
         url,
         headers={"User-Agent": f"ORC/{app_version}"},
     )
+    partial = destination.with_suffix(destination.suffix + ".part")
+    try:
+        if partial.exists():
+            partial.unlink()
+    except OSError:
+        pass
+
     with open_url(request) as response:
-        total = int(response.headers.get("Content-Length", 0))
+        total = int(response.headers.get("Content-Length", 0) or 0)
         content_type = (response.headers.get("Content-Type") or "").lower()
         if "text/html" in content_type:
             raise ValueError(
@@ -155,7 +175,7 @@ def download_file(
             )
         downloaded = 0
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with destination.open("wb") as handle:
+        with partial.open("wb") as handle:
             while True:
                 chunk = response.read(CHUNK_SIZE)
                 if not chunk:
@@ -164,6 +184,26 @@ def download_file(
                 downloaded += len(chunk)
                 if on_progress:
                     on_progress(downloaded, total)
+
+        if downloaded <= 0:
+            raise OSError("O arquivo baixado está vazio.")
+        if total > 0 and downloaded < total:
+            raise OSError(
+                f"Download incompleto ({downloaded} de {total} bytes). "
+                "Tente novamente."
+            )
+        if downloaded < MIN_INSTALLER_BYTES:
+            raise OSError(
+                "O arquivo baixado é pequeno demais para ser o instalador. "
+                "Verifique a conexão e tente novamente."
+            )
+
+    try:
+        if destination.exists():
+            destination.unlink()
+    except OSError:
+        pass
+    partial.replace(destination)
 
 
 class UpdateDialog(tk.Toplevel):
@@ -175,6 +215,8 @@ class UpdateDialog(tk.Toplevel):
         self.app_version = app_version
         self.download_path: Path | None = None
         self._cancelled = False
+        self._ui_queue: queue.Queue[Callable[[], None]] = queue.Queue()
+        self._last_progress_ui = 0.0
 
         remote_version = info["version"]
         self.title("Atualização disponível")
@@ -214,6 +256,13 @@ class UpdateDialog(tk.Toplevel):
             state="disabled",
         )
         self.install_button.pack(side="left", padx=(0, 6))
+        self.retry_button = ttk.Button(
+            buttons,
+            text="Tentar novamente",
+            command=self._retry_download,
+            state="disabled",
+        )
+        self.retry_button.pack(side="left", padx=(0, 6))
         ttk.Button(
             buttons, text="Abrir pasta", command=self.open_download_folder
         ).pack(side="left", padx=(0, 6))
@@ -230,6 +279,8 @@ class UpdateDialog(tk.Toplevel):
         self.update_idletasks()
         centralizar_janela(self, root)
 
+        # Poll na thread da UI — nunca chamar after() a partir da thread de rede.
+        self.after(UI_POLL_MS, self._processar_fila_ui)
         self.after(200, self.start_download)
 
     def close_dialog(self, *, recusar: bool = True) -> None:
@@ -242,32 +293,89 @@ class UpdateDialog(tk.Toplevel):
             pass
         self.destroy()
 
+    def _processar_fila_ui(self) -> None:
+        if self._cancelled:
+            return
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        try:
+            while True:
+                callback = self._ui_queue.get_nowait()
+                try:
+                    callback()
+                except tk.TclError:
+                    pass
+        except queue.Empty:
+            pass
+        try:
+            if self.winfo_exists() and not self._cancelled:
+                self.after(UI_POLL_MS, self._processar_fila_ui)
+        except tk.TclError:
+            pass
+
+    def _agendar_ui(self, callback: Callable[[], None]) -> None:
+        if self._cancelled:
+            return
+        self._ui_queue.put(callback)
+
     def start_download(self) -> None:
-        # Reaproveita download já completo (ex.: login → hub → logout → login).
         destination = resolve_download_destination(self.info["download"])
-        if destination.is_file() and destination.stat().st_size > 0:
+        if installer_parece_completo(destination):
             self.download_path = destination
             self._on_download_success()
             return
+        # Remove .exe incompleto / .part antigo para forçar download limpo.
+        for candidato in (destination, destination.with_suffix(destination.suffix + ".part")):
+            try:
+                if candidato.is_file() and not installer_parece_completo(candidato):
+                    candidato.unlink()
+            except OSError:
+                pass
+
+        self.install_button.configure(state="disabled")
+        self.retry_button.configure(state="disabled")
+        self.status_var.set("Conectando ao servidor de download...")
+        self.progress.stop()
+        self.progress.configure(mode="indeterminate")
+        self.progress.start(12)
         threading.Thread(target=self._download_worker, daemon=True).start()
+
+    def _retry_download(self) -> None:
+        self.download_path = None
+        self.start_download()
 
     def _download_worker(self) -> None:
         destination = resolve_download_destination(self.info["download"])
         try:
+            self._agendar_ui(
+                lambda: self.status_var.set("Baixando instalador...")
+            )
 
             def on_progress(done: int, total: int) -> None:
                 if self._cancelled:
                     return
+                agora = time.monotonic()
+                # Evita enfileirar milhares de updates; libera a fila da UI.
+                if (
+                    agora - self._last_progress_ui < PROGRESS_UI_INTERVAL_SEC
+                    and total > 0
+                    and done < total
+                ):
+                    return
+                self._last_progress_ui = agora
                 if total > 0:
                     percent = min(100, int(done * 100 / total))
                     text = f"Baixando instalador... {percent}%"
                     mode: Literal["determinate", "indeterminate"] = "determinate"
                     value = percent
                 else:
-                    text = "Baixando instalador..."
+                    mb = done / (1024 * 1024)
+                    text = f"Baixando instalador... {mb:.1f} MB"
                     mode = "indeterminate"
                     value = 0
-                # Agendar no próprio diálogo (não no parent Tk que pode ter morrido).
                 self._agendar_ui(
                     lambda t=text, m=mode, v=value: self._update_progress(t, m, v)
                 )
@@ -280,22 +388,14 @@ class UpdateDialog(tk.Toplevel):
             )
             if self._cancelled:
                 return
-            if not destination.is_file() or destination.stat().st_size == 0:
-                raise OSError("O arquivo baixado está vazio ou não foi criado.")
+            if not installer_parece_completo(destination):
+                raise OSError("O arquivo baixado está incompleto ou inválido.")
             self.download_path = destination
             self._agendar_ui(self._on_download_success)
         except Exception as exc:
             if not self._cancelled:
                 message = format_download_error(exc)
                 self._agendar_ui(lambda msg=message: self._on_download_error(msg))
-
-    def _agendar_ui(self, callback: Callable[[], None]) -> None:
-        try:
-            if not self.winfo_exists():
-                return
-            self.after(0, callback)
-        except (tk.TclError, RuntimeError):
-            pass
 
     def _update_progress(
         self, text: str, mode: Literal["determinate", "indeterminate"], value: int
@@ -318,6 +418,7 @@ class UpdateDialog(tk.Toplevel):
         path = self.download_path
         self.status_var.set(f"Download concluído:\n{path}")
         self.install_button.configure(state="normal")
+        self.retry_button.configure(state="disabled")
         messagebox.showinfo(
             "Atualização baixada",
             "O instalador foi baixado.\n\n"
@@ -330,9 +431,11 @@ class UpdateDialog(tk.Toplevel):
             return
         self.progress.stop()
         self.status_var.set(f"Falha no download: {message}")
+        self.retry_button.configure(state="normal")
         messagebox.showerror(
             "Erro no download",
-            f"Não foi possível baixar a atualização.\n\n{message}",
+            f"Não foi possível baixar a atualização.\n\n{message}\n\n"
+            'Use "Tentar novamente" ou feche e abra o programa de novo.',
             parent=self,
         )
 
@@ -364,9 +467,11 @@ class UpdateDialog(tk.Toplevel):
             pass
 
     def open_download_folder(self) -> None:
-        if not self.download_path:
-            return
-        folder = self.download_path.parent
+        folder = (
+            self.download_path.parent
+            if self.download_path
+            else download_folder()
+        )
         try:
             os.startfile(folder)  # type: ignore[attr-defined]
         except AttributeError:

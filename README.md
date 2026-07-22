@@ -4,12 +4,17 @@ Aplicativo desktop para elaboração de orçamentos de reparos de vícios constr
 
 Desenvolvido em **Python** com interface **Tkinter**, voltado ao uso em perícias e laudos de vícios construtivos.
 
-**Versão atual: 1.3.0**
+**Versão atual: 1.4.0**
 
-## Destaques da 1.3.0
+## Destaques da 1.4.0
 
-- **Tela de login** na abertura do aplicativo (usuário, senha e URL da API)
-- **Dados compartilhados** entre computadores: orçamentos customizados, composições próprias e etapas pré-definidas ficam em um **banco de dados** via API, acessível por todos os usuários autorizados
+- **UF por item**: é possível alterar o estado de um único item SINAPI, permitindo usá-lo com preço de qualquer UF
+- **Substituição automática** de itens que existem em um estado e não em outro, ao trocar a UF de referência
+- **Etapa modelo** com filtro por digitação na barra de seleção
+- **Busca por código SINAPI** ordenada por relevância (código exato → prefixo → substring)
+- **Expressões nos quantitativos**, para contas rápidas direto no campo de quantidade
+- **Calculadora** no Orçamento Customizado
+- **Edição inline** do nome das etapas (sem janela pop-up)
 
 ## Funcionalidades
 
@@ -39,8 +44,12 @@ Tela inicial com acesso aos módulos:
 
 - Múltiplos orçamentos salvos no **banco compartilhado** (criar, renomear, excluir e alternar entre eles)
 - Estrutura em **etapas** (grupos) com itens **SINAPI** ou **composições próprias**
-- Inserção por busca, por código rápido, a partir do catálogo de composições ou de **etapas pré-definidas**
-- Reordenação de etapas e itens; edição de quantidades e custos
+- Inserção por busca, por código rápido, a partir do catálogo de composições ou de **etapas pré-definidas** (com filtro por digitação)
+- Busca SINAPI por código com ordenação por relevância (exato, prefixo, substring)
+- Reordenação de etapas e itens; edição de quantidades (com **expressões**) e custos
+- Edição do nome da etapa **no local** (sem pop-up)
+- **UF por item** e **substituição automática** ao trocar o estado de referência
+- **Calculadora** integrada ao módulo
 - **BDI** configurável e seleção de **estado** de referência para preços
 - **Importação** de planilhas sintéticas exportadas pelo sistema **i9**
 - **Exportação** para Excel em quatro modelos:
@@ -95,7 +104,7 @@ Assim, qualquer computador com o ORC instalado e autenticado na mesma URL de API
 ## Instalação (usuário final)
 
 1. Baixe o instalador mais recente na [página de releases](https://github.com/leosans-eng/orcamento-reparos-construtivos/releases) ou pelo link em `version.json`.
-2. Execute `ORC_Instalador_1.3.0.exe` (ou o instalador indicado em `version.json`) e siga o assistente. O app será instalado em `C:\ORC` por padrão.
+2. Execute `ORC_Instalador_1.4.0.exe` (ou o instalador indicado em `version.json`) e siga o assistente. O app será instalado em `C:\ORC` por padrão.
 3. Abra o ORC e faça **login** com seu usuário.
 
 ## Desenvolvimento
@@ -203,7 +212,7 @@ setup\orc_installer.bat
 Saídas:
 
 - `dist\ORC\ORC.exe` — executável portátil
-- `setup\output\ORC_Instalador_1.3.0.exe` — instalador Windows
+- `setup\output\ORC_Instalador_1.4.0.exe` — instalador Windows
 
 Após publicar uma nova versão, atualize `version.json` no GitHub com a versão e o link do instalador correspondente.
 
@@ -220,12 +229,21 @@ A referência SINAPI em uso aparece no rodapé da interface (ex.: `05/2026`).
 
 ## Histórico de versões
 
+### 1.4.0
+
+- É possível alterar a **UF de um único item**, para permitir que um item da SINAPI seja utilizado em qualquer estado
+- **Substituição automática** de itens que existem em um estado, mas não em outro
+- Melhorias na barra de seleção de **Etapa Modelo**, permitindo digitar para filtrar
+- Melhoria na busca de item SINAPI por código: ordenação por relevância (código exato → prefixo → substring). Exemplo: ao buscar `142`, o item `142` aparece no topo
+- Função de **expressões nos quantitativos**, para contas rápidas no campo de quantidade
+- **Calculadora** no Orçamento Customizado
+- Removida a janela pop-up para troca de nome de etapas; a edição passa a ser feita **no local**
+
 ### 1.3.0
 
 - **Tela de login** com URL da API, usuário e senha (opção de salvar credenciais neste computador)
 - **Armazenamento compartilhado** em banco de dados via API: orçamentos customizados, composições próprias e etapas pré-definidas passam a ser comuns a todos os PCs que acessam o mesmo servidor
 - **Logout** no hub para encerrar a sessão e autenticar outro usuário
-
 
 ### 1.2.0
 

@@ -7,6 +7,7 @@ import os
 import queue
 import subprocess
 import ssl
+import sys
 import tempfile
 import threading
 import time
@@ -445,26 +446,95 @@ class UpdateDialog(tk.Toplevel):
                 "Aviso", "Arquivo do instalador não encontrado.", parent=self
             )
             return
-        try:
-            os.startfile(self.download_path)  # type: ignore[attr-defined]
-        except AttributeError:
-            subprocess.Popen([str(self.download_path)], shell=True)
-        except OSError as exc:
+
+        caminho = self.download_path
+        if not self._iniciar_instalador(caminho):
             messagebox.showerror(
-                "Erro", f"Não foi possível abrir o instalador:\n{exc}", parent=self
+                "Erro",
+                "Não foi possível abrir o instalador automaticamente.\n\n"
+                f"O arquivo está em:\n{caminho}\n\n"
+                "Abra a pasta Downloads, execute o instalador manualmente "
+                "e feche o ORC antes de concluir.",
+                parent=self,
             )
+            try:
+                os.startfile(caminho.parent)  # type: ignore[attr-defined]
+            except (AttributeError, OSError):
+                pass
             return
-        parent = self.root
-        self.close_dialog(recusar=False)
+
+        # Só fecha o ORC depois de o Windows ter aceito iniciar o instalador.
         try:
-            if parent.winfo_exists():
-                messagebox.showinfo(
-                    "Instalação",
-                    "O instalador foi aberto. Feche este programa antes de concluir a instalação.",
-                    parent=parent,
-                )
+            messagebox.showinfo(
+                "Instalação",
+                "O instalador foi iniciado.\n\n"
+                "O ORC será fechado agora para liberar a instalação.\n"
+                "Se aparecer uma janela do Windows pedindo permissão (UAC), "
+                "clique em Sim e continue no instalador.\n\n"
+                "Ao final, abra o ORC de novo.",
+                parent=self,
+            )
         except tk.TclError:
             pass
+
+        self.close_dialog(recusar=False)
+        self._encerrar_processo_para_instalacao()
+
+    def _iniciar_instalador(self, caminho: Path) -> bool:
+        """
+        Inicia o instalador e confirma que o processo foi criado.
+
+        Não usa apenas startfile “cego”: se o Windows recusar o lançamento,
+        o ORC permanece aberto e o usuário vê o caminho do arquivo.
+        """
+        caminho_str = str(caminho.resolve())
+        try:
+            # CREATE_NEW_CONSOLE / DETACHED evita amarrar o instalador à vida do ORC.
+            creationflags = 0
+            if sys.platform == "win32":
+                creationflags = (
+                    getattr(subprocess, "DETACHED_PROCESS", 0)
+                    | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                )
+            processo = subprocess.Popen(
+                [caminho_str],
+                cwd=str(caminho.parent),
+                close_fds=True,
+                creationflags=creationflags,
+            )
+        except OSError:
+            try:
+                os.startfile(caminho_str)  # type: ignore[attr-defined]
+                # startfile não devolve PID; aguarda um pouco para o Shell abrir.
+                time.sleep(1.0)
+                return True
+            except OSError:
+                return False
+
+        # Confirma que o processo ainda existe (não morreu na hora).
+        time.sleep(0.6)
+        codigo = processo.poll()
+        if codigo is None:
+            return True
+        # Alguns setups sobem um helper e o processo inicial encerra rápido (ex.: UAC).
+        # Código 0 ainda é sucesso; outros códigos = falha real.
+        return codigo == 0
+
+    def _encerrar_processo_para_instalacao(self) -> None:
+        """Encerra o processo inteiro (login ou hub) após o instalador ter sido iniciado."""
+        try:
+            reiniciar_coordenador_atualizacao()
+        except Exception:
+            pass
+
+        try:
+            root = self.root.winfo_toplevel()
+            root.destroy()
+        except tk.TclError:
+            pass
+
+        # Pequena folga para o instalador/UAC aparecer antes do processo sumir.
+        threading.Timer(1.2, lambda: os._exit(0)).start()
 
     def open_download_folder(self) -> None:
         folder = (

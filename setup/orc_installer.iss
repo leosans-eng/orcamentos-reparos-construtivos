@@ -37,6 +37,12 @@ SetupIconFile=..\icone.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 PrivilegesRequired=admin
 
+; Se o ORC ainda estiver aberto, o instalador fecha o processo automaticamente
+; (evita o usuário precisar trocar de janela e fechar manualmente).
+CloseApplications=force
+CloseApplicationsFilter=ORC.exe,ORC.exe*
+RestartApplications=no
+
 [Languages]
 Name: "portuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 

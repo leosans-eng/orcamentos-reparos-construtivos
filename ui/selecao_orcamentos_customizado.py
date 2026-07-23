@@ -16,7 +16,7 @@ from core.orcamento_storage import (
     renomear_orcamento,
 )
 from ui.dialogo_importar_i9 import DialogoImportarI9
-from ui.icones import criar_botao_ttk_com_icone
+from ui.icones import criar_botao_ttk_com_icone, definir_estado_botao_icone
 from ui.recarga_catalogo import RecarregadorLista
 from ui.widgets import (
     confirmar_exclusao_com_espera,
@@ -139,20 +139,24 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         )
         self.btn_abrir.pack(side="left", padx=(0, 4))
 
-        self.btn_copiar = ttk.Button(
+        self.btn_copiar = criar_botao_ttk_com_icone(
             linha_botoes,
-            text="Copiar orçamento",
+            texto="Copiar orçamento",
+            nome_icone="copy-outline",
             command=self._copiar_selecionado,
-            style="Compact.TButton",
-            state="disabled",
+            estilo="Compact.TButton",
+            refs=self._icones_botoes,
         )
+        definir_estado_botao_icone(self.btn_copiar, "disabled")
         self.btn_copiar.pack(side="left", padx=(0, 4))
 
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_botoes,
-            text="Editar nome",
+            texto="Editar nome",
+            nome_icone="pencil",
             command=self._renomear_selecionado,
-            style="Edit.Compact.TButton",
+            estilo="Edit.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
 
         criar_botao_ttk_com_icone(
@@ -253,7 +257,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         tem_selecao = bool(self.tree.selection())
         estado = "normal" if tem_selecao else "disabled"
         self.btn_abrir.config(state=estado)
-        self.btn_copiar.config(state=estado)
+        definir_estado_botao_icone(self.btn_copiar, estado)
 
     def _ao_duplo_clique(self, _event=None):
         if self._orcamento_selecionado_id():

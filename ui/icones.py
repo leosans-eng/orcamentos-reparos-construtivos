@@ -46,6 +46,17 @@ def altura_icone_botao_compact(master: tk.Misc, estilo: str = "Compact.TButton")
     return altura_icone_botao(master, estilo)
 
 
+_COR_ICONE_DESABILITADO = "#9e9e9e"
+
+
+def _anexar_icones_estado(botao: ttk.Button, icone, icone_off, command, estilo: str) -> ttk.Button:
+    botao._orc_img_normal = icone  # type: ignore[attr-defined]
+    botao._orc_img_disabled = icone_off  # type: ignore[attr-defined]
+    botao._orc_command = command  # type: ignore[attr-defined]
+    botao._orc_style = estilo  # type: ignore[attr-defined]
+    return botao
+
+
 def criar_botao_ttk_so_icone(
     parent: tk.Misc,
     *,
@@ -60,14 +71,19 @@ def criar_botao_ttk_so_icone(
         cor_icone = "#000000"
     altura = altura_icone_botao(parent, estilo)
     icone = criar_icone_svg(parent, nome_icone, altura=altura, cor=cor_icone)
+    icone_off = criar_icone_svg(
+        parent, nome_icone, altura=altura, cor=_COR_ICONE_DESABILITADO
+    )
     if refs is not None:
         refs.append(icone)
-    return ttk.Button(
+        refs.append(icone_off)
+    botao = ttk.Button(
         parent,
         image=icone,
         command=command,
         style=estilo,
     )
+    return _anexar_icones_estado(botao, icone, icone_off, command, estilo)
 
 
 def criar_botao_ttk_com_icone(
@@ -85,9 +101,13 @@ def criar_botao_ttk_com_icone(
         cor_icone = "#000000"
     altura = altura_icone_botao(parent, estilo)
     icone = criar_icone_svg(parent, nome_icone, altura=altura, cor=cor_icone)
+    icone_off = criar_icone_svg(
+        parent, nome_icone, altura=altura, cor=_COR_ICONE_DESABILITADO
+    )
     if refs is not None:
         refs.append(icone)
-    return ttk.Button(
+        refs.append(icone_off)
+    botao = ttk.Button(
         parent,
         text=texto,
         image=icone,
@@ -95,6 +115,45 @@ def criar_botao_ttk_com_icone(
         command=command,
         style=estilo,
     )
+    return _anexar_icones_estado(botao, icone, icone_off, command, estilo)
+
+
+def _comando_inert():
+    return None
+
+
+def definir_estado_botao_icone(botao: ttk.Button, estado: str) -> None:
+    """
+    Desabilita visualmente sem usar state=disabled do ttk.
+
+    O estado nativo do ttk clareia a imagem SVG e deixa um retângulo branco
+    estranho; aqui só trocamos ícone/estilo e anulamos o comando.
+    """
+    icone_normal = getattr(botao, "_orc_img_normal", None)
+    icone_off = getattr(botao, "_orc_img_disabled", None)
+    comando = getattr(botao, "_orc_command", None)
+    estilo = getattr(botao, "_orc_style", None) or botao.cget("style")
+
+    if str(estado) == "disabled":
+        kwargs = {
+            "state": "normal",
+            "command": _comando_inert,
+            "style": "Muted.Compact.TButton",
+        }
+        if icone_off is not None:
+            kwargs["image"] = icone_off
+        botao.configure(**kwargs)
+        return
+
+    kwargs = {
+        "state": "normal",
+        "style": estilo,
+    }
+    if comando is not None:
+        kwargs["command"] = comando
+    if icone_normal is not None:
+        kwargs["image"] = icone_normal
+    botao.configure(**kwargs)
 
 
 _COR_VERDE_INSERIR = "#2e7d32"

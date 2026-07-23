@@ -46,7 +46,13 @@ from core.sinapi_busca import (
 from ui.calculadora import abrir_calculadora
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.grade_orcamento import GradeOrcamento
-from ui.icones import criar_botao_inserir_prominente, criar_botao_ttk_com_icone, criar_icone_svg
+from ui.icones import (
+    criar_botao_inserir_prominente,
+    criar_botao_ttk_com_icone,
+    criar_botao_ttk_so_icone,
+    criar_icone_svg,
+    definir_estado_botao_icone,
+)
 from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
@@ -1523,11 +1529,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         self.label_nome_orcamento.pack(side="left")
 
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             linha_cabecalho,
-            text="Editar nome do orçamento",
+            texto="Editar nome do orçamento",
+            nome_icone="pencil",
             command=self._renomear_orcamento,
-            style="Edit.Compact.TButton",
+            estilo="Edit.Compact.TButton",
+            refs=self._icones_botoes,
         ).pack(side="left", padx=(8, 16))
 
         frame_direita = tk.Frame(linha_cabecalho, bg="#ececec")
@@ -1649,7 +1657,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             conteudo,
             text=(
                 "Estrutura do orçamento  ·  Duplo clique: nº da etapa (reordenar), "
-                "nome da etapa (editar no local), código/qtd. do item (editar)  ·  "
+                "nome da etapa/código/qtd. do item (editar)  ·  "
                 "Ctrl/Shift+clique: seleção múltipla  ·  Delete: remover"
             ),
             bg="#ececec",
@@ -1683,25 +1691,25 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         container_historico = tk.Frame(linha_total, bg="#f5fafc")
         container_historico.pack(side="left", padx=10, pady=6)
 
-        self.btn_desfazer = ttk.Button(
+        self.btn_desfazer = criar_botao_ttk_so_icone(
             container_historico,
-            text="Desfazer",
+            nome_icone="caret-back-outline",
             command=self._desfazer,
-            style="Compact.TButton",
-            state="disabled",
+            refs=self._icones_botoes,
         )
         self.btn_desfazer.pack(side="left", padx=(0, 4))
         vincular_tooltip(self.btn_desfazer, "Desfazer (Ctrl+Z)")
+        definir_estado_botao_icone(self.btn_desfazer, "disabled")
 
-        self.btn_refazer = ttk.Button(
+        self.btn_refazer = criar_botao_ttk_so_icone(
             container_historico,
-            text="Refazer",
+            nome_icone="caret-forward-outline",
             command=self._refazer,
-            style="Compact.TButton",
-            state="disabled",
+            refs=self._icones_botoes,
         )
         self.btn_refazer.pack(side="left", padx=(0, 10))
         vincular_tooltip(self.btn_refazer, "Refazer (Ctrl+Y)")
+        definir_estado_botao_icone(self.btn_refazer, "disabled")
 
         self.label_ultima_acao = tk.Label(
             container_historico,
@@ -1850,11 +1858,11 @@ class OrcamentoCustomizadoFrame(tk.Frame):
     def _atualizar_botoes_historico(self):
         if not hasattr(self, "btn_desfazer"):
             return
-        self.btn_desfazer.config(
-            state="normal" if self._historico_undo else "disabled"
+        definir_estado_botao_icone(
+            self.btn_desfazer, "normal" if self._historico_undo else "disabled"
         )
-        self.btn_refazer.config(
-            state="normal" if self._historico_redo else "disabled"
+        definir_estado_botao_icone(
+            self.btn_refazer, "normal" if self._historico_redo else "disabled"
         )
 
     def _empilhar_historico(self, antes, depois, descricao):

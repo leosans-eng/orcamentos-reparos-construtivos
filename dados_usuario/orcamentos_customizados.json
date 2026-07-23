@@ -6,11 +6,176 @@
       "id": "fada4388-f37b-49dc-a9c6-26a2b18642b4",
       "nome": "Teste4",
       "bdi_percent": 30.62,
-      "estado_referencia": "",
-      "grupos": [],
+      "estado_referencia": "SP",
+      "grupos": [
+        {
+          "id": "f31e0a51-d2ae-45ae-b212-f32aa7bb2a3e",
+          "tipo": "grupo",
+          "nome": "SERVIÇOS PRELIMINARES",
+          "itens": [
+            {
+              "id": "9a729551-8c2e-493a-be8b-9e197a054b51",
+              "tipo": "composicao_propria",
+              "composicao_catalogo_id": "6a5cb243-8b73-4315-8621-42bb25948511",
+              "codigo": "47",
+              "nome": "PROJETOS E LAUDOS DE REFORMA",
+              "unidade": "H",
+              "quantidade": 1.0
+            },
+            {
+              "id": "69a557bf-bb88-4ed1-9c8f-06d312fa6e0a",
+              "tipo": "composicao_propria",
+              "composicao_catalogo_id": "7d259e2e-e56b-43f0-8e71-861a8f7bfdc1",
+              "codigo": "48",
+              "nome": "ADMINISTRAÇÃO LOCAL",
+              "unidade": "H",
+              "quantidade": 1.0
+            },
+            {
+              "id": "3a759c17-b38e-4dba-97f5-284103af4d99",
+              "tipo": "composicao_propria",
+              "composicao_catalogo_id": "9515419c-470f-4ba4-b197-d0dbf02a1dd4",
+              "codigo": "49",
+              "nome": "ALUGUEL DE ANDAIME FACHADEIRO",
+              "unidade": "M²xMês",
+              "quantidade": 1.0
+            },
+            {
+              "id": "4efcb651-de9a-415b-b639-cc0756c80322",
+              "tipo": "sinapi",
+              "codigo": "10775",
+              "descricao": "LOCACAO DE CONTAINER 2,30 X 6,00 M, ALT. 2,50 M, COM 1 SANITARIO, PARA ESCRITORIO, COMPLETO, SEM DIVISORIAS INTERNAS (NAO INCLUI MOBILIZACAO/DESMOBILIZACAO)",
+              "unidade": "MES",
+              "custo_unitario": 872.5,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "I",
+              "estado_fixado": false
+            }
+          ]
+        },
+        {
+          "id": "b958f017-bccb-4784-87ff-394603676324",
+          "tipo": "grupo",
+          "nome": "SISTEMA DE CAPTAÇÃO PLUVIAL (CALHAS BEIRAL) E FAIXA IMPERMEÁVEL",
+          "itens": [
+            {
+              "id": "bc71432c-fe78-4035-bd33-85b4bd6acc87",
+              "tipo": "sinapi",
+              "codigo": "94228",
+              "descricao": "CALHA EM CHAPA DE AÇO GALVANIZADO NÚMERO 24, DESENVOLVIMENTO DE 50 CM, INCLUSO TRANSPORTE VERTICAL. AF_07/2019",
+              "unidade": "M",
+              "custo_unitario": 94.57,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "C",
+              "estado_fixado": false
+            },
+            {
+              "id": "cafe4b72-fc6f-438c-8d72-c740b7a254e8",
+              "tipo": "sinapi",
+              "codigo": "89578",
+              "descricao": "TUBO PVC, SÉRIE R, ÁGUA PLUVIAL, DN 100 MM, FORNECIDO E INSTALADO EM CONDUTORES VERTICAIS DE ÁGUAS PLUVIAIS. AF_06/2022",
+              "unidade": "M",
+              "custo_unitario": 44.18,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "C",
+              "estado_fixado": false
+            },
+            {
+              "id": "f7fd2567-cf8a-4c7f-8ba7-0a2c9b30921b",
+              "tipo": "composicao_propria",
+              "composicao_catalogo_id": "6fb8952e-ed0e-4d4f-8279-45a530ae7de6",
+              "codigo": "0033",
+              "nome": "CAIXA DE AREIA 40X40X40CM EM ALVENARIA - EXECUÇÃO",
+              "unidade": "UN",
+              "quantidade": 1.0
+            },
+            {
+              "id": "777eedb4-583a-4a2a-bae4-2e97a71fe876",
+              "tipo": "sinapi",
+              "codigo": "89512",
+              "descricao": "TUBO PVC, SÉRIE R, ÁGUA PLUVIAL, DN 100 MM, FORNECIDO E INSTALADO EM RAMAL DE ENCAMINHAMENTO. AF_06/2022",
+              "unidade": "M",
+              "custo_unitario": 68.67,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "C",
+              "estado_fixado": false
+            },
+            {
+              "id": "451f76de-bb86-4948-b4cc-7eb26a25ed61",
+              "tipo": "sinapi",
+              "codigo": "99814",
+              "descricao": "LIMPEZA DE SUPERFÍCIE PISO OU PAREDE COM JATO DE ALTA PRESSÃO. AF_10/2025",
+              "unidade": "M2",
+              "custo_unitario": 2.23,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "C",
+              "estado_fixado": false
+            },
+            {
+              "id": "2bd4dc71-b83f-436f-baa4-4c75f16e8674",
+              "tipo": "sinapi",
+              "codigo": "98556",
+              "descricao": "IMPERMEABILIZAÇÃO DE SUPERFÍCIE COM ARGAMASSA POLIMÉRICA / MEMBRANA ACRÍLICA, 4 DEMÃOS, REFORÇADA COM VÉU DE POLIÉSTER. AF_09/2023",
+              "unidade": "M2",
+              "custo_unitario": 69.87,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "C",
+              "estado_fixado": false
+            },
+            {
+              "id": "fc23c6cf-006b-441f-87e7-eae3dcaac3bb",
+              "tipo": "sinapi",
+              "codigo": "102489",
+              "descricao": "PINTURA HIDROFUGANTE COM SILICONE, APLICAÇÃO MANUAL, 2 DEMÃOS. AF_05/2021",
+              "unidade": "M2",
+              "custo_unitario": 32.8,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "C",
+              "estado_fixado": false
+            }
+          ]
+        },
+        {
+          "id": "9040bbee-e568-4b9e-9fcc-e396f69f14a5",
+          "tipo": "grupo",
+          "nome": "LIMPEZA GERAL",
+          "itens": [
+            {
+              "id": "cb355be4-2acb-4b24-82d4-ee8279e28f8a",
+              "tipo": "sinapi",
+              "codigo": "99811",
+              "descricao": "LIMPEZA DE CONTRAPISO COM VASSOURA A SECO. AF_10/2025",
+              "unidade": "M2",
+              "custo_unitario": 0.92,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "C",
+              "estado_fixado": false
+            },
+            {
+              "id": "5653b4de-2062-464c-82fd-e74a0e4f6b42",
+              "tipo": "sinapi",
+              "codigo": "101452",
+              "descricao": "SERVENTE DE OBRAS COM ENCARGOS COMPLEMENTARES",
+              "unidade": "MES",
+              "custo_unitario": 5470.4,
+              "quantidade": 1.0,
+              "estado": "SP",
+              "tipo_sinapi": "C",
+              "estado_fixado": false
+            }
+          ]
+        }
+      ],
       "criado_em": "2026-07-10T14:17:03.274111+00:00",
-      "atualizado_em": "2026-07-10T14:17:03.274111+00:00",
-      "versao": 1
+      "atualizado_em": "2026-07-23T11:31:10+00:00"
     },
     {
       "id": "fcc13a32-8d71-4225-885c-96e52211e221",

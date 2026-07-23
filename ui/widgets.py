@@ -413,7 +413,18 @@ def configurar_estilos_ttk(root):
         background=[("active", "#cfd8dc"), ("pressed", "#b0bec5")],
         foreground=[("active", "#263238"), ("pressed", "#263238")],
     )
-    style.configure("Compact.TButton", padding=(4, 1))
+    style.configure("Compact.TButton", padding=(4, 1), focuscolor="none")
+    style.map(
+        "Compact.TButton",
+        background=[
+            ("disabled", "#e0e0e0"),
+            ("pressed", "#d5d5d5"),
+            ("active", "#e8e8e8"),
+        ],
+        foreground=[
+            ("disabled", "#9e9e9e"),
+        ],
+    )
     style.configure(
         "Secondary.Compact.TButton",
         background="#eceff1",
@@ -424,8 +435,29 @@ def configurar_estilos_ttk(root):
     )
     style.map(
         "Secondary.Compact.TButton",
-        background=[("active", "#cfd8dc"), ("pressed", "#b0bec5")],
-        foreground=[("active", "#263238"), ("pressed", "#263238")],
+        background=[
+            ("disabled", "#e0e0e0"),
+            ("active", "#cfd8dc"),
+            ("pressed", "#b0bec5"),
+        ],
+        foreground=[
+            ("disabled", "#9e9e9e"),
+            ("active", "#263238"),
+            ("pressed", "#263238"),
+        ],
+    )
+    style.configure(
+        "Muted.Compact.TButton",
+        background="#e8e8e8",
+        foreground="#9e9e9e",
+        borderwidth=1,
+        focuscolor="none",
+        padding=(4, 1),
+    )
+    style.map(
+        "Muted.Compact.TButton",
+        background=[("active", "#e8e8e8"), ("pressed", "#e8e8e8")],
+        foreground=[("active", "#9e9e9e"), ("pressed", "#9e9e9e")],
     )
     root._orc_estilos_ttk = True
 

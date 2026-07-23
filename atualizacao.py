@@ -496,12 +496,24 @@ class UpdateDialog(tk.Toplevel):
                     getattr(subprocess, "DETACHED_PROCESS", 0)
                     | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
                 )
-            processo = subprocess.Popen(
-                [caminho_str],
-                cwd=str(caminho.parent),
-                close_fds=True,
-                creationflags=creationflags,
-            )
+            # CreateProcess não executa .bat/.cmd (sai com código 1). Usa cmd.
+            if sys.platform == "win32" and caminho.suffix.lower() in {
+                ".bat",
+                ".cmd",
+            }:
+                processo = subprocess.Popen(
+                    ["cmd.exe", "/c", "start", "", caminho_str],
+                    cwd=str(caminho.parent),
+                    close_fds=True,
+                    creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+                )
+            else:
+                processo = subprocess.Popen(
+                    [caminho_str],
+                    cwd=str(caminho.parent),
+                    close_fds=True,
+                    creationflags=creationflags,
+                )
         except OSError:
             try:
                 os.startfile(caminho_str)  # type: ignore[attr-defined]
@@ -517,7 +529,8 @@ class UpdateDialog(tk.Toplevel):
         if codigo is None:
             return True
         # Alguns setups sobem um helper e o processo inicial encerra rápido (ex.: UAC).
-        # Código 0 ainda é sucesso; outros códigos = falha real.
+        # Código 0 ainda é sucesso (também o caso de `cmd /c start` com .bat).
+        # Outros códigos = falha real.
         return codigo == 0
 
     def _encerrar_processo_para_instalacao(self) -> None:

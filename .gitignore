@@ -19,6 +19,10 @@ docs/
 dados_usuario/orc_api.json
 dados_usuario/orc_sessao.json
 dados_usuario/orcamentos_customizados.json
+dados_usuario/migracao_i9_estado.json
+dados_usuario/migracao_i9_log.csv
+dados_usuario/migracao_i9_estado.tmp
+scripts/
 api/orc_dev.db
 api/.env
 api/backups/

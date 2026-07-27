@@ -296,7 +296,10 @@ if __name__ == "__main__":
                 reiniciar_coordenador_atualizacao()
             except ImportError:
                 pass
-            _root_login.destroy()
+            try:
+                _root_login.destroy()
+            except tk.TclError:
+                pass
             raise SystemExit(0)
         try:
             from atualizacao import reiniciar_coordenador_atualizacao
@@ -305,7 +308,10 @@ if __name__ == "__main__":
             reiniciar_coordenador_atualizacao()
         except ImportError:
             pass
-        _root_login.destroy()
+        try:
+            _root_login.destroy()
+        except tk.TclError:
+            pass
         print("[ORC] Login ok — iniciando hub")
         iniciar_precarga_catalogos()
         app = OrcApp()

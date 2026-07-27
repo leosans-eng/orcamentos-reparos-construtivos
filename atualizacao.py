@@ -448,13 +448,15 @@ class UpdateDialog(tk.Toplevel):
             return
 
         caminho = self.download_path
-        if not self._iniciar_instalador(caminho):
+        # Agenda o instalador para abrir DEPOIS que o ORC sair — sem messagebox
+        # (ele competia por foco com o Setup e gerava TclError no destroy).
+        if not self._agendar_instalador_apos_saida(caminho):
             messagebox.showerror(
                 "Erro",
-                "Não foi possível abrir o instalador automaticamente.\n\n"
+                "Não foi possível preparar o instalador.\n\n"
                 f"O arquivo está em:\n{caminho}\n\n"
-                "Abra a pasta Downloads, execute o instalador manualmente "
-                "e feche o ORC antes de concluir.",
+                "Feche o ORC, abra a pasta Downloads e execute o instalador "
+                "manualmente.",
                 parent=self,
             )
             try:
@@ -463,33 +465,70 @@ class UpdateDialog(tk.Toplevel):
                 pass
             return
 
-        # Só fecha o ORC depois de o Windows ter aceito iniciar o instalador.
-        try:
-            messagebox.showinfo(
-                "Instalação",
-                "O instalador foi iniciado.\n\n"
-                "O ORC será fechado agora para liberar a instalação.\n"
-                "Se aparecer uma janela do Windows pedindo permissão (UAC), "
-                "clique em Sim e continue no instalador.\n\n"
-                "Ao final, abra o ORC de novo.",
-                parent=self,
-            )
-        except tk.TclError:
-            pass
-
         self.close_dialog(recusar=False)
         self._encerrar_processo_para_instalacao()
 
-    def _iniciar_instalador(self, caminho: Path) -> bool:
+    def _agendar_instalador_apos_saida(self, caminho: Path) -> bool:
         """
-        Inicia o instalador e confirma que o processo foi criado.
+        Dispara um processo destacado que espera ~2 s e só então abre o instalador.
 
-        Não usa apenas startfile “cego”: se o Windows recusar o lançamento,
-        o ORC permanece aberto e o usuário vê o caminho do arquivo.
+        Assim o ORC já fechou quando o Setup aparece (update fluido, sem disputa
+        de foco nem tela 'fechar aplicativos' do Inno).
         """
         caminho_str = str(caminho.resolve())
         try:
-            # CREATE_NEW_CONSOLE / DETACHED evita amarrar o instalador à vida do ORC.
+            if sys.platform == "win32":
+                # Um .bat auxiliar evita o bug do `start "" "..."` (Windows interpreta
+                # aspas vazias e tenta abrir '\\'). Título não-vazio é obrigatório.
+                pasta = Path(tempfile.gettempdir()) / "orc_update_launch"
+                pasta.mkdir(parents=True, exist_ok=True)
+                launcher = pasta / "abrir_instalador.bat"
+                launcher.write_text(
+                    "\r\n".join(
+                        [
+                            "@echo off",
+                            "ping 127.0.0.1 -n 3 >nul",
+                            f'start "ORC Setup" "{caminho_str}"',
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                subprocess.Popen(
+                    ["cmd.exe", "/c", str(launcher)],
+                    cwd=str(caminho.parent),
+                    close_fds=True,
+                    creationflags=(
+                        getattr(subprocess, "DETACHED_PROCESS", 0)
+                        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                    ),
+                )
+                return True
+
+            def _abrir_depois() -> None:
+                time.sleep(2.0)
+                try:
+                    subprocess.Popen(
+                        [caminho_str],
+                        cwd=str(caminho.parent),
+                        start_new_session=True,
+                    )
+                except OSError:
+                    pass
+
+            threading.Thread(target=_abrir_depois, daemon=False).start()
+            return True
+        except OSError:
+            return False
+
+    def _iniciar_instalador(self, caminho: Path) -> bool:
+        """
+        Abre o instalador na hora (uso em testes / diagnóstico).
+
+        O fluxo normal de 'Instalar agora' usa ``_agendar_instalador_apos_saida``.
+        """
+        caminho_str = str(caminho.resolve())
+        try:
             creationflags = 0
             if sys.platform == "win32":
                 creationflags = (
@@ -497,12 +536,13 @@ class UpdateDialog(tk.Toplevel):
                     | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
                 )
             # CreateProcess não executa .bat/.cmd (sai com código 1). Usa cmd.
+            # Título "ORC Setup" (não "") — aspas vazias no start quebram o path.
             if sys.platform == "win32" and caminho.suffix.lower() in {
                 ".bat",
                 ".cmd",
             }:
                 processo = subprocess.Popen(
-                    ["cmd.exe", "/c", "start", "", caminho_str],
+                    ["cmd.exe", "/c", "start", "ORC Setup", caminho_str],
                     cwd=str(caminho.parent),
                     close_fds=True,
                     creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
@@ -517,24 +557,20 @@ class UpdateDialog(tk.Toplevel):
         except OSError:
             try:
                 os.startfile(caminho_str)  # type: ignore[attr-defined]
-                # startfile não devolve PID; aguarda um pouco para o Shell abrir.
                 time.sleep(1.0)
                 return True
             except OSError:
                 return False
 
-        # Confirma que o processo ainda existe (não morreu na hora).
         time.sleep(0.6)
         codigo = processo.poll()
         if codigo is None:
             return True
-        # Alguns setups sobem um helper e o processo inicial encerra rápido (ex.: UAC).
-        # Código 0 ainda é sucesso (também o caso de `cmd /c start` com .bat).
-        # Outros códigos = falha real.
+        # UAC / helper que encerra rápido: código 0 = ok; também `cmd /c start` .bat.
         return codigo == 0
 
     def _encerrar_processo_para_instalacao(self) -> None:
-        """Encerra o processo inteiro (login ou hub) após o instalador ter sido iniciado."""
+        """Encerra o processo na hora para liberar a instalação."""
         try:
             reiniciar_coordenador_atualizacao()
         except Exception:
@@ -546,8 +582,9 @@ class UpdateDialog(tk.Toplevel):
         except tk.TclError:
             pass
 
-        # Pequena folga para o instalador/UAC aparecer antes do processo sumir.
-        threading.Timer(1.2, lambda: os._exit(0)).start()
+        # Saída imediata: evita o loop de app.py tentar destroy de novo (TclError)
+        # e libera os arquivos antes do instalador agendado abrir.
+        os._exit(0)
 
     def open_download_folder(self) -> None:
         folder = (

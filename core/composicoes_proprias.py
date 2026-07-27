@@ -3,7 +3,12 @@
 import uuid
 from copy import deepcopy
 
-from core.sinapi_busca import obter_item_sinapi
+from core.sinapi_busca import (
+    codigo_disponivel_no_estado,
+    deve_fixar_estado_sinapi,
+    escolher_estado_fallback_sinapi,
+    obter_item_sinapi,
+)
 
 TIPO_COMPONENTE_SINAPI = "sinapi"
 TIPO_COMPONENTE_MERCADO = "mercado"
@@ -51,25 +56,32 @@ def nova_composicao(codigo, nome, unidade, componentes=None):
     }
 
 
-def estado_efetivo_componente(componente, estado_referencia="") -> str:
+def estado_efetivo_componente(componente, estado_referencia="", sinapi=None) -> str:
     """UF usada para preço/disponibilidade de um componente SINAPI."""
     if componente.get("tipo") != TIPO_COMPONENTE_SINAPI:
         return str(estado_referencia or "").strip()
+    estado_ref = str(estado_referencia or "").strip()
+    codigo = str(componente.get("codigo", "")).strip()
+    if not codigo or sinapi is None:
+        return estado_ref
+    if estado_ref and codigo_disponivel_no_estado(sinapi, codigo, estado_ref):
+        return estado_ref
     if componente.get("estado_fixado"):
         estado_item = str(componente.get("estado", "")).strip()
-        if estado_item:
+        if estado_item and codigo_disponivel_no_estado(sinapi, codigo, estado_item):
             return estado_item
-    return str(estado_referencia or "").strip()
+    fallback = escolher_estado_fallback_sinapi(sinapi, codigo)
+    if fallback:
+        return fallback
+    return estado_ref
 
 
-def componente_usa_estado_alternativo(componente, estado_referencia="") -> bool:
-    if componente.get("tipo") != TIPO_COMPONENTE_SINAPI or not componente.get(
-        "estado_fixado"
-    ):
+def componente_usa_estado_alternativo(componente, estado_referencia="", sinapi=None) -> bool:
+    if componente.get("tipo") != TIPO_COMPONENTE_SINAPI:
         return False
-    estado_item = str(componente.get("estado", "")).strip()
     estado_ref = str(estado_referencia or "").strip()
-    return bool(estado_item) and estado_item != estado_ref
+    estado_efetivo = estado_efetivo_componente(componente, estado_ref, sinapi)
+    return bool(estado_efetivo) and estado_efetivo != estado_ref
 
 
 def definir_estado_componente_sinapi(
@@ -94,7 +106,12 @@ def definir_estado_componente_sinapi(
         componente["unidade"] = unidade
     componente["estado"] = estado
     if fixar is None:
-        fixar = estado != str(estado_referencia or "").strip()
+        fixar = deve_fixar_estado_sinapi(
+            sinapi,
+            componente.get("codigo", ""),
+            estado,
+            estado_referencia,
+        )
     componente["estado_fixado"] = bool(fixar)
     return componente
 
@@ -144,7 +161,7 @@ def calcular_custo_unitario(composicao, sinapi_df, estado):
                 unitario = 0.0
             custo += unitario * coeficiente
         elif tipo == TIPO_COMPONENTE_SINAPI:
-            estado_comp = estado_efetivo_componente(componente, estado)
+            estado_comp = estado_efetivo_componente(componente, estado, sinapi_df)
             if not estado_comp:
                 tem_depreciado = True
                 continue
@@ -173,7 +190,7 @@ def verificar_componentes_depreciados(composicao, sinapi_df, estado):
     for componente in composicao.get("componentes", []):
         if componente.get("tipo") != TIPO_COMPONENTE_SINAPI:
             continue
-        estado_comp = estado_efetivo_componente(componente, estado)
+        estado_comp = estado_efetivo_componente(componente, estado, sinapi_df)
         if not estado_comp:
             depreciados.append(componente.get("id"))
             continue

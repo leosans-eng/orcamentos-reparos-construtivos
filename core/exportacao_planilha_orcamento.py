@@ -25,6 +25,8 @@ from core.formatador_sinapi.comum import (
 from core.orcamento_customizado import (
     TIPO_COMPOSICAO_PROPRIA,
     TIPO_SINAPI,
+    estado_efetivo_item,
+    item_usa_estado_alternativo,
     sincronizar_precos_sinapi_no_orcamento,
 )
 from core.planilha_sintetica import gerar_planilha_sintetica
@@ -119,20 +121,20 @@ def _custo_unitario_item(item, catalogo, sinapi, estado: str) -> float:
     return 0.0
 
 
-def _descricao_item(item) -> str:
+def _descricao_item(item, *, estado="", sinapi=None, catalogo=None) -> str:
     if item["tipo"] == TIPO_SINAPI:
         descricao = str(item.get("descricao", "")).strip()
-        if item.get("estado_fixado"):
-            estado = str(item.get("estado", "")).strip()
-            if estado:
-                return f"{descricao} [{estado}]" if descricao else f"[{estado}]"
+        if item_usa_estado_alternativo(item, estado, catalogo, sinapi):
+            uf = estado_efetivo_item(item, estado, sinapi)
+            if uf:
+                return f"{descricao} [{uf}]" if descricao else f"[{uf}]"
         return descricao
     if item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
         descricao = str(item.get("nome", "")).strip()
         if item.get("estado_fixado"):
-            estado = str(item.get("estado", "")).strip()
-            if estado:
-                return f"{descricao} [{estado}]" if descricao else f"[{estado}]"
+            uf = str(item.get("estado", "")).strip()
+            if uf:
+                return f"{descricao} [{uf}]" if descricao else f"[{uf}]"
         return descricao
     return ""
 
@@ -162,7 +164,9 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
             itens_linhas.append(
                 {
                     "Código SINAPI": _codigo_item(item),
-                    "Descrição do item": _descricao_item(item),
+                    "Descrição do item": _descricao_item(
+                        item, estado=estado, sinapi=sinapi, catalogo=catalogo
+                    ),
                     "Unid.": _unidade_item(item),
                     "Qtd.": round(quantidade, 2),
                     "Valor Unit.": round(valor_unit, 2),

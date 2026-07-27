@@ -348,6 +348,35 @@ def estados_com_codigo(sinapi, codigo) -> list[str]:
     )
 
 
+def escolher_estado_fallback_sinapi(sinapi, codigo) -> str:
+    """UF alternativa quando o código não existe no estado de referência (SP preferido)."""
+    estados_alt = estados_com_codigo(sinapi, codigo)
+    if "SP" in estados_alt:
+        return "SP"
+    if estados_alt:
+        return estados_alt[0]
+    return ""
+
+
+def codigo_disponivel_no_estado(sinapi, codigo, estado) -> bool:
+    """True quando o código SINAPI existe na base para o estado informado."""
+    estado = str(estado or "").strip()
+    if not estado:
+        return False
+    return obter_item_sinapi(sinapi, codigo, estado) is not None
+
+
+def deve_fixar_estado_sinapi(sinapi, codigo, estado_escolhido, estado_referencia) -> bool:
+    """Fixação de UF só é necessária quando o código não existe no estado de referência."""
+    estado_escolhido = str(estado_escolhido or "").strip()
+    estado_referencia = str(estado_referencia or "").strip()
+    if not estado_escolhido:
+        return False
+    if not estado_referencia or estado_escolhido == estado_referencia:
+        return False
+    return not codigo_disponivel_no_estado(sinapi, codigo, estado_referencia)
+
+
 def item_sinapi_ausente(sinapi, codigo, estado) -> bool:
     """True quando o código não existe na base SINAPI para o estado selecionado."""
     if not str(estado or "").strip():

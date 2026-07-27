@@ -23,7 +23,7 @@ from core.composicoes_proprias_storage import (
     obter_por_id,
     salvar_estado_previa_custos,
 )
-from core.sinapi_busca import estados_com_codigo
+from core.sinapi_busca import deve_fixar_estado_sinapi, estados_com_codigo
 from ui.icones import (
     criar_botao_inserir_prominente,
     criar_botao_ttk_com_icone,
@@ -605,11 +605,11 @@ class ComposicoesPropriasFrame(tk.Frame):
             tipo = componente.get("tipo", "")
             rotulo_tipo = "SINAPI" if tipo == TIPO_COMPONENTE_SINAPI else "Mercado"
             descricao = componente.get("descricao", "")
-            if componente_usa_estado_alternativo(componente, estado):
+            if componente_usa_estado_alternativo(componente, estado, self.ctx.sinapi):
                 descricao = f"{descricao}  [{componente.get('estado', '')}]"
             if componente.get("id") in depreciados:
                 tags = ("depreciado",)
-            elif componente_usa_estado_alternativo(componente, estado):
+            elif componente_usa_estado_alternativo(componente, estado, self.ctx.sinapi):
                 tags = ("estado_alternativo",)
             else:
                 tags = ()
@@ -838,7 +838,9 @@ class ComposicoesPropriasFrame(tk.Frame):
                 return
             estado_ref = self._estado_selecionado()
             estado_item = str(estado or "").strip()
-            estado_fixado = bool(estado_item) and estado_item != estado_ref
+            estado_fixado = deve_fixar_estado_sinapi(
+                self.ctx.sinapi, codigo, estado_item, estado_ref
+            )
             componente = novo_componente_sinapi(
                 codigo,
                 descricao,

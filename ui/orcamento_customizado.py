@@ -18,6 +18,7 @@ from core.orcamento_customizado import (
     custo_unitario_com_bdi,
     item_indisponivel_na_base,
     item_usa_estado_alternativo,
+    estado_efetivo_item,
     rotulo_item,
     rotulo_tipo_sinapi,
     sincronizar_precos_sinapi_no_orcamento,
@@ -36,6 +37,7 @@ from core.sinapi_busca import (
     TIPO_INSUMO,
     TIPO_TODOS,
     VALORES_FILTRO_TIPO,
+    deve_fixar_estado_sinapi,
     estados_com_codigo,
     nome_tipo_sinapi,
     obter_item_sinapi,
@@ -2119,10 +2121,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         return item_id
 
-    def _estado_item_deve_fixar(self, estado_item):
-        estado_item = str(estado_item or "").strip()
-        estado_orc = self._estado_selecionado()
-        return bool(estado_item) and estado_item != estado_orc
+    def _estado_item_deve_fixar(self, estado_item, codigo=None):
+        return deve_fixar_estado_sinapi(
+            self.ctx.sinapi,
+            codigo or "",
+            estado_item,
+            self._estado_selecionado(),
+        )
 
     def _abrir_busca_sinapi(self):
         grupo_id = self._grupo_id_selecionado()
@@ -2144,7 +2149,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 quantidade,
                 estado,
                 tipo_sinapi,
-                estado_fixado=self._estado_item_deve_fixar(estado),
+                estado_fixado=self._estado_item_deve_fixar(estado, codigo),
             )
 
         DialogoBuscaSinapi(
@@ -2703,7 +2708,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     custo,
                     estado,
                     tipo_sinapi,
-                    estado_fixado=self._estado_item_deve_fixar(estado),
+                    estado_fixado=self._estado_item_deve_fixar(estado, codigo),
                 )
             except ValueError as exc:
                 messagebox.showwarning("Editar item", str(exc), parent=self.winfo_toplevel())
@@ -2876,11 +2881,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                         item, self.ctx.sinapi, catalogo, estado_atual
                     )
                     usa_uf_alt = item_usa_estado_alternativo(
-                        item, estado_atual, catalogo
+                        item, estado_atual, catalogo, self.ctx.sinapi
                     )
                     descricao = item["descricao"]
-                    if usa_uf_alt and item.get("estado_fixado"):
-                        descricao = f"{descricao}  [{item.get('estado', '')}]"
+                    if usa_uf_alt:
+                        uf_alt = estado_efetivo_item(item, estado_atual, self.ctx.sinapi)
+                        descricao = f"{descricao}  [{uf_alt}]"
                     self.grade.adicionar_linha(
                         meta={
                             "tipo": TIPO_SINAPI,
@@ -2909,7 +2915,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     custo_bdi = custo_unitario_com_bdi(custo_unit, bdi)
                     total = custo_bdi * item["quantidade"]
                     usa_uf_alt = item_usa_estado_alternativo(
-                        item, estado_atual, catalogo
+                        item, estado_atual, catalogo, self.ctx.sinapi
                     )
                     descricao = item.get("nome", "")
                     if item.get("estado_fixado") and item.get("estado"):

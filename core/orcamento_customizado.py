@@ -53,25 +53,46 @@ def _criar_item_sinapi(
     }
 
 
-def estado_efetivo_item(item, estado_orcamento="") -> str:
+def estado_efetivo_item(item, estado_orcamento="", sinapi=None) -> str:
     """UF usada para preço/disponibilidade do item (pode diferir do orçamento)."""
     if item.get("tipo") not in (TIPO_SINAPI, TIPO_COMPOSICAO_PROPRIA):
         return str(estado_orcamento or "").strip()
+    estado_ref = str(estado_orcamento or "").strip()
+    if item.get("tipo") == TIPO_SINAPI and sinapi is not None:
+        from core.sinapi_busca import (
+            codigo_disponivel_no_estado,
+            escolher_estado_fallback_sinapi,
+        )
+
+        codigo = str(item.get("codigo", "")).strip()
+        if codigo:
+            if estado_ref and codigo_disponivel_no_estado(sinapi, codigo, estado_ref):
+                return estado_ref
+            if item.get("estado_fixado"):
+                estado_item = str(item.get("estado", "")).strip()
+                if estado_item and codigo_disponivel_no_estado(
+                    sinapi, codigo, estado_item
+                ):
+                    return estado_item
+            fallback = escolher_estado_fallback_sinapi(sinapi, codigo)
+            if fallback:
+                return fallback
+        return estado_ref
     if item.get("estado_fixado"):
         estado_item = str(item.get("estado", "")).strip()
         if estado_item:
             return estado_item
-    return str(estado_orcamento or "").strip()
+    return estado_ref
 
 
-def item_usa_estado_alternativo(item, estado_orcamento="", catalogo=None) -> bool:
+def item_usa_estado_alternativo(
+    item, estado_orcamento="", catalogo=None, sinapi=None
+) -> bool:
     """True quando o item usa UF diferente da do orçamento (própria ou via catálogo)."""
     estado_ref = str(estado_orcamento or "").strip()
     if item.get("tipo") == TIPO_SINAPI:
-        if not item.get("estado_fixado"):
-            return False
-        estado_item = str(item.get("estado", "")).strip()
-        return bool(estado_item) and estado_item != estado_ref
+        estado_efetivo = estado_efetivo_item(item, estado_ref, sinapi)
+        return bool(estado_efetivo) and estado_efetivo != estado_ref
     if item.get("tipo") == TIPO_COMPOSICAO_PROPRIA:
         if item.get("estado_fixado"):
             estado_item = str(item.get("estado", "")).strip()
@@ -88,9 +109,9 @@ def item_usa_estado_alternativo(item, estado_orcamento="", catalogo=None) -> boo
             )
             if composicao is None:
                 return False
-            estado_calc = estado_efetivo_item(item, estado_orcamento)
+            estado_calc = estado_efetivo_item(item, estado_orcamento, sinapi)
             return any(
-                componente_usa_estado_alternativo(c, estado_calc)
+                componente_usa_estado_alternativo(c, estado_calc, sinapi)
                 for c in composicao.get("componentes", [])
             )
     return False
@@ -347,7 +368,7 @@ class OrcamentoCustomizado:
 
     def definir_estado_item_sinapi(self, item_id, estado, sinapi, *, fixar=None):
         """Altera a UF de preço de um item SINAPI sem mudar o estado do orçamento."""
-        from core.sinapi_busca import obter_item_sinapi
+        from core.sinapi_busca import deve_fixar_estado_sinapi, obter_item_sinapi
 
         _grupo, item = self.obter_item(item_id)
         if item is None:
@@ -377,7 +398,12 @@ class OrcamentoCustomizado:
             item["unidade"] = unidade
         item["estado"] = estado
         if fixar is None:
-            fixar = estado != str(self.estado_referencia or "").strip()
+            fixar = deve_fixar_estado_sinapi(
+                sinapi,
+                item["codigo"],
+                estado,
+                self.estado_referencia,
+            )
         item["estado_fixado"] = bool(fixar)
 
     def definir_estado_item_composicao(self, item_id, estado, *, fixar=None):
@@ -450,7 +476,11 @@ def sincronizar_precos_sinapi_no_orcamento(orcamento, sinapi, estado):
     estado_ref = str(estado or "").strip()
     if not estado_ref:
         return
-    from core.sinapi_busca import obter_item_sinapi
+    from core.sinapi_busca import (
+        deve_fixar_estado_sinapi,
+        escolher_estado_fallback_sinapi,
+        obter_item_sinapi,
+    )
 
     def _aplicar_linha(item, linha, estado_aplicado, *, fixado):
         try:
@@ -469,6 +499,10 @@ def sincronizar_precos_sinapi_no_orcamento(orcamento, sinapi, estado):
         for item in grupo.get("itens", []):
             if item["tipo"] != TIPO_SINAPI:
                 continue
+            linha_ref = obter_item_sinapi(sinapi, item["codigo"], estado_ref)
+            if linha_ref is not None:
+                _aplicar_linha(item, linha_ref, estado_ref, fixado=False)
+                continue
             if item.get("estado_fixado"):
                 estado_item = str(item.get("estado", "")).strip()
                 if not estado_item:
@@ -478,18 +512,14 @@ def sincronizar_precos_sinapi_no_orcamento(orcamento, sinapi, estado):
                     continue
                 _aplicar_linha(item, linha, estado_item, fixado=True)
                 continue
-
-            linha = obter_item_sinapi(sinapi, item["codigo"], estado_ref)
-            if linha is None:
-                estado_alt = str(item.get("estado", "")).strip()
-                if (
-                    estado_alt
-                    and estado_alt != estado_ref
-                    and obter_item_sinapi(sinapi, item["codigo"], estado_alt) is not None
-                ):
-                    item["estado_fixado"] = True
-                continue
-            _aplicar_linha(item, linha, estado_ref, fixado=False)
+            fallback = escolher_estado_fallback_sinapi(sinapi, item["codigo"])
+            if fallback:
+                linha = obter_item_sinapi(sinapi, item["codigo"], fallback)
+                if linha is not None:
+                    fixado = deve_fixar_estado_sinapi(
+                        sinapi, item["codigo"], fallback, estado_ref
+                    )
+                    _aplicar_linha(item, linha, fallback, fixado=fixado)
 
 
 def rotulo_tipo_sinapi(item, sinapi=None) -> str:
@@ -504,7 +534,7 @@ def rotulo_tipo_sinapi(item, sinapi=None) -> str:
         linha = obter_item_sinapi(
             sinapi,
             item.get("codigo", ""),
-            estado_efetivo_item(item, item.get("estado", "")),
+            estado_efetivo_item(item, item.get("estado", ""), sinapi),
         )
         if linha is not None:
             tipo = str(linha.get("tipo", "")).strip().upper()[:1]
@@ -525,7 +555,7 @@ def item_indisponivel_na_base(item, sinapi, catalogo, estado) -> bool:
     from core.sinapi_busca import item_sinapi_ausente
 
     if item["tipo"] == TIPO_SINAPI:
-        estado_item = estado_efetivo_item(item, estado)
+        estado_item = estado_efetivo_item(item, estado, sinapi)
         return item_sinapi_ausente(sinapi, item["codigo"], estado_item)
     if item["tipo"] == TIPO_COMPOSICAO_PROPRIA:
         _custo, tem_depreciado = custo_composicao_propria_item(

@@ -151,18 +151,34 @@ def gerar_caminho_saida(
     return os.path.join(diretorio, nome_arquivo)
 
 
+def _copiar_lado_borda(lado) -> Side:
+    """Recria o Side; StyleProxy do openpyxl não pode ser reutilizado no Border."""
+    if lado is None or getattr(lado, "style", None) is None:
+        return Side()
+    try:
+        cor = lado.color
+        rgb = getattr(cor, "rgb", None) if cor is not None else None
+    except (TypeError, ValueError, AttributeError):
+        rgb = None
+    if not rgb:
+        return Side(style=lado.style)
+    return Side(style=lado.style, color=str(rgb))
+
+
 def aplicar_borda_contorno(ws, start_row, start_col, end_row, end_col):
     borda_externa = Side(style="thin", color="000000")
     for row in range(start_row, end_row + 1):
         for col in range(start_col, end_col + 1):
-            if row in (start_row, end_row) or col in (start_col, end_col):
-                celula = ws.cell(row=row, column=col)
-                celula.border = Border(
-                    left=borda_externa if col == start_col else celula.border.left,
-                    right=borda_externa if col == end_col else celula.border.right,
-                    top=borda_externa if row == start_row else celula.border.top,
-                    bottom=borda_externa if row == end_row else celula.border.bottom,
-                )
+            if row not in (start_row, end_row) and col not in (start_col, end_col):
+                continue
+            celula = ws.cell(row=row, column=col)
+            atual = celula.border
+            celula.border = Border(
+                left=borda_externa if col == start_col else _copiar_lado_borda(atual.left),
+                right=borda_externa if col == end_col else _copiar_lado_borda(atual.right),
+                top=borda_externa if row == start_row else _copiar_lado_borda(atual.top),
+                bottom=borda_externa if row == end_row else _copiar_lado_borda(atual.bottom),
+            )
 
 
 def extrair_totais_finais(ws, max_rows=3):

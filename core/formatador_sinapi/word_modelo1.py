@@ -7,6 +7,8 @@ from copy import deepcopy
 import openpyxl
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
 
 from core.formatador_sinapi.paths import caminho_modelo_word
@@ -118,6 +120,30 @@ def limpar_celula_conclusao(celula):
     for filho in list(paragrafo._p):
         if filho.tag.endswith("}r"):
             paragrafo._p.remove(filho)
+
+
+def _definir_borda_inferior_preta(celula):
+    tc_pr = celula._tc.get_or_add_tcPr()
+    bordas = tc_pr.find(qn("w:tcBorders"))
+    if bordas is None:
+        bordas = OxmlElement("w:tcBorders")
+        tc_pr.append(bordas)
+    inferior = bordas.find(qn("w:bottom"))
+    if inferior is None:
+        inferior = OxmlElement("w:bottom")
+        bordas.append(inferior)
+    inferior.set(qn("w:val"), "single")
+    inferior.set(qn("w:sz"), "4")
+    inferior.set(qn("w:space"), "0")
+    inferior.set(qn("w:color"), "000000")
+
+
+def fechar_borda_inferior_tabela(tabela):
+    """A última linha do template usa borda preta; as linhas clonadas ficam cinza."""
+    if len(tabela.rows) < 2:
+        return
+    for _, celula in celulas_unicas(tabela.rows[-1]):
+        _definir_borda_inferior_preta(celula)
 
 
 def aplicar_larguras_colunas(tabela, larguras_cm):
@@ -247,6 +273,7 @@ def reconstruir_tabela_orcamento(tabela, linhas):
             linha = adicionar_linha_clonada(tabela, proto_extenso)
             preencher_linha_extenso(linha, linha_dados["texto"])
 
+    fechar_borda_inferior_tabela(tabela)
     aplicar_larguras_colunas(tabela, LARGURAS_ORCAMENTO_CM)
 
 

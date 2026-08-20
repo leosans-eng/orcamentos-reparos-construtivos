@@ -259,6 +259,21 @@ class OrcamentoCustomizado:
         itens[indice], itens[novo_indice] = itens[novo_indice], itens[indice]
         return True
 
+    def mover_item_para_indice(self, item_id, novo_indice):
+        """Reordena o item para o índice final desejado dentro da mesma etapa."""
+        grupo, item = self.obter_item(item_id)
+        if item is None or grupo is None:
+            raise ValueError("Item não encontrado.")
+        itens = grupo["itens"]
+        if not itens:
+            return False
+        indice = next(i for i, candidato in enumerate(itens) if candidato["id"] == item_id)
+        destino = max(0, min(int(novo_indice), len(itens) - 1))
+        if indice == destino:
+            return False
+        itens.insert(destino, itens.pop(indice))
+        return True
+
     def adicionar_item_sinapi(
         self,
         grupo_id,

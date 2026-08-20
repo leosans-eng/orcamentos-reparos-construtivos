@@ -1595,18 +1595,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_etapas_2,
-            text="Item ↑",
-            command=lambda: self._mover_item(-1),
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_etapas_2,
-            text="Item ↓",
-            command=lambda: self._mover_item(1),
-            style="Compact.TButton",
-        ).pack(side="left", padx=(0, 4))
-        ttk.Button(
-            linha_etapas_2,
             text="Estado do item (UF)",
             command=self._alterar_estado_item,
             style="Compact.TButton",
@@ -1675,6 +1663,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             on_duplo_clique_item_grupo=self._trocar_ordem_etapa,
             on_salvar_nome_grupo=self._salvar_nome_grupo_inline,
             on_tecla_delete=lambda _e: self._remover_selecionado(silencioso=True),
+            on_reordenar_item=self._ao_reordenar_item_arraste,
         )
         self.grade.pack(fill="both", expand=True)
 
@@ -2474,26 +2463,21 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ao_confirmar,
         )
 
-    def _mover_item(self, delta):
-        meta = self._meta_selecionada()
-        if not meta or meta["tipo"] == TIPO_GRUPO:
-            messagebox.showinfo(
-                "Mover item",
-                "Selecione um item para mover dentro da etapa.",
-                parent=self.winfo_toplevel(),
-            )
-            return
-        item_id = meta["id"]
+    def _ao_reordenar_item_arraste(self, item_id, novo_indice):
         try:
-            if not self.orcamento.mover_item(item_id, delta):
-                return
+            if not self.orcamento.mover_item_para_indice(item_id, novo_indice):
+                return False
         except ValueError as exc:
             messagebox.showwarning("Item", str(exc), parent=self.winfo_toplevel())
-            return
+            return False
+        grupo, item = self.orcamento.obter_item(item_id)
+        tipo = item.get("tipo") if item else None
+        grupo_id = grupo.get("id") if grupo else None
         self._registrar_alteracao(
-            focar_meta={"tipo": meta["tipo"], "id": item_id, "grupo_id": meta.get("grupo_id")},
+            focar_meta={"tipo": tipo, "id": item_id, "grupo_id": grupo_id},
             descricao="Item reordenado",
         )
+        return True
 
     def _meta_selecionada(self):
         return self.grade.obter_meta_selecionada()

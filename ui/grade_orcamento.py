@@ -30,6 +30,8 @@ COR_COMPOSICAO = "#7b5e00"
 COR_ALERTA_DEPRECIADO = "#fff8e1"
 COR_ESTADO_ALTERNATIVO = "#e8f4fc"
 COR_TEXTO = "#333333"
+COR_MARCADOR_DROP = "#006699"
+LIMIAR_ARRASTE_PX = 8
 
 
 class GradeOrcamento(tk.Frame):
@@ -44,6 +46,7 @@ class GradeOrcamento(tk.Frame):
         on_duplo_clique_item_grupo=None,
         on_tecla_delete=None,
         on_salvar_nome_grupo=None,
+        on_reordenar_item=None,
     ):
         super().__init__(parent, bg="#ececec")
         self.on_duplo_clique_qtd = on_duplo_clique_qtd
@@ -52,6 +55,7 @@ class GradeOrcamento(tk.Frame):
         self.on_duplo_clique_item_grupo = on_duplo_clique_item_grupo
         self.on_tecla_delete = on_tecla_delete
         self.on_salvar_nome_grupo = on_salvar_nome_grupo
+        self.on_reordenar_item = on_reordenar_item
         self._linhas = []
         self._selecao_metas: list[dict] = []
         self._ancora_indice: int | None = None
@@ -60,6 +64,8 @@ class GradeOrcamento(tk.Frame):
         self._reconstruindo = False
         self._fracao_scroll_salva = 0.0
         self._edicao: dict | None = None
+        self._drag: dict | None = None
+        self._marcador_drop = None
         self._montar()
 
     def _montar(self):
@@ -161,6 +167,7 @@ class GradeOrcamento(tk.Frame):
 
     def limpar(self):
         self._encerrar_edicao_inline(descartar=True)
+        self._encerrar_arraste(limpar_apenas=True)
         for linha in self._linhas:
             linha["frame"].destroy()
         self._linhas.clear()
@@ -300,6 +307,7 @@ class GradeOrcamento(tk.Frame):
                     anchor=anchor,
                     padx=4,
                     pady=5,
+                    cursor="fleur" if self.on_reordenar_item else "",
                 )
                 lbl.grid(row=0, column=col, sticky="nsew", padx=(10, 1))
             elif chave == "quantidade" and estilo != "grupo" and texto:
@@ -354,9 +362,11 @@ class GradeOrcamento(tk.Frame):
 
     def _vincular_selecao(self, widget, indice_linha):
         widget.bind(
-            "<Button-1>",
-            lambda event, i=indice_linha: self._ao_clicar_linha(i, event),
+            "<ButtonPress-1>",
+            lambda event, i=indice_linha: self._ao_pressionar_linha(i, event),
         )
+        widget.bind("<B1-Motion>", self._ao_arrastar_linha)
+        widget.bind("<ButtonRelease-1>", self._ao_soltar_linha)
 
     def _encerrar_edicao_inline(self, *, descartar=False):
         edicao = self._edicao
@@ -517,6 +527,207 @@ class GradeOrcamento(tk.Frame):
             if self._meta_coincide(linha["meta"], meta):
                 return indice
         return None
+
+    def _ao_pressionar_linha(self, indice_linha, event):
+        if self._edicao is not None:
+            return
+        if indice_linha < 0 or indice_linha >= len(self._linhas):
+            return
+        meta = dict(self._linhas[indice_linha]["meta"])
+        self._drag = {
+            "indice_origem": indice_linha,
+            "meta": meta,
+            "y0": event.y_root,
+            "ativo": False,
+            "novo_indice": None,
+            "ctrl": bool(event.state & 0x4),
+            "shift": bool(event.state & 0x1),
+        }
+        self._ao_clicar_linha(indice_linha, event)
+
+    def _ao_arrastar_linha(self, event):
+        drag = self._drag
+        if drag is None or self.on_reordenar_item is None:
+            return
+        if drag["meta"].get("tipo") == TIPO_GRUPO:
+            return
+        if drag["ctrl"] or drag["shift"]:
+            return
+        if abs(event.y_root - drag["y0"]) < LIMIAR_ARRASTE_PX and not drag["ativo"]:
+            return
+        if not drag["ativo"]:
+            drag["ativo"] = True
+            try:
+                self.canvas.configure(cursor="fleur")
+            except tk.TclError:
+                pass
+        self._auto_rolar_durante_arraste(event.y_root)
+        destino = self._resolver_destino_arraste(drag["meta"], event.y_root)
+        drag["novo_indice"] = None if destino is None else destino["novo_indice"]
+        self._atualizar_marcador_drop(destino)
+
+    def _ao_soltar_linha(self, event):
+        drag = self._drag
+        if drag is None:
+            return
+        ativo = drag.get("ativo")
+        meta = drag.get("meta") or {}
+        novo_indice = drag.get("novo_indice")
+        self._encerrar_arraste()
+        if not ativo or self.on_reordenar_item is None:
+            return
+        if meta.get("tipo") == TIPO_GRUPO or novo_indice is None:
+            return
+        item_id = meta.get("id")
+        if not item_id:
+            return
+        self.on_reordenar_item(item_id, novo_indice)
+
+    def _encerrar_arraste(self, *, limpar_apenas=False):
+        self._drag = None
+        self._remover_marcador_drop()
+        if limpar_apenas:
+            return
+        try:
+            self.canvas.configure(cursor="")
+        except tk.TclError:
+            pass
+
+    def _auto_rolar_durante_arraste(self, y_root):
+        if self._conteudo_cabe_no_canvas():
+            return
+        topo = self.canvas.winfo_rooty()
+        base = topo + self.canvas.winfo_height()
+        if y_root < topo + 36:
+            self.canvas.yview_scroll(-1, "units")
+        elif y_root > base - 36:
+            self.canvas.yview_scroll(1, "units")
+
+    def _indice_linha_em_y_root(self, y_root):
+        for indice, linha in enumerate(self._linhas):
+            frame = linha["frame"]
+            try:
+                topo = frame.winfo_rooty()
+                base = topo + frame.winfo_height()
+            except tk.TclError:
+                continue
+            if topo <= y_root <= base:
+                return indice
+        return None
+
+    def _itens_da_etapa(self, grupo_id):
+        return [
+            (indice, linha["meta"])
+            for indice, linha in enumerate(self._linhas)
+            if linha["meta"].get("tipo") != TIPO_GRUPO
+            and linha["meta"].get("grupo_id") == grupo_id
+        ]
+
+    def _resolver_destino_arraste(self, meta_origem, y_root):
+        grupo_id = meta_origem.get("grupo_id")
+        if not grupo_id:
+            return None
+        itens = self._itens_da_etapa(grupo_id)
+        if len(itens) < 2:
+            return None
+
+        ids = [m["id"] for _, m in itens]
+        origem_id = meta_origem.get("id")
+        if origem_id not in ids:
+            return None
+        ids_sem = [item_id for item_id in ids if item_id != origem_id]
+
+        indice_linha = self._indice_linha_em_y_root(y_root)
+        insert_at = None
+        ancora_pack = None
+        antes = True
+
+        if indice_linha is not None:
+            meta_alvo = self._linhas[indice_linha]["meta"]
+            if meta_alvo.get("tipo") == TIPO_GRUPO:
+                if meta_alvo.get("id") == grupo_id:
+                    insert_at = 0
+                    ancora_pack = self._linhas[indice_linha]["frame"]
+                    antes = False
+                else:
+                    return None
+            elif meta_alvo.get("grupo_id") != grupo_id:
+                return None
+            elif meta_alvo.get("id") == origem_id:
+                return None
+            else:
+                frame = self._linhas[indice_linha]["frame"]
+                meio = frame.winfo_rooty() + max(frame.winfo_height(), 1) / 2
+                antes = y_root < meio
+                try:
+                    pos = ids_sem.index(meta_alvo["id"])
+                except ValueError:
+                    return None
+                insert_at = pos if antes else pos + 1
+                ancora_pack = frame
+        else:
+            # Fora de qualquer linha: se estiver na faixa vertical da etapa, usa início/fim.
+            primeiro_idx, _ = itens[0]
+            ultimo_idx, _ = itens[-1]
+            try:
+                topo_etapa = self._linhas[primeiro_idx]["frame"].winfo_rooty()
+                base_etapa = (
+                    self._linhas[ultimo_idx]["frame"].winfo_rooty()
+                    + self._linhas[ultimo_idx]["frame"].winfo_height()
+                )
+            except tk.TclError:
+                return None
+            if y_root < topo_etapa:
+                insert_at = 0
+                ancora_pack = self._linhas[primeiro_idx]["frame"]
+                antes = True
+            elif y_root > base_etapa:
+                insert_at = len(ids_sem)
+                ancora_pack = self._linhas[ultimo_idx]["frame"]
+                antes = False
+            else:
+                return None
+
+        if insert_at is None:
+            return None
+        insert_at = max(0, min(insert_at, len(ids_sem)))
+        ids_sem.insert(insert_at, origem_id)
+        novo_indice = ids_sem.index(origem_id)
+        indice_atual = ids.index(origem_id)
+        if novo_indice == indice_atual:
+            return None
+        return {
+            "novo_indice": novo_indice,
+            "ancora": ancora_pack,
+            "antes": antes,
+        }
+
+    def _atualizar_marcador_drop(self, destino):
+        self._remover_marcador_drop()
+        if not destino or destino.get("ancora") is None:
+            return
+        marcador = tk.Frame(self.frame_linhas, bg=COR_MARCADOR_DROP, height=3)
+        try:
+            if destino.get("antes"):
+                marcador.pack(fill="x", before=destino["ancora"])
+            else:
+                marcador.pack(fill="x", after=destino["ancora"])
+        except tk.TclError:
+            try:
+                marcador.destroy()
+            except tk.TclError:
+                pass
+            return
+        self._marcador_drop = marcador
+
+    def _remover_marcador_drop(self):
+        if self._marcador_drop is None:
+            return
+        try:
+            self._marcador_drop.destroy()
+        except tk.TclError:
+            pass
+        self._marcador_drop = None
 
     def _ao_clicar_linha(self, indice_linha, event):
         if indice_linha < 0 or indice_linha >= len(self._linhas):

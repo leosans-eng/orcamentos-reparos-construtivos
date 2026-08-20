@@ -15,6 +15,13 @@ from core.orcamento_storage import (
     obter_orcamento_dict,
     renomear_orcamento,
 )
+from core.ui_prefs import (
+    ORDENACAO_ATUALIZADO,
+    ORDENACAO_CRIADO,
+    ORDENACOES_LISTA_ORCAMENTOS,
+    definir_pref,
+    obter_pref,
+)
 from ui.dialogo_importar_i9 import DialogoImportarI9
 from ui.icones import criar_botao_ttk_com_icone, definir_estado_botao_icone
 from ui.recarga_catalogo import RecarregadorLista
@@ -130,13 +137,15 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
 
-        self.btn_abrir = ttk.Button(
+        self.btn_abrir = criar_botao_ttk_com_icone(
             linha_botoes,
-            text="Abrir orçamento",
+            texto="Abrir orçamento",
+            nome_icone="folder-open-outline",
             command=self._abrir_selecionado,
-            style="Compact.TButton",
-            state="disabled",
+            estilo="Compact.TButton",
+            refs=self._icones_botoes,
         )
+        definir_estado_botao_icone(self.btn_abrir, "disabled")
         self.btn_abrir.pack(side="left", padx=(0, 4))
 
         self.btn_copiar = criar_botao_ttk_com_icone(
@@ -179,6 +188,10 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
 
         self.var_busca = tk.StringVar()
         self.var_busca.trace_add("write", lambda *_a: self._atualizar_lista())
+        self._ordenacao = obter_pref("ordenacao_lista_orcamentos", ORDENACAO_CRIADO)
+        if self._ordenacao not in ORDENACOES_LISTA_ORCAMENTOS:
+            self._ordenacao = ORDENACAO_CRIADO
+
         linha_busca = tk.Frame(painel_lista, bg="#ececec")
         linha_busca.pack(fill="x", pady=(0, 6))
         tk.Label(linha_busca, text="Filtrar:", bg="#ececec").pack(side="left")
@@ -204,8 +217,16 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             container_tree, columns=colunas, show="headings", height=16
         )
         self.tree.heading("nome", text="Nome")
-        self.tree.heading("criado_em", text="Criado em")
-        self.tree.heading("atualizado_em", text="Atualizado em")
+        self.tree.heading(
+            "criado_em",
+            text="Criado em",
+            command=lambda: self._ordenar_por(ORDENACAO_CRIADO),
+        )
+        self.tree.heading(
+            "atualizado_em",
+            text="Atualizado em",
+            command=lambda: self._ordenar_por(ORDENACAO_ATUALIZADO),
+        )
         self.tree.heading("etapas", text="Etapas")
         self.tree.heading("itens", text="Itens")
         self.tree.column("nome", width=280, stretch=True)
@@ -220,6 +241,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self.tree.bind("<Double-1>", self._ao_duplo_clique)
         self.tree.bind("<Return>", self._ao_duplo_clique)
         self.tree.bind("<<TreeviewSelect>>", self._ao_selecionar)
+        self._atualizar_rotulos_ordenacao()
 
         self._lista_fingerprint = None
 
@@ -256,7 +278,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
     def _ao_selecionar(self, _event=None):
         tem_selecao = bool(self.tree.selection())
         estado = "normal" if tem_selecao else "disabled"
-        self.btn_abrir.config(state=estado)
+        definir_estado_botao_icone(self.btn_abrir, estado)
         definir_estado_botao_icone(self.btn_copiar, estado)
 
     def _ao_duplo_clique(self, _event=None):
@@ -286,13 +308,50 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
                 return
         self._preencher_lista(resumos)
 
+    def _ordenar_por(self, campo: str):
+        if campo not in ORDENACOES_LISTA_ORCAMENTOS:
+            return
+        self._ordenacao = campo
+        definir_pref("ordenacao_lista_orcamentos", campo)
+        self._atualizar_rotulos_ordenacao()
+        self._atualizar_lista()
+
+    def _atualizar_rotulos_ordenacao(self):
+        criado = "Criado em"
+        atualizado = "Atualizado em"
+        if self._ordenacao == ORDENACAO_CRIADO:
+            criado = "Criado em ▼"
+        elif self._ordenacao == ORDENACAO_ATUALIZADO:
+            atualizado = "Atualizado em ▼"
+        self.tree.heading("criado_em", text=criado)
+        self.tree.heading("atualizado_em", text=atualizado)
+
+    @staticmethod
+    def _chave_ordenacao(resumo: dict, campo: str):
+        valor = str(resumo.get(campo) or "")
+        return valor
+
+    def _resumos_ordenados(self, resumos):
+        campo = getattr(self, "_ordenacao", ORDENACAO_CRIADO)
+        if campo == ORDENACAO_CRIADO:
+            # Mantém a ordem da API/cache (padrão atual da lista).
+            return list(resumos)
+        return sorted(
+            resumos,
+            key=lambda r: (
+                self._chave_ordenacao(r, ORDENACAO_ATUALIZADO),
+                str(r.get("nome") or "").casefold(),
+            ),
+            reverse=True,
+        )
+
     def _preencher_lista(self, resumos):
         selecionado = self._orcamento_selecionado_id()
         filtro = self.var_busca.get().strip().lower()
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        for resumo in resumos:
+        for resumo in self._resumos_ordenados(resumos):
             nome = resumo.get("nome", "")
             if filtro and filtro not in nome.lower():
                 continue

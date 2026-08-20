@@ -47,6 +47,7 @@ from core.sinapi_busca import (
 )
 from ui.calculadora import abrir_calculadora
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
+from core.ui_prefs import definir_pref, obter_pref
 from ui.grade_orcamento import (
     COR_ALERTA_DEPRECIADO,
     COR_COMPOSICAO,
@@ -1519,6 +1520,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self._voltar_para_selecao,
             texto_referencia=self._texto_referencia(),
             montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
+            montar_acoes_antes_referencia=self._montar_botao_calculadora_cabecalho,
         )
 
         conteudo = tk.Frame(self, bg="#ececec")
@@ -1531,40 +1533,32 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             linha_cabecalho,
             text="",
             bg="#ececec",
-            fg="#006699",
+            fg="#0d5c75",
             font=("Arial", 11, "bold"),
             anchor="w",
         )
         self.label_nome_orcamento.pack(side="left")
-
-        criar_botao_ttk_com_icone(
+        btn_renomear = criar_botao_ttk_so_icone(
             linha_cabecalho,
-            texto="Editar nome do orçamento",
             nome_icone="pencil",
             command=self._renomear_orcamento,
             estilo="Edit.Compact.TButton",
             refs=self._icones_botoes,
-        ).pack(side="left", padx=(8, 16))
-
-        frame_direita = tk.Frame(linha_cabecalho, bg="#ececec")
-        frame_direita.pack(side="right")
-
-        self._montar_botao_calculadora(frame_direita)
-
-        tk.Label(frame_direita, text="BDI (%):", bg="#ececec").pack(side="left")
-        self.var_bdi = tk.StringVar(value=_formatar_bdi(BDI_PADRAO))
-        self.var_bdi.trace_add("write", self._ao_alterar_bdi)
-        ttk.Entry(frame_direita, textvariable=self.var_bdi, width=7).pack(
-            side="left", padx=(4, 10)
         )
+        btn_renomear.pack(side="left", padx=(8, 0))
+        vincular_tooltip(btn_renomear, "Editar nome")
 
-        tk.Label(frame_direita, text="Estado:", bg="#ececec").pack(side="left")
-        estados = self.ctx.obter_estados()
-        self.combo_estado = ttk.Combobox(
-            frame_direita, values=valores_combo_estado(estados), width=12, state="readonly"
+        self.var_mostrar_legenda = tk.BooleanVar(
+            value=bool(obter_pref("legenda_grade_orcamento", True))
         )
-        self.combo_estado.pack(side="left", padx=(4, 0))
-        self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
+        chk_legenda = ttk.Checkbutton(
+            linha_cabecalho,
+            text="Legenda",
+            variable=self.var_mostrar_legenda,
+            command=self._ao_alternar_legenda,
+        )
+        chk_legenda.pack(side="right")
+        vincular_tooltip(chk_legenda, "Mostrar ou ocultar a legenda de cores da grade")
 
         linha_acoes = tk.Frame(conteudo, bg="#ececec")
         linha_acoes.pack(fill="x", padx=4, pady=(0, 8))
@@ -1615,9 +1609,6 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         frame_inserir.pack(side="left", padx=(12, 0))
 
-        self.frame_area_reservada = tk.Frame(linha_acoes, bg="#ececec")
-        self.frame_area_reservada.pack(side="left", fill="x", expand=True)
-
         linha_inserir_1 = tk.Frame(frame_inserir, bg="#ececec")
         linha_inserir_1.pack(fill="x", pady=(0, 4))
         criar_botao_inserir_prominente(
@@ -1649,18 +1640,112 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         entrada_cod.bind("<Return>", lambda _e: self._inserir_rapido())
         entrada_qtd.bind("<Return>", lambda _e: self._inserir_rapido())
 
+        frame_dados = tk.LabelFrame(
+            linha_acoes,
+            text="Dados do orçamento",
+            bg="#ececec",
+            padx=8,
+            pady=6,
+        )
+        frame_dados.pack(side="left", padx=(12, 0), anchor="n")
+
+        linha_dados = tk.Frame(frame_dados, bg="#ececec")
+        linha_dados.pack(fill="x", pady=(0, 4))
+        tk.Label(linha_dados, text="BDI (%):", bg="#ececec").pack(side="left")
+        self.var_bdi = tk.StringVar(value=_formatar_bdi(BDI_PADRAO))
+        self.var_bdi.trace_add("write", self._ao_alterar_bdi)
+        ttk.Entry(linha_dados, textvariable=self.var_bdi, width=7).pack(
+            side="left", padx=(4, 10)
+        )
+
+        tk.Label(linha_dados, text="Estado:", bg="#ececec").pack(side="left")
+        estados = self.ctx.obter_estados()
+        self.combo_estado = ttk.Combobox(
+            linha_dados, values=valores_combo_estado(estados), width=12, state="readonly"
+        )
+        self.combo_estado.pack(side="left", padx=(4, 0))
+        self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
+
+        # Espaçador para igualar a altura dos painéis de duas linhas à esquerda.
+        tk.Frame(frame_dados, bg="#ececec", height=1).pack(fill="x")
+
+        self.frame_area_reservada = tk.Frame(linha_acoes, bg="#ececec")
+        self.frame_area_reservada.pack(side="left", fill="x", expand=True)
+
+        titulo_grade = tk.Frame(conteudo, bg="#ececec")
+        tk.Label(
+            titulo_grade,
+            text="Estrutura do orçamento",
+            bg="#ececec",
+            fg="#444444",
+            font=("Arial", 9, "bold"),
+        ).pack(side="left")
+        btn_ajuda = tk.Label(
+            titulo_grade,
+            text="?",
+            bg="#dfe8ec",
+            fg="#006699",
+            font=("Arial", 9, "bold"),
+            width=2,
+            cursor="hand2",
+            relief="solid",
+            bd=1,
+        )
+        btn_ajuda.pack(side="left", padx=(6, 0))
+        vincular_tooltip(
+            btn_ajuda,
+            "Ctrl+F: filtrar por código ou descrição\n"
+            "Arraste pelo nº (ou ⠿ na etapa) para reordenar\n"
+            "Duplo clique: nome da etapa, código ou quantidade\n"
+            "Botão direito: menu do item\n"
+            "Ctrl/Shift+clique: seleção múltipla\n"
+            "Delete: remover",
+        )
+
         painel_grade = tk.LabelFrame(
             conteudo,
-            text=(
-                "Estrutura do orçamento  ·  Arraste pelo nº para reordenar  ·  "
-                "Duplo clique: nome/código/qtd. (editar)  ·  "
-                "Ctrl/Shift+clique: seleção  ·  Delete: remover"
-            ),
+            labelwidget=titulo_grade,
             bg="#ececec",
             padx=6,
             pady=6,
         )
         painel_grade.pack(fill="both", expand=True, padx=4, pady=(0, 6))
+
+        self._barra_filtro_grade = tk.Frame(painel_grade, bg="#ececec")
+        tk.Label(self._barra_filtro_grade, text="Filtrar:", bg="#ececec").pack(side="left")
+        self.var_filtro_grade = tk.StringVar()
+        self.var_filtro_grade.trace_add("write", self._ao_filtrar_grade)
+        self._entrada_filtro_grade = ttk.Entry(
+            self._barra_filtro_grade, textvariable=self.var_filtro_grade, width=28
+        )
+        self._entrada_filtro_grade.pack(side="left", padx=(4, 8))
+        tk.Label(
+            self._barra_filtro_grade,
+            text="código ou descrição  ·  Esc",
+            bg="#ececec",
+            fg="#888888",
+            font=("Arial", 8),
+        ).pack(side="left")
+        btn_fechar_filtro = tk.Label(
+            self._barra_filtro_grade,
+            text="✕",
+            bg="#ececec",
+            fg="#666666",
+            font=("Arial", 9),
+            cursor="hand2",
+            padx=2,
+            pady=0,
+        )
+        btn_fechar_filtro.pack(side="left", padx=(4, 0))
+        btn_fechar_filtro.bind("<Button-1>", lambda _e: self._ocultar_filtro_grade())
+        btn_fechar_filtro.bind(
+            "<Enter>", lambda _e: btn_fechar_filtro.configure(fg="#222222")
+        )
+        btn_fechar_filtro.bind(
+            "<Leave>", lambda _e: btn_fechar_filtro.configure(fg="#666666")
+        )
+        vincular_tooltip(btn_fechar_filtro, "Fechar filtro (Esc)")
+        self._entrada_filtro_grade.bind("<Escape>", self._ocultar_filtro_grade)
 
         self._banner_depreciados = tk.Frame(
             painel_grade,
@@ -1692,6 +1777,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             on_tecla_delete=lambda _e: self._remover_selecionado(silencioso=True),
             on_reordenar_item=self._ao_reordenar_item_arraste,
             on_reordenar_etapa=self._ao_reordenar_etapa_arraste,
+            on_menu_contexto=self._ao_menu_contexto_grade,
         )
         self.grade.pack(fill="both", expand=True)
 
@@ -1973,6 +2059,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ("<Control-Y>", self._ao_tecla_refazer),
             ("<Control-Shift-z>", self._ao_tecla_refazer),
             ("<Control-Shift-Z>", self._ao_tecla_refazer),
+            ("<Control-f>", self._ao_tecla_filtro_grade),
+            ("<Control-F>", self._ao_tecla_filtro_grade),
         )
         for sequencia, callback in pares:
             func_id = top.bind(sequencia, callback, add="+")
@@ -2054,7 +2142,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
     def _abrir_calculadora(self):
         abrir_calculadora(self.winfo_toplevel())
 
-    def _montar_botao_calculadora(self, parent):
+    def _montar_botao_calculadora_cabecalho(self, parent):
+        self._montar_botao_calculadora(parent, side="right")
+
+    def _montar_botao_calculadora(self, parent, *, side="left"):
         """Botão flat só com ícone — mesmo visual de Gerar Planilha / Abrir SINAPI."""
         kwargs = {
             "command": self._abrir_calculadora,
@@ -2079,14 +2170,14 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             kwargs["fg"] = "#006699"
             kwargs["activeforeground"] = "#006699"
         botao = tk.Button(parent, **kwargs)
-        botao.pack(side="left", padx=(0, 10))
+        botao.pack(side=side, padx=(0, 10))
         vincular_tooltip(botao, "Abrir Calculadora")
 
     def _montar_legenda_grade(self, parent):
-        legenda = tk.Frame(parent, bg="#ececec")
-        legenda.pack(fill="x", pady=(6, 0))
+        self._frame_legenda = tk.Frame(parent, bg="#ececec")
+        self._conteudo_legenda = tk.Frame(self._frame_legenda, bg="#ececec")
         tk.Label(
-            legenda,
+            self._conteudo_legenda,
             text="Legenda:",
             bg="#ececec",
             fg="#555555",
@@ -2099,7 +2190,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             (COR_COMPOSICAO, "Composição própria"),
         ):
             amostra = tk.Frame(
-                legenda,
+                self._conteudo_legenda,
                 bg=cor,
                 width=12,
                 height=12,
@@ -2109,12 +2200,101 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             amostra.pack(side="left", padx=(0, 4))
             amostra.pack_propagate(False)
             tk.Label(
-                legenda,
+                self._conteudo_legenda,
                 text=texto,
                 bg="#ececec",
                 fg="#555555",
                 font=("Arial", 8),
             ).pack(side="left", padx=(0, 12))
+        self._conteudo_legenda.pack(side="left", fill="x", expand=True)
+        self._aplicar_visibilidade_legenda()
+
+    def _ao_alternar_legenda(self):
+        definir_pref("legenda_grade_orcamento", bool(self.var_mostrar_legenda.get()))
+        self._aplicar_visibilidade_legenda()
+
+    def _aplicar_visibilidade_legenda(self):
+        frame = getattr(self, "_frame_legenda", None)
+        if frame is None:
+            return
+        if self.var_mostrar_legenda.get():
+            if not frame.winfo_ismapped():
+                frame.pack(fill="x", pady=(6, 0))
+        else:
+            try:
+                frame.pack_forget()
+            except tk.TclError:
+                pass
+
+    def _ao_tecla_filtro_grade(self, event):
+        if not self.winfo_ismapped():
+            return
+        try:
+            if event.widget.winfo_toplevel() is not self.winfo_toplevel():
+                return
+        except tk.TclError:
+            return
+        return self._mostrar_filtro_grade(event)
+
+    def _mostrar_filtro_grade(self, _event=None):
+        barra = getattr(self, "_barra_filtro_grade", None)
+        entrada = getattr(self, "_entrada_filtro_grade", None)
+        if barra is None or entrada is None:
+            return "break"
+        if not barra.winfo_ismapped():
+            barra.pack(fill="x", pady=(0, 6), before=self.grade)
+        entrada.focus_set()
+        entrada.selection_range(0, "end")
+        return "break"
+
+    def _ocultar_filtro_grade(self, _event=None):
+        barra = getattr(self, "_barra_filtro_grade", None)
+        if barra is not None:
+            try:
+                barra.pack_forget()
+            except tk.TclError:
+                pass
+        if hasattr(self, "var_filtro_grade"):
+            self.var_filtro_grade.set("")
+        if hasattr(self, "grade"):
+            self.grade.aplicar_filtro("")
+            self.grade.focus_set()
+        return "break"
+
+    def _ao_filtrar_grade(self, *_args):
+        if hasattr(self, "grade"):
+            self.grade.aplicar_filtro(self.var_filtro_grade.get())
+
+    def _ao_menu_contexto_grade(self, meta, event):
+        menu = tk.Menu(self, tearoff=0)
+        eh_etapa = meta.get("tipo") == TIPO_GRUPO
+        if eh_etapa:
+            menu.add_command(
+                label="Remover etapa",
+                command=lambda: self._remover_selecionado(silencioso=False),
+            )
+        else:
+            menu.add_command(
+                label="Substituir item",
+                command=lambda m=dict(meta): self._editar_item_sinapi(m),
+            )
+            menu.add_command(
+                label="Alterar UF",
+                command=self._alterar_estado_item,
+            )
+            menu.add_command(
+                label="Editar quantidade",
+                command=lambda: self._dialogo_editar_quantidade(meta.get("id")),
+            )
+            menu.add_separator()
+            menu.add_command(
+                label="Remover",
+                command=lambda: self._remover_selecionado(silencioso=False),
+            )
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
 
     def _atualizar_banner_depreciados(self):
         banner = getattr(self, "_banner_depreciados", None)
@@ -3028,6 +3208,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self.grade.definir_vazio(
                 "Nenhuma etapa neste orçamento.\nClique em \"Nova etapa\" para começar."
             )
+        filtro = ""
+        if hasattr(self, "var_filtro_grade"):
+            filtro = self.var_filtro_grade.get()
+        self.grade.aplicar_filtro(filtro)
         self._atualizar_banner_depreciados()
 
     def focar(self):

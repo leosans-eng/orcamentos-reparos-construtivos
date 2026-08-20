@@ -633,17 +633,18 @@ def criar_botao_voltar(parent, command, bg_parent="#ececec"):
 
 
 def vincular_tooltip(widget, texto: str):
-    """Exibe texto ao passar o mouse (tooltip simples)."""
+    """Exibe texto ao passar o mouse (tooltip simples, dentro da tela)."""
     estado = {"janela": None}
 
     def _mostrar(_event):
         if estado["janela"] is not None:
             return
-        x = widget.winfo_rootx() + widget.winfo_width() // 2
-        y = widget.winfo_rooty() + widget.winfo_height() + 4
         janela = tk.Toplevel(widget)
         janela.wm_overrideredirect(True)
-        janela.wm_geometry(f"+{x}+{y}")
+        try:
+            janela.attributes("-topmost", True)
+        except tk.TclError:
+            pass
         tk.Label(
             janela,
             text=texto,
@@ -653,12 +654,28 @@ def vincular_tooltip(widget, texto: str):
             font=("Arial", 9),
             padx=6,
             pady=3,
+            justify="left",
         ).pack()
+        janela.update_idletasks()
+        largura = janela.winfo_reqwidth()
+        altura = janela.winfo_reqheight()
+        tela_w = janela.winfo_screenwidth()
+        tela_h = janela.winfo_screenheight()
+        x = widget.winfo_rootx() + widget.winfo_width() // 2 - largura // 2
+        y = widget.winfo_rooty() + widget.winfo_height() + 4
+        if y + altura > tela_h - 8:
+            y = widget.winfo_rooty() - altura - 4
+        x = max(4, min(x, tela_w - largura - 4))
+        y = max(4, min(y, tela_h - altura - 4))
+        janela.wm_geometry(f"+{x}+{y}")
         estado["janela"] = janela
 
     def _esconder(_event):
         if estado["janela"] is not None:
-            estado["janela"].destroy()
+            try:
+                estado["janela"].destroy()
+            except tk.TclError:
+                pass
             estado["janela"] = None
 
     widget.bind("<Enter>", _mostrar)

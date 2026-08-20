@@ -9,7 +9,7 @@ TkAnchor = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
 Coluna = tuple[str, str, int, TkAnchor, int]
 
 COLUNAS: tuple[Coluna, ...] = (
-    ("item", "Item", 52, "center", 0),
+    ("item", "Item", 68, "center", 0),
     ("codigo", "Código", 72, "center", 0),
     ("tipo_ic", "I/C", 36, "center", 0),
     ("descricao", "Descrição", 180, "w", 1),
@@ -49,6 +49,7 @@ class GradeOrcamento(tk.Frame):
         on_salvar_nome_grupo=None,
         on_reordenar_item=None,
         on_reordenar_etapa=None,
+        on_menu_contexto=None,
     ):
         super().__init__(parent, bg="#ececec")
         self.on_duplo_clique_qtd = on_duplo_clique_qtd
@@ -59,6 +60,7 @@ class GradeOrcamento(tk.Frame):
         self.on_salvar_nome_grupo = on_salvar_nome_grupo
         self.on_reordenar_item = on_reordenar_item
         self.on_reordenar_etapa = on_reordenar_etapa
+        self.on_menu_contexto = on_menu_contexto
         self._linhas = []
         self._selecao_metas: list[dict] = []
         self._ancora_indice: int | None = None
@@ -70,6 +72,7 @@ class GradeOrcamento(tk.Frame):
         self._drag: dict | None = None
         self._marcador_drop = None
         self._lbl_vazio = None
+        self._filtro = ""
         self._montar()
 
     def _montar(self):
@@ -316,9 +319,10 @@ class GradeOrcamento(tk.Frame):
                 lbl.bind("<Double-1>", lambda _e, m=meta: self._duplo_clique_codigo(m))
             elif chave == "item" and estilo == "grupo":
                 cursor_item = "fleur" if self.on_reordenar_etapa else "hand2"
+                texto_item = f"⠿ {texto}" if self.on_reordenar_etapa else texto
                 lbl = tk.Label(
                     frame,
-                    text=texto,
+                    text=texto_item,
                     font=fonte,
                     fg=cor_texto,
                     bg=cor_fundo,
@@ -389,6 +393,7 @@ class GradeOrcamento(tk.Frame):
             "cor_base": cor_fundo,
             "cor_texto": cor_texto,
             "lbl_descricao": widgets.get("lbl_descricao"),
+            "valores": dict(valores),
         }
         self._linhas.append(registro)
 
@@ -409,6 +414,68 @@ class GradeOrcamento(tk.Frame):
         )
         widget.bind("<B1-Motion>", self._ao_arrastar_linha)
         widget.bind("<ButtonRelease-1>", self._ao_soltar_linha)
+        widget.bind(
+            "<Button-3>",
+            lambda event, i=indice_linha: self._ao_botao_direito(i, event),
+        )
+
+    def _ao_botao_direito(self, indice_linha, event):
+        if indice_linha < 0 or indice_linha >= len(self._linhas):
+            return
+        meta = dict(self._linhas[indice_linha]["meta"])
+        if not any(self._meta_coincide(meta, sel) for sel in self._selecao_metas):
+            self._selecao_metas = [meta]
+            self._ancora_indice = indice_linha
+            self._atualizar_destaques()
+        self.focus_set()
+        self.canvas.focus_set()
+        if self.on_menu_contexto is not None:
+            self.on_menu_contexto(meta, event)
+
+    def aplicar_filtro(self, texto: str | None):
+        """Filtra linhas por código/descrição/número; etapas acompanham itens encontrados."""
+        consulta = (texto or "").strip().casefold()
+        self._filtro = consulta
+        if self._marcador_drop is not None:
+            self._remover_marcador_drop()
+        for linha in self._linhas:
+            try:
+                linha["frame"].pack_forget()
+            except tk.TclError:
+                pass
+        indices = self._indices_visiveis_filtro(consulta)
+        for indice in indices:
+            try:
+                self._linhas[indice]["frame"].pack(fill="x", pady=(0, 1))
+            except tk.TclError:
+                pass
+        self._atualizar_scrollregion()
+
+    def _indices_visiveis_filtro(self, consulta: str):
+        if not consulta:
+            return list(range(len(self._linhas)))
+        mostrar: set[int] = set()
+        for indice, linha in enumerate(self._linhas):
+            meta = linha["meta"]
+            vals = linha.get("valores") or {}
+            desc = str(vals.get("descricao", "")).casefold()
+            codigo = str(vals.get("codigo", "")).casefold()
+            num = str(vals.get("item", "")).casefold()
+            if meta.get("tipo") == TIPO_GRUPO:
+                if consulta in desc or consulta in num:
+                    mostrar.add(indice)
+                    for j in range(indice + 1, len(self._linhas)):
+                        if self._linhas[j]["meta"].get("tipo") == TIPO_GRUPO:
+                            break
+                        mostrar.add(j)
+                continue
+            if consulta in desc or consulta in codigo or consulta in num:
+                mostrar.add(indice)
+                for j in range(indice - 1, -1, -1):
+                    if self._linhas[j]["meta"].get("tipo") == TIPO_GRUPO:
+                        mostrar.add(j)
+                        break
+        return sorted(mostrar)
 
     def _encerrar_edicao_inline(self, *, descartar=False):
         edicao = self._edicao

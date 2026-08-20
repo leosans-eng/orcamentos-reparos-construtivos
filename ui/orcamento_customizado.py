@@ -47,7 +47,13 @@ from core.sinapi_busca import (
 )
 from ui.calculadora import abrir_calculadora
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
-from ui.grade_orcamento import GradeOrcamento
+from ui.grade_orcamento import (
+    COR_ALERTA_DEPRECIADO,
+    COR_COMPOSICAO,
+    COR_ESTADO_ALTERNATIVO,
+    COR_GRUPO,
+    GradeOrcamento,
+)
 from ui.icones import (
     criar_botao_inserir_prominente,
     criar_botao_ttk_com_icone,
@@ -707,7 +713,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         *,
         titulo="Buscar na SINAPI",
         mostrar_quantidade=True,
-        texto_confirmar="Inserir no grupo",
+        texto_confirmar="Inserir na etapa",
         texto_confirmar_fechar="Inserir e fechar",
         fechar_unico=False,
         incluir_composicoes_proprias=False,
@@ -1622,7 +1628,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         ).pack(side="left", padx=(0, 6))
         criar_botao_inserir_prominente(
             linha_inserir_1,
-            texto="Inserir composição PRÓPRIA",
+            texto="Inserir composição própria",
             command=self._adicionar_composicao_propria,
             refs=self._icones_botoes,
         ).pack(side="left")
@@ -1646,15 +1652,36 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         painel_grade = tk.LabelFrame(
             conteudo,
             text=(
-                "Estrutura do orçamento  ·  Duplo clique: nº da etapa (reordenar), "
-                "nome da etapa/código/qtd. do item (editar)  ·  "
-                "Ctrl/Shift+clique: seleção múltipla  ·  Delete: remover"
+                "Estrutura do orçamento  ·  Arraste pelo nº para reordenar  ·  "
+                "Duplo clique: nome/código/qtd. (editar)  ·  "
+                "Ctrl/Shift+clique: seleção  ·  Delete: remover"
             ),
             bg="#ececec",
             padx=6,
             pady=6,
         )
         painel_grade.pack(fill="both", expand=True, padx=4, pady=(0, 6))
+
+        self._banner_depreciados = tk.Frame(
+            painel_grade,
+            bg="#fff3cd",
+            highlightbackground="#e0c36a",
+            highlightthickness=1,
+        )
+        tk.Label(
+            self._banner_depreciados,
+            text=(
+                "Há itens depreciados ou indisponíveis na base atual. "
+                "Substitua-os (duplo clique no código) antes de gerar a planilha."
+            ),
+            bg="#fff3cd",
+            fg="#7a5b00",
+            font=("Arial", 9),
+            anchor="w",
+            justify="left",
+            padx=8,
+            pady=6,
+        ).pack(fill="x")
 
         self.grade = GradeOrcamento(
             painel_grade,
@@ -1664,8 +1691,11 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             on_salvar_nome_grupo=self._salvar_nome_grupo_inline,
             on_tecla_delete=lambda _e: self._remover_selecionado(silencioso=True),
             on_reordenar_item=self._ao_reordenar_item_arraste,
+            on_reordenar_etapa=self._ao_reordenar_etapa_arraste,
         )
         self.grade.pack(fill="both", expand=True)
+
+        self._montar_legenda_grade(painel_grade)
 
         for tecla in ("<Delete>", "<KP_Delete>"):
             self.bind(tecla, self._ao_tecla_delete_orcamento, add="+")
@@ -2052,6 +2082,53 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         botao.pack(side="left", padx=(0, 10))
         vincular_tooltip(botao, "Abrir Calculadora")
 
+    def _montar_legenda_grade(self, parent):
+        legenda = tk.Frame(parent, bg="#ececec")
+        legenda.pack(fill="x", pady=(6, 0))
+        tk.Label(
+            legenda,
+            text="Legenda:",
+            bg="#ececec",
+            fg="#555555",
+            font=("Arial", 8, "bold"),
+        ).pack(side="left", padx=(0, 8))
+        for cor, texto in (
+            (COR_GRUPO, "Etapa"),
+            (COR_ALERTA_DEPRECIADO, "Depreciado / indisponível"),
+            (COR_ESTADO_ALTERNATIVO, "UF alternativa"),
+            (COR_COMPOSICAO, "Composição própria"),
+        ):
+            amostra = tk.Frame(
+                legenda,
+                bg=cor,
+                width=12,
+                height=12,
+                highlightbackground="#aaaaaa",
+                highlightthickness=1,
+            )
+            amostra.pack(side="left", padx=(0, 4))
+            amostra.pack_propagate(False)
+            tk.Label(
+                legenda,
+                text=texto,
+                bg="#ececec",
+                fg="#555555",
+                font=("Arial", 8),
+            ).pack(side="left", padx=(0, 12))
+
+    def _atualizar_banner_depreciados(self):
+        banner = getattr(self, "_banner_depreciados", None)
+        if banner is None:
+            return
+        if self.grade.tem_itens_depreciados():
+            if not banner.winfo_ismapped():
+                banner.pack(fill="x", pady=(0, 6), before=self.grade)
+        else:
+            try:
+                banner.pack_forget()
+            except tk.TclError:
+                pass
+
     def _estado_selecionado(self):
         return estado_do_combo(self.combo_estado.get())
 
@@ -2123,7 +2200,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if not grupo_id:
             messagebox.showinfo(
                 "Inserir item SINAPI",
-                "Selecione um grupo (etapa) na estrutura do orçamento.",
+                "Selecione uma etapa na estrutura do orçamento.",
                 parent=self.winfo_toplevel(),
             )
             return
@@ -2153,7 +2230,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if not grupo_id:
             messagebox.showinfo(
                 "Inserir rápido",
-                "Selecione um grupo (etapa) na estrutura do orçamento.",
+                "Selecione uma etapa na estrutura do orçamento.",
                 parent=self.winfo_toplevel(),
             )
             return
@@ -2313,7 +2390,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if not grupo_id:
             messagebox.showinfo(
                 "Composição própria",
-                "Selecione um grupo (etapa) na estrutura do orçamento.",
+                "Selecione uma etapa na estrutura do orçamento.",
                 parent=self.winfo_toplevel(),
             )
             return
@@ -2417,7 +2494,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             if not meta or meta["tipo"] != TIPO_GRUPO:
                 messagebox.showinfo(
                     "Trocar ordem da etapa",
-                    "Selecione a linha da etapa (cabeçalho do grupo) para reordenar.",
+                    "Selecione a linha da etapa para reordenar (ou arraste pelo número).",
                     parent=self.winfo_toplevel(),
                 )
                 return
@@ -2479,6 +2556,19 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
         return True
 
+    def _ao_reordenar_etapa_arraste(self, grupo_id, novo_indice):
+        try:
+            if not self.orcamento.mover_grupo_para_indice(grupo_id, novo_indice):
+                return False
+        except ValueError as exc:
+            messagebox.showwarning("Etapa", str(exc), parent=self.winfo_toplevel())
+            return False
+        self._registrar_alteracao(
+            focar_meta={"tipo": TIPO_GRUPO, "id": grupo_id},
+            descricao="Etapa reordenada",
+        )
+        return True
+
     def _meta_selecionada(self):
         return self.grade.obter_meta_selecionada()
 
@@ -2504,7 +2594,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             if not silencioso:
                 messagebox.showinfo(
                     "Remover",
-                    "Selecione um grupo ou item para remover.",
+                    "Selecione uma etapa ou item para remover.",
                     parent=self.winfo_toplevel(),
                 )
             return
@@ -2530,7 +2620,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         if len(grupos) == 1:
             if not messagebox.askyesno(
-                "Remover grupo",
+                "Remover etapa",
                 "Remover a etapa e todos os seus itens?",
                 parent=self.winfo_toplevel(),
             ):
@@ -2934,6 +3024,11 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             )
         )
         self.grade.finalizar_reconstrucao(fracao, selecoes)
+        if not self.orcamento.grupos:
+            self.grade.definir_vazio(
+                "Nenhuma etapa neste orçamento.\nClique em \"Nova etapa\" para começar."
+            )
+        self._atualizar_banner_depreciados()
 
     def focar(self):
         self.recarregar_orcamento(forcar_rede=False)

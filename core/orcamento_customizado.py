@@ -224,9 +224,9 @@ class OrcamentoCustomizado:
     def renomear_grupo(self, grupo_id, nome):
         grupo = self.obter_grupo(grupo_id)
         if grupo is None:
-            raise ValueError("Grupo não encontrado.")
+            raise ValueError("Etapa não encontrada.")
         if not nome or not nome.strip():
-            raise ValueError("Informe o nome do grupo.")
+            raise ValueError("Informe o nome da etapa.")
         grupo["nome"] = nome.strip()
 
     def mover_grupo_para_posicao(self, grupo_id, posicao):
@@ -234,17 +234,23 @@ class OrcamentoCustomizado:
         total = len(self.grupos)
         if posicao < 1 or posicao > total:
             raise ValueError(f"Informe uma posição entre 1 e {total}.")
+        return self.mover_grupo_para_indice(grupo_id, posicao - 1)
+
+    def mover_grupo_para_indice(self, grupo_id, novo_indice):
+        """Reordena a etapa para o índice final desejado (0 = primeira)."""
+        total = len(self.grupos)
+        if total == 0:
+            return False
         indice_atual = next(
             (i for i, grupo in enumerate(self.grupos) if grupo["id"] == grupo_id),
             None,
         )
         if indice_atual is None:
-            raise ValueError("Grupo não encontrado.")
-        novo_indice = posicao - 1
-        if indice_atual == novo_indice:
+            raise ValueError("Etapa não encontrada.")
+        destino = max(0, min(int(novo_indice), total - 1))
+        if indice_atual == destino:
             return False
-        grupo = self.grupos.pop(indice_atual)
-        self.grupos.insert(novo_indice, grupo)
+        self.grupos.insert(destino, self.grupos.pop(indice_atual))
         return True
 
     def mover_item(self, item_id, delta):

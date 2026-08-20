@@ -3,6 +3,7 @@ from tkinter import ttk
 from typing import Literal
 
 from core.orcamento_customizado import TIPO_GRUPO
+from ui.widgets import vincular_tooltip
 
 TkAnchor = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
 Coluna = tuple[str, str, int, TkAnchor, int]
@@ -47,6 +48,7 @@ class GradeOrcamento(tk.Frame):
         on_tecla_delete=None,
         on_salvar_nome_grupo=None,
         on_reordenar_item=None,
+        on_reordenar_etapa=None,
     ):
         super().__init__(parent, bg="#ececec")
         self.on_duplo_clique_qtd = on_duplo_clique_qtd
@@ -56,6 +58,7 @@ class GradeOrcamento(tk.Frame):
         self.on_tecla_delete = on_tecla_delete
         self.on_salvar_nome_grupo = on_salvar_nome_grupo
         self.on_reordenar_item = on_reordenar_item
+        self.on_reordenar_etapa = on_reordenar_etapa
         self._linhas = []
         self._selecao_metas: list[dict] = []
         self._ancora_indice: int | None = None
@@ -66,6 +69,7 @@ class GradeOrcamento(tk.Frame):
         self._edicao: dict | None = None
         self._drag: dict | None = None
         self._marcador_drop = None
+        self._lbl_vazio = None
         self._montar()
 
     def _montar(self):
@@ -100,6 +104,16 @@ class GradeOrcamento(tk.Frame):
 
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
+
+        self._lbl_vazio = tk.Label(
+            self.frame_linhas,
+            text="",
+            font=("Arial", 10),
+            fg="#777777",
+            bg=COR_FUNDO,
+            justify="center",
+            pady=28,
+        )
 
         self.canvas.bind("<Configure>", self._ao_redimensionar_canvas)
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
@@ -174,6 +188,25 @@ class GradeOrcamento(tk.Frame):
         self._selecao_metas.clear()
         self._ancora_indice = None
         self._tem_itens_depreciados = False
+        self._ocultar_vazio()
+
+    def definir_vazio(self, texto: str | None):
+        """Mostra mensagem central quando a grade não tem linhas."""
+        if not texto or self._linhas:
+            self._ocultar_vazio()
+            return
+        if self._lbl_vazio is None:
+            return
+        self._lbl_vazio.config(text=texto)
+        self._lbl_vazio.pack(fill="x", expand=True)
+
+    def _ocultar_vazio(self):
+        if self._lbl_vazio is None:
+            return
+        try:
+            self._lbl_vazio.pack_forget()
+        except tk.TclError:
+            pass
 
     def tem_itens_depreciados(self) -> bool:
         return self._tem_itens_depreciados
@@ -221,6 +254,7 @@ class GradeOrcamento(tk.Frame):
         alerta_estado_alternativo=False,
     ):
         idx = len(self._linhas)
+        self._ocultar_vazio()
         cor_fundo = COR_GRUPO if estilo == "grupo" else COR_FUNDO
         if alerta_depreciado and estilo != "grupo":
             cor_fundo = COR_ALERTA_DEPRECIADO
@@ -281,6 +315,7 @@ class GradeOrcamento(tk.Frame):
                 lbl.grid(row=0, column=col, sticky="nsew", padx=(0, 1))
                 lbl.bind("<Double-1>", lambda _e, m=meta: self._duplo_clique_codigo(m))
             elif chave == "item" and estilo == "grupo":
+                cursor_item = "fleur" if self.on_reordenar_etapa else "hand2"
                 lbl = tk.Label(
                     frame,
                     text=texto,
@@ -290,13 +325,18 @@ class GradeOrcamento(tk.Frame):
                     anchor=anchor,
                     padx=4,
                     pady=5,
-                    cursor="hand2",
+                    cursor=cursor_item,
                 )
                 lbl.grid(row=0, column=col, sticky="nsew", padx=(0, 1))
                 lbl.bind(
                     "<Double-1>",
                     lambda _e, m=meta: self._duplo_clique_item_grupo(m),
                 )
+                if self.on_reordenar_etapa:
+                    vincular_tooltip(
+                        lbl,
+                        "Arraste para reordenar a etapa\nDuplo clique: escolher posição",
+                    )
             elif chave == "item":
                 lbl = tk.Label(
                     frame,
@@ -310,6 +350,8 @@ class GradeOrcamento(tk.Frame):
                     cursor="fleur" if self.on_reordenar_item else "",
                 )
                 lbl.grid(row=0, column=col, sticky="nsew", padx=(10, 1))
+                if self.on_reordenar_item:
+                    vincular_tooltip(lbl, "Arraste para reordenar o item")
             elif chave == "quantidade" and estilo != "grupo" and texto:
                 lbl = tk.Label(
                     frame,
@@ -547,9 +589,14 @@ class GradeOrcamento(tk.Frame):
 
     def _ao_arrastar_linha(self, event):
         drag = self._drag
-        if drag is None or self.on_reordenar_item is None:
+        if drag is None:
             return
-        if drag["meta"].get("tipo") == TIPO_GRUPO:
+        meta = drag["meta"]
+        eh_etapa = meta.get("tipo") == TIPO_GRUPO
+        if eh_etapa:
+            if self.on_reordenar_etapa is None:
+                return
+        elif self.on_reordenar_item is None:
             return
         if drag["ctrl"] or drag["shift"]:
             return
@@ -562,7 +609,10 @@ class GradeOrcamento(tk.Frame):
             except tk.TclError:
                 pass
         self._auto_rolar_durante_arraste(event.y_root)
-        destino = self._resolver_destino_arraste(drag["meta"], event.y_root)
+        if eh_etapa:
+            destino = self._resolver_destino_arraste_etapa(meta, event.y_root)
+        else:
+            destino = self._resolver_destino_arraste(meta, event.y_root)
         drag["novo_indice"] = None if destino is None else destino["novo_indice"]
         self._atualizar_marcador_drop(destino)
 
@@ -574,14 +624,17 @@ class GradeOrcamento(tk.Frame):
         meta = drag.get("meta") or {}
         novo_indice = drag.get("novo_indice")
         self._encerrar_arraste()
-        if not ativo or self.on_reordenar_item is None:
+        if not ativo or novo_indice is None:
             return
-        if meta.get("tipo") == TIPO_GRUPO or novo_indice is None:
+        entidade_id = meta.get("id")
+        if not entidade_id:
             return
-        item_id = meta.get("id")
-        if not item_id:
+        if meta.get("tipo") == TIPO_GRUPO:
+            if self.on_reordenar_etapa is not None:
+                self.on_reordenar_etapa(entidade_id, novo_indice)
             return
-        self.on_reordenar_item(item_id, novo_indice)
+        if self.on_reordenar_item is not None:
+            self.on_reordenar_item(entidade_id, novo_indice)
 
     def _encerrar_arraste(self, *, limpar_apenas=False):
         self._drag = None
@@ -622,6 +675,102 @@ class GradeOrcamento(tk.Frame):
             if linha["meta"].get("tipo") != TIPO_GRUPO
             and linha["meta"].get("grupo_id") == grupo_id
         ]
+
+    def _etapas_na_grade(self):
+        return [
+            (indice, linha["meta"])
+            for indice, linha in enumerate(self._linhas)
+            if linha["meta"].get("tipo") == TIPO_GRUPO
+        ]
+
+    def _bloco_vertical_etapa(self, grupo_id):
+        """Retorna (indice_header, frame_header, y_topo, y_base) do bloco da etapa."""
+        header_idx = None
+        frame_header = None
+        for indice, linha in enumerate(self._linhas):
+            meta = linha["meta"]
+            if meta.get("tipo") == TIPO_GRUPO and meta.get("id") == grupo_id:
+                header_idx = indice
+                frame_header = linha["frame"]
+                break
+        if header_idx is None or frame_header is None:
+            return None
+        try:
+            y_topo = frame_header.winfo_rooty()
+            y_base = y_topo + frame_header.winfo_height()
+        except tk.TclError:
+            return None
+        for indice in range(header_idx + 1, len(self._linhas)):
+            meta = self._linhas[indice]["meta"]
+            if meta.get("tipo") == TIPO_GRUPO:
+                break
+            if meta.get("grupo_id") != grupo_id:
+                break
+            frame = self._linhas[indice]["frame"]
+            try:
+                y_base = frame.winfo_rooty() + frame.winfo_height()
+            except tk.TclError:
+                pass
+        return header_idx, frame_header, y_topo, y_base
+
+    def _resolver_destino_arraste_etapa(self, meta_origem, y_root):
+        etapas = self._etapas_na_grade()
+        if len(etapas) < 2:
+            return None
+        ids = [m["id"] for _, m in etapas]
+        origem_id = meta_origem.get("id")
+        if origem_id not in ids:
+            return None
+        ids_sem = [etapa_id for etapa_id in ids if etapa_id != origem_id]
+
+        alvo_id = None
+        for etapa_id in ids:
+            if etapa_id == origem_id:
+                continue
+            bloco = self._bloco_vertical_etapa(etapa_id)
+            if bloco is None:
+                continue
+            _idx, _frame, y_topo, y_base = bloco
+            if y_topo <= y_root <= y_base:
+                alvo_id = etapa_id
+                meio = (y_topo + y_base) / 2
+                antes = y_root < meio
+                break
+        else:
+            # Acima da primeira / abaixo da última etapa (exceto a própria origem).
+            primeiro_id = ids[0] if ids[0] != origem_id else (ids[1] if len(ids) > 1 else None)
+            ultimo_id = ids[-1] if ids[-1] != origem_id else (ids[-2] if len(ids) > 1 else None)
+            if primeiro_id:
+                bloco = self._bloco_vertical_etapa(primeiro_id)
+                if bloco and y_root < bloco[2]:
+                    alvo_id = primeiro_id
+                    antes = True
+            if alvo_id is None and ultimo_id:
+                bloco = self._bloco_vertical_etapa(ultimo_id)
+                if bloco and y_root > bloco[3]:
+                    alvo_id = ultimo_id
+                    antes = False
+            if alvo_id is None:
+                return None
+
+        try:
+            pos = ids_sem.index(alvo_id)
+        except ValueError:
+            return None
+        insert_at = pos if antes else pos + 1
+        insert_at = max(0, min(insert_at, len(ids_sem)))
+        ids_sem.insert(insert_at, origem_id)
+        novo_indice = ids_sem.index(origem_id)
+        if novo_indice == ids.index(origem_id):
+            return None
+        bloco_alvo = self._bloco_vertical_etapa(alvo_id)
+        if bloco_alvo is None:
+            return None
+        return {
+            "novo_indice": novo_indice,
+            "ancora": bloco_alvo[1],
+            "antes": antes,
+        }
 
     def _resolver_destino_arraste(self, meta_origem, y_root):
         grupo_id = meta_origem.get("grupo_id")

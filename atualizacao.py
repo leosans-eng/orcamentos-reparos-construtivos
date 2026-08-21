@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import queue
@@ -14,7 +15,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Callable, Literal, cast
 from urllib.parse import unquote, urlparse
 from tkinter import messagebox, ttk
 
@@ -34,6 +35,11 @@ CHUNK_SIZE = 256 * 1024
 MIN_INSTALLER_BYTES = 1_000_000
 UI_POLL_MS = 100
 PROGRESS_UI_INTERVAL_SEC = 0.25
+
+
+def _ps_single_quote(value: str) -> str:
+    """Aspas simples do PowerShell ('' escapa ')."""
+    return "'" + value.replace("'", "''") + "'"
 
 
 def parse_version(value: str) -> tuple[int, ...]:
@@ -223,7 +229,7 @@ class UpdateDialog(tk.Toplevel):
         self.title("Atualização disponível")
         aplicar_icone_janela(self)
         self.resizable(False, False)
-        self.transient(root)
+        self.transient(cast(tk.Wm, root))
         self.grab_set()
 
         frame = ttk.Frame(self, padding=16)
@@ -478,29 +484,32 @@ class UpdateDialog(tk.Toplevel):
         caminho_str = str(caminho.resolve())
         try:
             if sys.platform == "win32":
-                # Um .bat auxiliar evita o bug do `start "" "..."` (Windows interpreta
-                # aspas vazias e tenta abrir '\\'). Título não-vazio é obrigatório.
-                pasta = Path(tempfile.gettempdir()) / "orc_update_launch"
-                pasta.mkdir(parents=True, exist_ok=True)
-                launcher = pasta / "abrir_instalador.bat"
-                launcher.write_text(
-                    "\r\n".join(
-                        [
-                            "@echo off",
-                            "ping 127.0.0.1 -n 3 >nul",
-                            f'start "ORC Setup" "{caminho_str}"',
-                            "",
-                        ]
-                    ),
-                    encoding="utf-8",
+                # NÃO usar .bat UTF-8: o cmd lê em ANSI e corrompe acentos
+                # (ex.: Usuário → UsuÃ;rio). -EncodedCommand é UTF-16LE.
+                pasta = _ps_single_quote(str(caminho.parent.resolve()))
+                arquivo = _ps_single_quote(caminho_str)
+                ps = (
+                    "Start-Sleep -Seconds 2; "
+                    f"Start-Process -FilePath {arquivo} -WorkingDirectory {pasta}"
                 )
+                encoded = base64.b64encode(ps.encode("utf-16-le")).decode("ascii")
                 subprocess.Popen(
-                    ["cmd.exe", "/c", str(launcher)],
-                    cwd=str(caminho.parent),
+                    [
+                        "powershell.exe",
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-WindowStyle",
+                        "Hidden",
+                        "-EncodedCommand",
+                        encoded,
+                    ],
                     close_fds=True,
+                    # DETACHED_PROCESS quebra -EncodedCommand (o Setup nunca abre).
+                    # CREATE_NO_WINDOW evita console; o processo sobrevive ao os._exit.
                     creationflags=(
-                        getattr(subprocess, "DETACHED_PROCESS", 0)
-                        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                        getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                        | getattr(subprocess, "CREATE_NO_WINDOW", 0)
                     ),
                 )
                 return True

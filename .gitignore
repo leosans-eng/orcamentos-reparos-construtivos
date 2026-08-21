@@ -22,6 +22,7 @@ dados_usuario/orcamentos_customizados.json
 dados_usuario/migracao_i9_estado.json
 dados_usuario/migracao_i9_log.csv
 dados_usuario/migracao_i9_estado.tmp
+dados_usuario/orc_ui_prefs.json
 scripts/
 api/orc_dev.db
 api/.env

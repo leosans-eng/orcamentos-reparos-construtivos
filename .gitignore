@@ -29,3 +29,4 @@ api/.env
 api/backups/
 api/
 tests/
+.env

@@ -23,7 +23,11 @@ from core.ui_prefs import (
     obter_pref,
 )
 from ui.dialogo_importar_i9 import DialogoImportarI9
-from ui.icones import criar_botao_ttk_com_icone, definir_estado_botao_icone
+from ui.icones import (
+    criar_botao_ttk_com_icone,
+    criar_label_icone,
+    definir_estado_botao_icone,
+)
 from ui.recarga_catalogo import RecarregadorLista
 from ui.widgets import (
     confirmar_exclusao_com_espera,
@@ -194,9 +198,13 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
 
         linha_busca = tk.Frame(painel_lista, bg="#ececec")
         linha_busca.pack(fill="x", pady=(0, 6))
-        tk.Label(linha_busca, text="Filtrar:", bg="#ececec").pack(side="left")
+        criar_label_icone(
+            linha_busca,
+            "funnel-outline",
+            refs=self._icones_botoes,
+        ).pack(side="left", padx=(0, 4))
         ttk.Entry(linha_busca, textvariable=self.var_busca, width=36).pack(
-            side="left", padx=(4, 0), fill="x", expand=True
+            side="left", padx=(0, 0), fill="x", expand=True
         )
 
         self._lbl_status_lista = tk.Label(

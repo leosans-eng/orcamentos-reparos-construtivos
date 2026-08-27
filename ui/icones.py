@@ -13,6 +13,13 @@ try:
 except ImportError:
     SvgImage = None  # type: ignore[misc, assignment]
 
+try:
+    from PIL import Image, ImageOps, ImageTk
+except ImportError:
+    Image = None  # type: ignore[misc, assignment]
+    ImageOps = None  # type: ignore[misc, assignment]
+    ImageTk = None  # type: ignore[misc, assignment]
+
 
 def criar_icone_svg(
     master: tk.Misc,
@@ -20,6 +27,9 @@ def criar_icone_svg(
     *,
     altura: int,
     cor: str = "#006699",
+    angulo: float = 0,
+    escala_x: float = 1.0,
+    escala_y: float = 1.0,
 ) -> tk.PhotoImage:
     """Rasteriza um SVG de assets/icons/{nome}.svg na altura indicada (px)."""
     if SvgImage is None:
@@ -31,6 +41,204 @@ def criar_icone_svg(
 
     svg_texto = caminho.read_text(encoding="utf-8")
     svg_texto = _aplicar_cor_svg(svg_texto, cor)
+    if escala_x != 1.0 or escala_y != 1.0:
+        svg_texto = _svg_com_escala(svg_texto, escala_x, escala_y)
+
+    base = SvgImage(master=master, data=svg_texto, scaletoheight=altura)
+    if not angulo:
+        return base
+    return _photo_rotacionado(master, base, angulo, altura)
+
+
+def _photo_rotacionado(
+    master: tk.Misc, base: tk.PhotoImage, angulo: float, tamanho: int
+) -> tk.PhotoImage:
+    """Gira o raster com Pillow (inversão confiável a 180°)."""
+    if Image is None or ImageTk is None:
+        # Fallback: tentativa via transform SVG (menos confiável no Tk).
+        return base
+
+    pil = ImageTk.getimage(base).convert("RGBA")
+    # PIL: positivo = anti-horário; queremos o mesmo sentido visual do SVG (horário).
+    girado = pil.rotate(
+        -angulo,
+        resample=Image.Resampling.BICUBIC,
+        expand=True,
+        fillcolor=(0, 0, 0, 0),
+    )
+    canvas = Image.new("RGBA", (tamanho, tamanho), (0, 0, 0, 0))
+    x = (tamanho - girado.width) // 2
+    y = (tamanho - girado.height) // 2
+    canvas.paste(girado, (x, y), girado)
+    return ImageTk.PhotoImage(canvas, master=master)
+
+
+def criar_label_icone(
+    parent: tk.Misc,
+    nome: str,
+    *,
+    altura: int = 14,
+    cor: str = "#555555",
+    bg: str = "#ececec",
+    refs: list | None = None,
+) -> tk.Label:
+    """Label com ícone SVG (ex.: funil ao lado de campos de filtro)."""
+    icone = criar_icone_svg(parent, nome, altura=altura, cor=cor)
+    if refs is not None:
+        refs.append(icone)
+    label = tk.Label(parent, image=icone, bg=bg)
+    label.image = icone  # type: ignore[attr-defined]
+    return label
+
+
+class IndicadorAmpulheta(tk.Label):
+    """Ampulheta: roda 180° → flip na imagem atual → roda 180° → flip (reinicia)."""
+
+    _PASSOS_MEIA = 12
+    _FRAMES_PAUSA = 8
+    _INTERVALO_MS = 40
+    _COR_AREIA = "#c98700"
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        altura: int = 24,
+        cor: str = "#006699",
+        bg: str = "#ececec",
+        refs: list | None = None,
+    ):
+        super().__init__(parent, bg=bg)
+        self._frames: list = []
+        self._indice = 0
+        self._job = None
+        self._ativo = False
+
+        if Image is None or ImageTk is None or ImageOps is None:
+            raise ImportError("Pacote 'Pillow' não instalado.")
+
+        base_photo = _criar_ampulheta_com_areia(
+            parent, altura=altura, cor_vidro=cor, cor_areia=self._COR_AREIA
+        )
+        atual = ImageTk.getimage(base_photo).convert("RGBA")
+        if refs is not None:
+            refs.append(base_photo)
+
+        def para_photo(pil_img):
+            foto = ImageTk.PhotoImage(pil_img, master=parent)
+            if refs is not None:
+                refs.append(foto)
+            return foto
+
+        def rotacionar(pil_img, angulo: float):
+            ang = angulo % 360.0
+            if abs(ang) < 0.01:
+                return pil_img.copy()
+            girado = pil_img.rotate(
+                -ang,
+                resample=Image.Resampling.BICUBIC,
+                expand=True,
+                fillcolor=(0, 0, 0, 0),
+            )
+            canvas = Image.new("RGBA", (altura, altura), (0, 0, 0, 0))
+            canvas.paste(
+                girado,
+                ((altura - girado.width) // 2, (altura - girado.height) // 2),
+                girado,
+            )
+            return canvas
+
+        # Duas vezes: (rodar 180° → flip vertical da imagem resultante)
+        for _ciclo in range(2):
+            for i in range(self._PASSOS_MEIA + 1):
+                if _ciclo == 1 and i == 0:
+                    continue  # já estamos no ângulo 0 após o flip
+                angulo = 180.0 * i / self._PASSOS_MEIA
+                self._frames.append(para_photo(rotacionar(atual, angulo)))
+            # Flip na imagem já rodada (senão coincide com o fim da rotação).
+            atual = ImageOps.flip(rotacionar(atual, 180.0))
+            self._frames.extend([para_photo(atual)] * self._FRAMES_PAUSA)
+
+        self.configure(image=self._frames[0])
+        self.bind("<Destroy>", self._ao_destruir)
+
+    def iniciar(self) -> None:
+        if self._ativo or not self._frames:
+            return
+        self._ativo = True
+        if not self.winfo_ismapped():
+            self.pack(expand=True)
+        self._agendar()
+
+    def parar(self) -> None:
+        self._ativo = False
+        self._cancelar()
+        self._indice = 0
+        if self._frames:
+            self.configure(image=self._frames[0])
+        if self.winfo_ismapped():
+            self.pack_forget()
+
+    def _agendar(self) -> None:
+        self._cancelar()
+        try:
+            self._job = self.after(self._INTERVALO_MS, self._tick)
+        except tk.TclError:
+            self._ativo = False
+
+    def _tick(self) -> None:
+        self._job = None
+        if not self._ativo or not self._frames:
+            return
+        self._indice = (self._indice + 1) % len(self._frames)
+        try:
+            self.configure(image=self._frames[self._indice])
+        except tk.TclError:
+            self._ativo = False
+            return
+        self._agendar()
+
+    def _cancelar(self) -> None:
+        if self._job is not None:
+            try:
+                self.after_cancel(self._job)
+            except (tk.TclError, ValueError):
+                pass
+            self._job = None
+
+    def _ao_destruir(self, _event=None) -> None:
+        self._ativo = False
+        self._cancelar()
+
+
+def _criar_ampulheta_com_areia(
+    master: tk.Misc,
+    *,
+    altura: int,
+    cor_vidro: str,
+    cor_areia: str,
+) -> tk.PhotoImage:
+    """Ampulheta com areia preenchida (visível ao inverter 180°)."""
+    if SvgImage is None:
+        raise ImportError("Pacote 'tksvg' não instalado.")
+    caminho = asset_path("icons", "hourglass-outline.svg")
+    if caminho is None:
+        raise FileNotFoundError("Ícone SVG não encontrado: assets/icons/hourglass-outline.svg")
+
+    svg_texto = caminho.read_text(encoding="utf-8")
+    # 1º path = vidro (contorno); 2º path = areia (preenchimento).
+    svg_texto = svg_texto.replace('stroke="currentColor"', f'stroke="{cor_vidro}"')
+    svg_texto = svg_texto.replace(
+        'fill="currentColor"',
+        f'fill="{cor_areia}"',
+    )
+    # O path da areia no asset não traz fill/stroke — força preenchimento visível.
+    partes = svg_texto.split("<path ", 2)
+    if len(partes) == 3:
+        vidro, areia_e_fim = partes[1], partes[2]
+        if "fill=" not in areia_e_fim.split("/>", 1)[0]:
+            areia_e_fim = f'fill="{cor_areia}" stroke="none" ' + areia_e_fim
+        svg_texto = "<path ".join([partes[0], vidro, areia_e_fim])
 
     return SvgImage(master=master, data=svg_texto, scaletoheight=altura)
 
@@ -202,3 +410,35 @@ def _aplicar_cor_svg(svg_texto: str, cor: str) -> str:
     if 'fill="none"' not in svg_texto and f'fill="{cor}"' not in svg_texto:
         svg_texto = svg_texto.replace("<path ", f'<path fill="{cor}" ')
     return svg_texto
+
+
+def _svg_com_rotacao(svg_texto: str, angulo: float) -> str:
+    """Envolve o conteúdo do SVG em um <g transform="rotate(...)">."""
+    inicio = svg_texto.find(">")
+    fim = svg_texto.rfind("</svg>")
+    if inicio < 0 or fim < 0 or fim <= inicio:
+        return svg_texto
+    abertura = svg_texto[: inicio + 1]
+    miolo = svg_texto[inicio + 1 : fim]
+    fechamento = svg_texto[fim:]
+    # viewBox padrão dos ícones Ionicons: 0 0 512 512
+    return (
+        f'{abertura}<g transform="rotate({angulo:.2f} 256 256)">'
+        f"{miolo}</g>{fechamento}"
+    )
+
+
+def _svg_com_escala(svg_texto: str, escala_x: float, escala_y: float) -> str:
+    """Escala em torno do centro (Y < 0 inverte cima↔baixo; X < 0 espelha no giro)."""
+    inicio = svg_texto.find(">")
+    fim = svg_texto.rfind("</svg>")
+    if inicio < 0 or fim < 0 or fim <= inicio:
+        return svg_texto
+    abertura = svg_texto[: inicio + 1]
+    miolo = svg_texto[inicio + 1 : fim]
+    fechamento = svg_texto[fim:]
+    return (
+        f'{abertura}<g transform="translate(256 256) '
+        f'scale({escala_x:.4f} {escala_y:.4f}) translate(-256 -256)">'
+        f"{miolo}</g>{fechamento}"
+    )

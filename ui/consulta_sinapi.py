@@ -12,6 +12,7 @@ from core.sinapi_busca import (
 )
 from core.sinapi_loader import obter_xlsx_sinapi_referencia_mais_recente
 from app_paths import asset_path
+from ui.icones import criar_label_icone
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
     centralizar_janela,
@@ -33,6 +34,7 @@ class ConsultaSinapiFrame(tk.Frame):
         self.on_voltar = on_voltar
         self._job_busca = None
         self._ultima_largura_wrap = 0
+        self._refs_icones = []
         self._montar()
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
@@ -98,9 +100,11 @@ class ConsultaSinapiFrame(tk.Frame):
         self.combo_tipo.grid(row=0, column=5, padx=4, pady=4, sticky="w")
         self.combo_tipo.set(TIPO_TODOS)
 
-        tk.Label(linha_filtros, text="Buscar:", bg="#ececec").grid(
-            row=0, column=6, padx=(16, 6), pady=4, sticky="w"
-        )
+        criar_label_icone(
+            linha_filtros,
+            "funnel-outline",
+            refs=self._refs_icones,
+        ).grid(row=0, column=6, padx=(16, 6), pady=4, sticky="w")
 
         self.var_busca = tk.StringVar()
         self.entrada_busca = ttk.Entry(linha_filtros, textvariable=self.var_busca, width=40)

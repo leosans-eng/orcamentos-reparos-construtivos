@@ -24,9 +24,12 @@ from core.vicios_storage import COMODOS_AREA_PRIVATIVA, comodos_permitidos_anoma
 from ui.dialogo_admin_usuarios import usuario_atual_eh_admin
 from ui.dialogo_ambientes_planta import DialogoAmbientesPlanta
 from ui.dialogo_config_anomalias import DialogoConfigAnomalias
+from ui.dialogo_previa_anomalia import DialogoPreviaAnomalia
 from ui.icones import (
+    IndicadorAmpulheta,
     criar_botao_ttk_com_icone,
     criar_botao_ttk_so_icone,
+    criar_icone_svg,
     definir_estado_botao_icone,
 )
 from ui.widgets import (
@@ -424,6 +427,11 @@ def criar_area_privativa(parent, ctx, on_voltar):
     tree_anomalias.column("#0", width=350, minwidth=200, stretch=True)
     tree_anomalias.column("subtotal", width=100, minwidth=90, stretch=False, anchor="e")
 
+    icone_previa = criar_icone_svg(
+        tree_anomalias, "search-outline", altura=14, cor="#006699"
+    )
+    _refs_icones.append(icone_previa)
+
     def ajustar_altura_treeview(event=None):
         frame_listbox.update_idletasks()
         altura = frame_listbox.winfo_height()
@@ -574,6 +582,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 "",
                 "end",
                 text=item["vicio"],
+                image=icone_previa,
                 values=(subtotal_str,),
                 open=True
             )
@@ -831,6 +840,90 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 total += quantidade * valor
 
         return total
+
+    def medidas_do_comodo(comodo):
+        piso = ler_float_seguro(comodos[comodo]["piso"])
+        arg = ler_float_seguro(comodos[comodo]["rev_arg"])
+        if comodos[comodo]["rev_cer"].cget("state") != "disabled":
+            cer = ler_float_seguro(comodos[comodo]["rev_cer"])
+        else:
+            cer = 0
+        return {"piso": piso, "rev_arg": arg, "rev_cer": cer}
+
+    def montar_linhas_previa(item):
+        linhas = []
+        nome_anomalia = item["vicio"]
+        dados_anomalia = ctx.dados_json.get("anomalias", {}).get(nome_anomalia) or {}
+        etapas = dados_anomalia.get("etapas") or []
+        estado = combo_estado.get().strip()
+        repintura_executada = set()
+        for comodo in item["comodos"]:
+            medidas = medidas_do_comodo(comodo)
+            for etapa in etapas:
+                quantidade = calcular_quantidade(etapa, medidas)
+                codigo = str(etapa.get("codigo_sinapi", "")).strip()
+                grupo_planilha = etapa.get("grupo_planilha", "")
+                if grupo_planilha == "repintura":
+                    chave = (comodo, codigo)
+                    if chave in repintura_executada:
+                        continue
+                    repintura_executada.add(chave)
+                linha_sinapi = linha_sinapi_codigo(codigo, estado) if estado else None
+                if linha_sinapi is not None:
+                    descricao = linha_sinapi.get("descricao", "")
+                    valor = linha_sinapi.get("custo", 0)
+                else:
+                    descricao = (
+                        "Selecione um Estado"
+                        if not estado
+                        else "Código não encontrado"
+                    )
+                    valor = 0
+                linhas.append({
+                    "comodo": comodo,
+                    "codigo": codigo,
+                    "descricao": descricao,
+                    "unidade": etapa.get("unidade", ""),
+                    "quantidade": quantidade,
+                    "valor_unit": valor,
+                    "total": quantidade * valor,
+                    "grupo": grupo_planilha,
+                })
+        return linhas
+
+    def abrir_previa_anomalia(item):
+        if not item:
+            return
+        DialogoPreviaAnomalia(
+            root,
+            nome_anomalia=item["vicio"],
+            comodos=list(item.get("comodos") or []),
+            estado=combo_estado.get().strip(),
+            linhas=montar_linhas_previa(item),
+            subtotal=calcular_subtotal_anomalia(item),
+        )
+
+    def ao_clicar_previa(event):
+        row = tree_anomalias.identify_row(event.y)
+        if not row or tree_anomalias.parent(row):
+            return
+        elemento = str(tree_anomalias.identify_element(event.x, event.y) or "")
+        if "image" not in elemento.lower():
+            return
+        indice = tree_anomalias.index(row)
+        if 0 <= indice < len(lista_anomalias):
+            abrir_previa_anomalia(lista_anomalias[indice])
+
+    def ao_mover_lista(event):
+        row = tree_anomalias.identify_row(event.y)
+        elemento = str(tree_anomalias.identify_element(event.x, event.y) or "")
+        if row and not tree_anomalias.parent(row) and "image" in elemento.lower():
+            tree_anomalias.configure(cursor="hand2")
+        else:
+            tree_anomalias.configure(cursor="")
+
+    tree_anomalias.bind("<ButtonRelease-1>", ao_clicar_previa)
+    tree_anomalias.bind("<Motion>", ao_mover_lista)
 
     def calcular_total_geral():
         total_itens = 0.0
@@ -1797,10 +1890,16 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
         anchor="w",
     ).grid(row=0, column=0, sticky="ew", padx=(0, 8))
 
-    slot_progresso = tk.Frame(linha_status, bg="#ececec", width=92, height=20)
-    slot_progresso.grid(row=0, column=1, padx=(0, 8), sticky="e")
-    slot_progresso.pack_propagate(False)
-    progresso = ttk.Progressbar(slot_progresso, mode="indeterminate", length=88)
+    slot_ampulheta = tk.Frame(linha_status, bg="#ececec", width=30, height=26)
+    slot_ampulheta.grid(row=0, column=1, padx=(0, 8), sticky="e")
+    slot_ampulheta.pack_propagate(False)
+    ampulheta = IndicadorAmpulheta(
+        slot_ampulheta,
+        altura=24,
+        cor="#006699",
+        bg="#ececec",
+        refs=refs_icones,
+    )
 
     btn_visualizar = criar_botao_ttk_com_icone(
         linha_status,
@@ -1889,14 +1988,11 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
 
     def iniciar_carregamento(mensagem):
         var_status.set(mensagem)
-        if not progresso.winfo_ismapped():
-            progresso.pack(fill="both", expand=True, pady=1)
-        progresso.start(12)
+        ampulheta.iniciar()
         definir_estado_botao_icone(btn_visualizar, "disabled")
 
     def parar_carregamento():
-        progresso.stop()
-        progresso.pack_forget()
+        ampulheta.parar()
         definir_estado_botao_icone(btn_visualizar, "normal")
 
     def visualizar_ambientes():

@@ -117,6 +117,10 @@ class AppContext:
             dados = dados[0]
         return dados
 
+    def recarregar_dados_json(self):
+        self.dados_json = self._carregar_dados_json()
+        return self.dados_json
+
     def registrar_callback_sinapi(self, callback):
         self._sinapi_callbacks.append(callback)
 

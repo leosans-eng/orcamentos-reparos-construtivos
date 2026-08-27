@@ -29,6 +29,31 @@ ROTULOS_TIPO_CALCULO = {
 
 UNIDADES_COMUNS = ("m²", "m", "m³", "H", "Un", "un", "KG", "L")
 
+COMODOS_AREA_PRIVATIVA = (
+    "Sala",
+    "Circulação",
+    "Dormitório 1",
+    "Dormitório 2",
+    "Banheiro",
+    "Cozinha",
+    "Área de Serviço",
+    "Área Externa",
+    "Varanda",
+    "Residência Inteira",
+)
+
+
+def comodos_permitidos_anomalia(dados_anomalia: dict[str, Any] | None, todos=None) -> list[str]:
+    """Cômodos em que a anomalia pode ser marcada. Sem cadastro = todos."""
+    origem = list(todos if todos is not None else COMODOS_AREA_PRIVATIVA)
+    if not dados_anomalia:
+        return origem
+    permitidos = dados_anomalia.get("comodos_permitidos")
+    if permitidos is None:
+        return origem
+    nomes = {str(item) for item in permitidos}
+    return [comodo for comodo in origem if comodo in nomes]
+
 
 def carregar_vicios(caminho: Path | None = None) -> dict[str, Any]:
     origem = caminho or vicios_construtivos_path()
@@ -81,4 +106,5 @@ def nova_anomalia(nome: str, grupo_reparo: str = "") -> dict[str, Any]:
     return {
         "grupo_reparo": grupo_reparo or nome,
         "etapas": [],
+        "comodos_permitidos": list(COMODOS_AREA_PRIVATIVA),
     }

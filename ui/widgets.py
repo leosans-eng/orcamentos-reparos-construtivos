@@ -813,7 +813,7 @@ def criar_botao_fechar(parent, command, texto="Fechar"):
 
 
 class CampoListaPesquisavel(tk.Frame):
-    """Campo com lista suspensa pesquisável (mesmo comportamento do Modelo em Nova etapa)."""
+    """Campo com lista suspensa pesquisável (abre no clique e fecha ao clicar fora)."""
 
     def __init__(
         self,
@@ -835,16 +835,11 @@ class CampoListaPesquisavel(tk.Frame):
         self._popup = None
         self._lista = None
         self._ignorando_foco = False
+        self._id_clique_fora = None
         self.var = textvariable if textvariable is not None else tk.StringVar()
 
         self.entrada = ttk.Entry(self, textvariable=self.var)
-        self.entrada.pack(side="left", fill="x", expand=True)
-        ttk.Button(
-            self,
-            text="▼",
-            width=3,
-            command=self._ao_botao_lista,
-        ).pack(side="left", padx=(4, 0))
+        self.entrada.pack(fill="x", expand=True)
 
         self.entrada.bind("<ButtonRelease-1>", self._ao_clicar)
         self.entrada.bind("<KeyRelease>", self._ao_digitar)
@@ -853,6 +848,9 @@ class CampoListaPesquisavel(tk.Frame):
         self.entrada.bind("<Escape>", self._ao_escape)
         self.entrada.bind("<FocusOut>", self._ao_foco_sair)
         self.bind("<Destroy>", self._ao_destruir)
+        self._id_clique_fora = self.bind_all(
+            "<ButtonPress-1>", self._ao_clique_fora, add="+"
+        )
 
     def definir_opcoes(self, opcoes):
         self._opcoes = list(opcoes)
@@ -903,6 +901,35 @@ class CampoListaPesquisavel(tk.Frame):
         y = self.entrada.winfo_rooty() + self.entrada.winfo_height()
         largura = max(self.entrada.winfo_width(), self._largura_minima_lista)
         self._popup.geometry(f"{largura}x180+{x}+{y}")
+
+    def _ponto_interno(self, x, y) -> bool:
+        widgets = [self, self.entrada]
+        if self._popup_ativo():
+            widgets.extend([self._popup, self._lista])
+        for widget in widgets:
+            try:
+                if not widget.winfo_ismapped():
+                    continue
+                x0 = widget.winfo_rootx()
+                y0 = widget.winfo_rooty()
+                x1 = x0 + widget.winfo_width()
+                y1 = y0 + widget.winfo_height()
+                if x0 <= x < x1 and y0 <= y < y1:
+                    return True
+            except tk.TclError:
+                continue
+        return False
+
+    def _ao_clique_fora(self, event):
+        if not self._popup_ativo():
+            return
+        try:
+            interno = self._ponto_interno(event.x_root, event.y_root)
+        except tk.TclError:
+            interno = False
+        if interno:
+            return
+        self.fechar_lista()
 
     def _criar_popup(self):
         popup = tk.Toplevel(self.winfo_toplevel())
@@ -968,10 +995,6 @@ class CampoListaPesquisavel(tk.Frame):
         self.after_idle(self._abrir_no_clique)
 
     def _abrir_no_clique(self):
-        self._mostrar_lista(forcar_todas=True)
-        self.after_idle(self._selecionar_texto)
-
-    def _ao_botao_lista(self):
         self._mostrar_lista(forcar_todas=True)
         self.after_idle(self._selecionar_texto)
 
@@ -1068,6 +1091,15 @@ class CampoListaPesquisavel(tk.Frame):
             self.on_escolher(valor)
 
     def _ao_destruir(self, event):
-        if event.widget is self:
-            self.fechar_lista()
+        if event.widget is not self:
+            return
+        self.fechar_lista()
+        funcid = self._id_clique_fora
+        self._id_clique_fora = None
+        if not funcid:
+            return
+        try:
+            self._unbind(("bind", "all", "<ButtonPress-1>"), funcid)
+        except (tk.TclError, TypeError, AttributeError):
+            pass
 

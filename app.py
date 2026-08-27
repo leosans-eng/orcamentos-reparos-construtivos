@@ -44,7 +44,7 @@ class OrcApp:
         configurar_estilos_ttk(self.janela)
 
         self.janela.title(TITULOS_JANELA["hub"])
-        self.janela.minsize(860, 520)
+        self.janela.minsize(940, 620)
         centralizar_janela_principal(
             self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
         )

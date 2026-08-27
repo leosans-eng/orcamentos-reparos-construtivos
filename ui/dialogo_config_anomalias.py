@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 
 from core.app_state import NOMES_GRUPOS_REPARO
 from core.vicios_storage import (
+    COMODOS_AREA_PRIVATIVA,
     ROTULOS_TIPO_CALCULO,
     TIPOS_CALCULO,
     UNIDADES_COMUNS,
@@ -168,6 +169,7 @@ class DialogoConfigAnomalias(tk.Toplevel):
         self.on_salvo = on_salvo
         self._refs_icones: list = []
         self._nome_atual: str | None = None
+        self._carregando = False
         self._dados = deepcopy(ctx.dados_json)
         self._dados.setdefault("anomalias", {})
 
@@ -176,8 +178,8 @@ class DialogoConfigAnomalias(tk.Toplevel):
         self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
-        self.geometry("980x560")
-        self.minsize(820, 480)
+        self.geometry("980x640")
+        self.minsize(820, 540)
 
         painel = tk.Frame(self, bg="#ececec", padx=14, pady=12)
         painel.pack(fill="both", expand=True)
@@ -233,7 +235,7 @@ class DialogoConfigAnomalias(tk.Toplevel):
         direita = tk.LabelFrame(painel, text="Detalhes", bg="#ececec", padx=10, pady=8)
         direita.grid(row=1, column=1, sticky="nsew")
         direita.columnconfigure(1, weight=1)
-        direita.rowconfigure(3, weight=1)
+        direita.rowconfigure(4, weight=1)
 
         tk.Label(direita, text="Nome:", bg="#ececec").grid(row=0, column=0, sticky="w", pady=3)
         self.var_nome = tk.StringVar()
@@ -242,7 +244,7 @@ class DialogoConfigAnomalias(tk.Toplevel):
         )
 
         tk.Label(direita, text="Grupo de reparo:", bg="#ececec").grid(
-            row=1, column=0, sticky="w", pady=3
+            row=1, column=0, sticky="nw", pady=3
         )
         grupos = sorted(set(NOMES_GRUPOS_REPARO.keys()) | {"repintura"})
         self.var_grupo = tk.StringVar()
@@ -251,12 +253,37 @@ class DialogoConfigAnomalias(tk.Toplevel):
         self.combo_grupo.bind("<<ComboboxSelected>>", lambda _e: self._aplicar_formulario())
         self.combo_grupo.bind("<FocusOut>", lambda _e: self._aplicar_formulario())
 
+        frame_comodos = tk.LabelFrame(
+            direita,
+            text="Cômodos em que a anomalia pode ser aplicada",
+            bg="#ececec",
+            padx=6,
+            pady=4,
+        )
+        frame_comodos.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        frame_comodos.columnconfigure(0, weight=1)
+        frame_comodos.columnconfigure(1, weight=1)
+        self._vars_comodos = {}
+        for indice, comodo in enumerate(COMODOS_AREA_PRIVATIVA):
+            var = tk.BooleanVar(value=True)
+            chk = tk.Checkbutton(
+                frame_comodos,
+                text=comodo,
+                variable=var,
+                bg="#ececec",
+                activebackground="#ececec",
+                anchor="w",
+                command=self._aplicar_formulario,
+            )
+            chk.grid(row=indice // 2, column=indice % 2, sticky="w", padx=(0, 8), pady=0)
+            self._vars_comodos[comodo] = var
+
         tk.Label(direita, text="Etapas SINAPI", bg="#ececec", font=("Arial", 10, "bold")).grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(10, 4)
+            row=3, column=0, columnspan=2, sticky="w", pady=(10, 4)
         )
 
         colunas = ("codigo", "unidade", "tipo", "coef", "grupo")
-        self.tree = ttk.Treeview(direita, columns=colunas, show="headings", height=10)
+        self.tree = ttk.Treeview(direita, columns=colunas, show="headings", height=8)
         self.tree.heading("codigo", text="Código")
         self.tree.heading("unidade", text="Unid.")
         self.tree.heading("tipo", text="Cálculo")
@@ -267,11 +294,11 @@ class DialogoConfigAnomalias(tk.Toplevel):
         self.tree.column("tipo", width=160, anchor="w")
         self.tree.column("coef", width=70, anchor="e")
         self.tree.column("grupo", width=110, anchor="w")
-        self.tree.grid(row=3, column=0, columnspan=2, sticky="nsew")
+        self.tree.grid(row=4, column=0, columnspan=2, sticky="nsew")
         self.tree.bind("<Double-1>", lambda _e: self._editar_etapa())
 
         botoes_etapas = tk.Frame(direita, bg="#ececec")
-        botoes_etapas.grid(row=4, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        botoes_etapas.grid(row=5, column=0, columnspan=2, sticky="e", pady=(8, 0))
         criar_botao_ttk_com_icone(
             botoes_etapas,
             texto="Adicionar etapa",
@@ -298,7 +325,9 @@ class DialogoConfigAnomalias(tk.Toplevel):
 
         rodape = tk.Frame(painel, bg="#ececec")
         rodape.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 0))
-        criar_botao_fechar(rodape, command=self.destroy).pack(side="right", padx=(6, 0))
+        criar_botao_fechar(
+            rodape, command=self.destroy, texto="Fechar sem salvar"
+        ).pack(side="right", padx=(6, 0))
         criar_botao_ttk_com_icone(
             rodape,
             texto="Salvar no JSON",
@@ -325,6 +354,7 @@ class DialogoConfigAnomalias(tk.Toplevel):
             self._nome_atual = None
             self.var_nome.set("")
             self.var_grupo.set("")
+            self._definir_comodos_permitidos(list(COMODOS_AREA_PRIVATIVA))
             self._redesenhar_etapas([])
             return
         alvo = selecionar if selecionar in nomes else nomes[0]
@@ -343,10 +373,15 @@ class DialogoConfigAnomalias(tk.Toplevel):
 
     def _carregar_anomalia(self, nome: str):
         dados = self._anomalias().get(nome) or nova_anomalia(nome)
-        self._nome_atual = nome
-        self.var_nome.set(nome)
-        self.var_grupo.set(str(dados.get("grupo_reparo", "")))
-        self._redesenhar_etapas(dados.get("etapas") or [])
+        self._carregando = True
+        try:
+            self._nome_atual = nome
+            self.var_nome.set(nome)
+            self.var_grupo.set(str(dados.get("grupo_reparo", "")))
+            self._definir_comodos_permitidos(dados.get("comodos_permitidos"))
+            self._redesenhar_etapas(dados.get("etapas") or [])
+        finally:
+            self._carregando = False
 
     def _redesenhar_etapas(self, etapas):
         self.tree.delete(*self.tree.get_children())
@@ -369,10 +404,28 @@ class DialogoConfigAnomalias(tk.Toplevel):
             return []
         return list(self._anomalias().get(self._nome_atual, {}).get("etapas") or [])
 
+    def _definir_comodos_permitidos(self, permitidos):
+        if permitidos is None:
+            nomes = set(COMODOS_AREA_PRIVATIVA)
+        else:
+            nomes = {str(item) for item in permitidos}
+        for comodo, var in self._vars_comodos.items():
+            var.set(comodo in nomes)
+
+    def _comodos_marcados(self) -> list[str]:
+        return [
+            comodo
+            for comodo, var in self._vars_comodos.items()
+            if var.get()
+        ]
+
     def _aplicar_formulario(self):
+        if self._carregando:
+            return
         if not self._nome_atual or self._nome_atual not in self._anomalias():
             return
         self._anomalias()[self._nome_atual]["grupo_reparo"] = self.var_grupo.get().strip()
+        self._anomalias()[self._nome_atual]["comodos_permitidos"] = self._comodos_marcados()
 
     def _nova(self):
         self._aplicar_formulario()
@@ -473,6 +526,13 @@ class DialogoConfigAnomalias(tk.Toplevel):
 
     def _salvar(self):
         self._aplicar_formulario()
+        if self._nome_atual and not self._comodos_marcados():
+            messagebox.showwarning(
+                "Cômodos permitidos",
+                "Selecione ao menos um cômodo em que a anomalia possa ser aplicada.",
+                parent=self,
+            )
+            return
         try:
             caminho = salvar_vicios(self._dados)
             self.ctx.recarregar_dados_json()

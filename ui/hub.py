@@ -14,6 +14,7 @@ from ui.widgets import (
 LARGURA_CARTAO = 240
 ALTURA_CARTAO = 148
 FONTE_TITULO_CARTAO = ("Arial", 12, "bold")
+FONTE_CATEGORIA = ("Arial", 11, "bold")
 ALTURA_ICONE_CARTAO = 20
 
 
@@ -28,8 +29,12 @@ class HubFrame(tk.Frame):
         self._montar()
 
     def _montar(self):
-        container = tk.Frame(self, bg="#ececec")
-        container.place(relx=0.5, rely=0.5, anchor="center")
+        # Área expansível: em tela cheia o conteúdo permanece centralizado e com respiro.
+        area = tk.Frame(self, bg="#ececec")
+        area.pack(fill="both", expand=True, padx=24, pady=(16, 48))
+
+        container = tk.Frame(area, bg="#ececec")
+        container.place(relx=0.5, rely=0.45, anchor="center")
 
         tk.Label(
             container,
@@ -45,76 +50,143 @@ class HubFrame(tk.Frame):
             font=("Arial", 11),
             fg="#444444",
             bg="#ececec",
-        ).pack(pady=(0, 24))
+        ).pack(pady=(0, 20))
 
-        cartoes = tk.Frame(container, bg="#ececec")
-        cartoes.pack()
-        for col in range(3):
-            cartoes.columnconfigure(col, weight=1, uniform="cartao_hub")
+        destaque = tk.Frame(
+            container,
+            bg="#e2eef3",
+            highlightbackground="#b7cdd8",
+            highlightthickness=1,
+        )
+        destaque.pack(fill="x", pady=(0, 22), padx=0)
+        interno = tk.Frame(destaque, bg="#e2eef3")
+        interno.pack(fill="x", padx=14, pady=(10, 12))
+        self._montar_secao(
+            interno,
+            "Orçamentos",
+            [
+                {
+                    "titulo": "Orçamento\nCustomizado",
+                    "descricao": "Montar orçamento com Etapas e Itens personalizados",
+                    "modulo": "orcamento_customizado",
+                    "habilitado": True,
+                    "icone_titulo": "construct-outline",
+                },
+                {
+                    "titulo": "Área Privativa",
+                    "descricao": "Orçamento de reparos em unidades autônomas",
+                    "modulo": "area_privativa",
+                    "habilitado": True,
+                    "icone_titulo": "construct-outline",
+                },
+                {
+                    "titulo": "Área Comum",
+                    "descricao": (
+                        "Orçamento de reparos em áreas comuns, "
+                        "com a opção de composições próprias"
+                    ),
+                    "modulo": "area_comum",
+                    "habilitado": False,
+                    "aviso": "Em breve",
+                    "icone_titulo": "construct-outline",
+                },
+            ],
+            pady_abaixo=0,
+            cor_fundo="#e2eef3",
+        )
 
-        self._criar_cartao(
-            cartoes,
-            titulo="Área Privativa",
-            descricao="Orçamento de reparos em unidades autônomas",
-            modulo="area_privativa",
-            habilitado=True,
-            coluna=0,
-            linha=0,
-            icone_titulo="construct-outline",
+        inferior = tk.Frame(container, bg="#ececec")
+        inferior.pack(fill="x")
+        inferior.columnconfigure(0, weight=1)
+        inferior.columnconfigure(1, weight=0)
+
+        cadastros = tk.Frame(inferior, bg="#ececec")
+        cadastros.grid(row=0, column=0, sticky="nw", padx=(0, 28))
+        self._montar_secao(
+            cadastros,
+            "Configurar cadastros",
+            [
+                {
+                    "titulo": "Configurar\nComposições Próprias",
+                    "descricao": (
+                        "Cadastre composições com insumos/composições "
+                        "SINAPI ou de mercado"
+                    ),
+                    "modulo": "composicoes_proprias",
+                    "habilitado": True,
+                    "icone_titulo": "cog-outline",
+                },
+                {
+                    "titulo": "Configurar\nEtapas pré-definidas",
+                    "descricao": (
+                        "Configure modelos de Etapas que já virão com "
+                        "itens SINAPI e composições próprias"
+                    ),
+                    "modulo": "etapas_predefinidas",
+                    "habilitado": True,
+                    "icone_titulo": "cog-outline",
+                },
+            ],
+            pady_abaixo=0,
         )
-        self._criar_cartao(
-            cartoes,
-            titulo="Área Comum",
-            descricao="Orçamento de reparos em áreas comuns, com a opção de composições próprias",
-            modulo="area_comum",
-            habilitado=False,
-            coluna=1,
-            linha=0,
-            aviso="Em breve",
-            icone_titulo="construct-outline",
-        )
-        self._criar_cartao(
-            cartoes,
-            titulo="Consulta SINAPI",
-            descricao="Pesquisar composições e preços da base",
-            modulo="consulta_sinapi",
-            habilitado=True,
-            coluna=2,
-            linha=0,
-            icone_titulo="search-outline",
-        )
-        self._criar_cartao(
-            cartoes,
-            titulo="Orçamento\nCustomizado",
-            descricao="Montar orçamento com Etapas e Itens personalizados",
-            modulo="orcamento_customizado",
-            habilitado=True,
-            coluna=0,
-            linha=1,
-            icone_titulo="construct-outline",
-        )
-        self._criar_cartao(
-            cartoes,
-            titulo="Configurar\nComposições Próprias",
-            descricao="Cadastre composições com insumos/composições SINAPI ou de mercado",
-            modulo="composicoes_proprias",
-            habilitado=True,
-            coluna=1,
-            linha=1,
-            icone_titulo="cog-outline",
-        )
-        self._criar_cartao(
-            cartoes,
-            titulo="Configurar\nEtapas pré-definidas",
-            descricao="Configure modelos de Etapas que já virão com itens SINAPI e composições próprias",
-            modulo="etapas_predefinidas",
-            habilitado=True,
-            coluna=2,
-            linha=1,
-            icone_titulo="cog-outline",
+
+        consulta = tk.Frame(inferior, bg="#ececec")
+        consulta.grid(row=0, column=1, sticky="nw")
+        self._montar_secao(
+            consulta,
+            "Consulta",
+            [
+                {
+                    "titulo": "Consulta SINAPI",
+                    "descricao": "Pesquisar composições e preços da base",
+                    "modulo": "consulta_sinapi",
+                    "habilitado": True,
+                    "icone_titulo": "search-outline",
+                },
+            ],
+            pady_abaixo=0,
         )
 
         self._montar_botoes_rodape()
+
+    def _montar_secao(
+        self, parent, titulo, cartoes, *, pady_abaixo=16, cor_fundo="#ececec"
+    ):
+        secao = tk.Frame(parent, bg=cor_fundo)
+        secao.pack(fill="x", pady=(0, pady_abaixo))
+
+        cabecalho = tk.Frame(secao, bg=cor_fundo)
+        cabecalho.pack(fill="x", pady=(0, 8))
+        tk.Label(
+            cabecalho,
+            text=titulo,
+            font=FONTE_CATEGORIA,
+            fg="#006699",
+            bg=cor_fundo,
+            anchor="w",
+        ).pack(side="left")
+        tk.Frame(cabecalho, bg="#c5d6de", height=1).pack(
+            side="left", fill="x", expand=True, padx=(10, 0), pady=6
+        )
+
+        grade = tk.Frame(secao, bg=cor_fundo)
+        grade.pack(anchor="w")
+        for col in range(len(cartoes)):
+            grade.columnconfigure(col, weight=0)
+
+        for indice, cartao in enumerate(cartoes):
+            self._criar_cartao(
+                grade,
+                titulo=cartao["titulo"],
+                descricao=cartao["descricao"],
+                modulo=cartao["modulo"],
+                habilitado=cartao.get("habilitado", True),
+                coluna=indice,
+                linha=0,
+                aviso=cartao.get("aviso"),
+                icone_titulo=cartao.get("icone_titulo"),
+            )
+        return secao
 
     def _montar_botoes_rodape(self):
         icone_cfg = criar_icone_svg(
@@ -211,7 +283,7 @@ class HubFrame(tk.Frame):
             highlightthickness=2,
             cursor="hand2" if habilitado else "arrow",
         )
-        cartao.grid(row=linha, column=coluna, padx=12, pady=4, sticky="n")
+        cartao.grid(row=linha, column=coluna, padx=(0, 12), pady=4, sticky="n")
         cartao.grid_propagate(False)
         cartao.rowconfigure(1, weight=1)
         cartao.columnconfigure(0, weight=1)

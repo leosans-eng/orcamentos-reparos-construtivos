@@ -5,7 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from core.idebras_client import AmbienteIdebras, PlantaIdebras, parse_decimal_br
+from core.idebras_client import AmbienteIdebras, PlantaIdebras, medidas_para_orcamento
 from ui.widgets import aplicar_icone_janela, centralizar_janela, criar_botao_fechar, preparar_toplevel
 
 
@@ -143,17 +143,7 @@ class DialogoAmbientesPlanta(tk.Toplevel):
         centralizar_janela(self, parent)
 
     def _medidas(self):
-        medidas = {}
-        for amb in self.ambientes:
-            destino = amb.comodo_orc
-            if not destino:
-                continue
-            medidas[destino] = {
-                "piso": parse_decimal_br(amb.area_piso),
-                "rev_arg": parse_decimal_br(amb.area_parede),
-                "rev_cer": parse_decimal_br(amb.area_parede_ceramica),
-            }
-        return medidas
+        return medidas_para_orcamento(self.ambientes)
 
     def _aplicar(self):
         self.on_aplicar(self._medidas())

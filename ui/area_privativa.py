@@ -16,6 +16,8 @@ from core.idebras_client import (
     IdebrasClient,
     IdebrasError,
     formatar_decimal_br,
+    localizar_conjunto_parecer,
+    medidas_para_orcamento,
     normalizar_ambiente,
 )
 from core.municipios_br import resolver_uf_conjunto
@@ -24,6 +26,7 @@ from core.vicios_storage import COMODOS_AREA_PRIVATIVA, comodos_permitidos_anoma
 from ui.dialogo_admin_usuarios import usuario_atual_eh_admin
 from ui.dialogo_ambientes_planta import DialogoAmbientesPlanta
 from ui.dialogo_config_anomalias import DialogoConfigAnomalias
+from ui.dialogo_importar_autor_idebras import DialogoImportarAutorIdebras
 from ui.dialogo_previa_anomalia import DialogoPreviaAnomalia
 from ui.icones import (
     IndicadorAmpulheta,
@@ -85,7 +88,55 @@ def criar_area_privativa(parent, ctx, on_voltar):
     var_proprietario.trace_add("write", forcar_maiusculo)
 
     entrada_proprietario = tk.Entry(linha_autor, textvariable=var_proprietario)
-    entrada_proprietario.pack(side="left", fill="x", expand=True, padx=(6, 12))
+    entrada_proprietario.pack(side="left", fill="x", expand=True, padx=(6, 6))
+
+    ctrl_idebras = {
+        "cliente": None,
+        "obter_conjuntos": lambda: [],
+        "selecionar_conjunto": lambda _nome: None,
+    }
+
+    def abrir_importar_autor():
+        cliente = ctrl_idebras.get("cliente")
+        conjuntos = list((ctrl_idebras.get("obter_conjuntos") or (lambda: []))())
+        if cliente is None or not conjuntos:
+            mostrar_feedback("Aguarde a conexão com o Idebras.", "orange")
+            return
+
+        def ao_importar(parecer):
+            var_proprietario.set(parecer.nome)
+            conjunto = localizar_conjunto_parecer(conjuntos, parecer)
+            selecionar = ctrl_idebras.get("selecionar_conjunto")
+            if conjunto is not None and selecionar:
+                selecionar(conjunto.nome)
+                mostrar_feedback(
+                    f"Autor importado: {parecer.nome}.",
+                    "green",
+                )
+            else:
+                mostrar_feedback(
+                    f"Autor importado: {parecer.nome}. "
+                    "O conjunto não foi localizado automaticamente.",
+                    "orange",
+                    temporario=False,
+                )
+
+        DialogoImportarAutorIdebras(
+            root,
+            cliente=cliente,
+            conjuntos=conjuntos,
+            on_importar=ao_importar,
+            refs_icones=_refs_icones,
+        )
+
+    btn_importar_autor = criar_botao_ttk_so_icone(
+        linha_autor,
+        nome_icone="cloud-download-outline",
+        command=abrir_importar_autor,
+        refs=_refs_icones,
+    )
+    btn_importar_autor.pack(side="left", padx=(0, 12))
+    vincular_tooltip(btn_importar_autor, "Importar autor do Idebras")
 
     tk.Label(linha_autor, text="Estado:", bg="#ececec").pack(side="left")
 
@@ -1826,12 +1877,14 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 temporario=False,
             )
 
-    _montar_painel_idebras(
-        frame_idebras_host,
-        root,
-        preencher_metragens,
-        _refs_icones,
-        on_conjunto=ao_conjunto_idebras,
+    ctrl_idebras.update(
+        _montar_painel_idebras(
+            frame_idebras_host,
+            root,
+            preencher_metragens,
+            _refs_icones,
+            on_conjunto=ao_conjunto_idebras,
+        )
     )
 
     def ativar_scroll():
@@ -1909,6 +1962,19 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
         refs=refs_icones,
     )
     btn_visualizar.grid(row=0, column=2, sticky="e")
+
+    btn_preencher = criar_botao_ttk_com_icone(
+        linha_status,
+        texto="Preencher metragens",
+        nome_icone="color-wand-outline",
+        command=lambda: None,
+        refs=refs_icones,
+    )
+    btn_preencher.grid(row=0, column=3, sticky="e", padx=(6, 0))
+    vincular_tooltip(
+        btn_preencher,
+        "Preencher metragens da planta nos cômodos",
+    )
 
     def na_ui(fn):
         try:
@@ -1990,12 +2056,14 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
         var_status.set(mensagem)
         ampulheta.iniciar()
         definir_estado_botao_icone(btn_visualizar, "disabled")
+        definir_estado_botao_icone(btn_preencher, "disabled")
 
     def parar_carregamento():
         ampulheta.parar()
         definir_estado_botao_icone(btn_visualizar, "normal")
+        definir_estado_botao_icone(btn_preencher, "normal")
 
-    def visualizar_ambientes():
+    def carregar_ambientes(ao_sucesso, mensagem):
         conjunto = conjunto_selecionado()
         planta = planta_selecionada()
         if conjunto is None:
@@ -2009,7 +2077,7 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
         if planta is not None and not planta.event_target_ambientes:
             var_status.set("Esta planta não possui ambientes para visualizar.")
             return
-        iniciar_carregamento("Carregando ambientes da planta...")
+        iniciar_carregamento(mensagem)
 
         def trabalho():
             try:
@@ -2043,28 +2111,56 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
                 na_ui(lambda m=msg: (parar_carregamento(), var_status.set(m)))
                 return
 
-            def abrir():
+            def concluir():
                 parar_carregamento()
-                if not ambientes:
-                    var_status.set("A planta não possui ambientes cadastrados.")
-                    return
-                DialogoAmbientesPlanta(
-                    root,
-                    conjunto_nome=conjunto.nome,
-                    planta=planta_atual,
-                    ambientes=ambientes,
-                    on_aplicar=preencher_metragens,
-                )
-                var_status.set(
-                    f"{len(ambientes)} ambiente(s) carregados de {planta_atual.nome}."
-                )
+                ao_sucesso(conjunto, planta_atual, ambientes)
 
-            na_ui(abrir)
+            na_ui(concluir)
 
         threading.Thread(target=trabalho, daemon=True).start()
 
+    def visualizar_ambientes():
+        def abrir(conjunto, planta_atual, ambientes):
+            if not ambientes:
+                var_status.set("A planta não possui ambientes cadastrados.")
+                return
+            DialogoAmbientesPlanta(
+                root,
+                conjunto_nome=conjunto.nome,
+                planta=planta_atual,
+                ambientes=ambientes,
+                on_aplicar=preencher_metragens,
+            )
+            var_status.set(
+                f"{len(ambientes)} ambiente(s) carregados de {planta_atual.nome}."
+            )
+
+        carregar_ambientes(abrir, "Carregando ambientes da planta...")
+
+    def preencher_metragens_planta():
+        def aplicar(conjunto, planta_atual, ambientes):
+            if not ambientes:
+                var_status.set("A planta não possui ambientes cadastrados.")
+                return
+            preencher_metragens(medidas_para_orcamento(ambientes))
+            mapeados = sum(1 for amb in ambientes if amb.comodo_orc)
+            var_status.set(
+                f"Metragens preenchidas a partir de {planta_atual.nome} "
+                f"({mapeados} cômodo(s) mapeado(s))."
+            )
+
+        carregar_ambientes(aplicar, "Preenchendo metragens da planta...")
+
+    def selecionar_conjunto(nome):
+        if not nome:
+            return
+        var_conjunto.set(nome)
+        ao_escolher_conjunto()
+
     btn_visualizar.configure(command=visualizar_ambientes)
     btn_visualizar._orc_command = visualizar_ambientes
+    btn_preencher.configure(command=preencher_metragens_planta)
+    btn_preencher._orc_command = preencher_metragens_planta
     campo_conjunto.on_escolher = lambda _nome: ao_escolher_conjunto()
 
     def conectar():
@@ -2094,6 +2190,11 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
         threading.Thread(target=trabalho, daemon=True).start()
 
     conectar()
+    return {
+        "cliente": cliente,
+        "obter_conjuntos": lambda: conjuntos,
+        "selecionar_conjunto": selecionar_conjunto,
+    }
 
 
 def _rotulo_planta(planta):

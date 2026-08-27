@@ -64,6 +64,33 @@ class AmbienteIdebras:
         return mapear_ambiente_orc(self.ambiente)
 
 
+@dataclass(frozen=True)
+class ParecerFinalizado:
+    nome: str
+    id_mutuario: str
+    cpf: str
+    conjunto: str
+    conjunto_id: str
+    endereco: str
+    bloco: str
+    apartamento: str
+    cidade: str
+    uf: str
+    data: str
+
+    @property
+    def cidade_uf(self) -> str:
+        if self.cidade and self.uf:
+            return f"{self.cidade}/{self.uf}"
+        return self.cidade or self.uf or ""
+
+
+@dataclass(frozen=True)
+class ResultadoPesquisaPareceres:
+    pareceres: list[ParecerFinalizado]
+    total: int
+
+
 def carregar_credenciais_idebras(caminho: Path | None = None) -> dict[str, str]:
     origem = caminho or env_path()
     valores: dict[str, str] = {}
@@ -137,6 +164,78 @@ def formatar_decimal_br(valor: float, casas: int = 2) -> str:
     return f"{valor:.{casas}f}".replace(".", ",")
 
 
+def medidas_para_orcamento(ambientes: list[AmbienteIdebras]) -> dict[str, dict[str, float]]:
+    medidas: dict[str, dict[str, float]] = {}
+    for amb in ambientes:
+        destino = amb.comodo_orc
+        if not destino:
+            continue
+        medidas[destino] = {
+            "piso": parse_decimal_br(amb.area_piso),
+            "rev_arg": parse_decimal_br(amb.area_parede),
+            "rev_cer": parse_decimal_br(amb.area_parede_ceramica),
+        }
+    return medidas
+
+
+def _nome_conjunto_sem_prefixo(nome: str) -> str:
+    texto = re.sub(r"\s*\(\d+\)\s*$", "", nome or "").strip()
+    if " - " in texto:
+        return texto.split(" - ", 1)[1].strip()
+    return texto
+
+
+def localizar_conjunto_parecer(
+    conjuntos: list[ConjuntoIdebras],
+    parecer: ParecerFinalizado,
+) -> ConjuntoIdebras | None:
+    if parecer.conjunto_id:
+        for conjunto in conjuntos:
+            if conjunto.id != parecer.conjunto_id:
+                continue
+            alvo_id = normalizar_ambiente(parecer.conjunto)
+            if not alvo_id or alvo_id in normalizar_ambiente(conjunto.nome):
+                return conjunto
+            break
+    alvo = normalizar_ambiente(parecer.conjunto)
+    cidade = normalizar_ambiente(parecer.cidade)
+    if not alvo:
+        return None
+    exatos: list[ConjuntoIdebras] = []
+    parciais: list[ConjuntoIdebras] = []
+    for conjunto in conjuntos:
+        nome_todo = normalizar_ambiente(conjunto.nome)
+        nome_limpo = normalizar_ambiente(_nome_conjunto_sem_prefixo(conjunto.nome))
+        if nome_limpo == alvo:
+            exatos.append(conjunto)
+        elif alvo in nome_todo:
+            parciais.append(conjunto)
+    return _escolher_conjunto_por_cidade(exatos, cidade) or _escolher_conjunto_por_cidade(
+        parciais, cidade
+    )
+
+
+def _escolher_conjunto_por_cidade(
+    candidatos: list[ConjuntoIdebras],
+    cidade: str = "",
+) -> ConjuntoIdebras | None:
+    if not candidatos:
+        return None
+    if cidade:
+        com_cidade = [
+            c for c in candidatos if cidade in normalizar_ambiente(c.nome)
+        ]
+        if len(com_cidade) == 1:
+            return com_cidade[0]
+        if len(com_cidade) > 1:
+            return com_cidade[0]
+    if len(candidatos) == 1:
+        return candidatos[0]
+    if not cidade and len(candidatos) > 1:
+        return None
+    return candidatos[0] if candidatos else None
+
+
 def _campos_form(html: str) -> dict[str, str]:
     campos: dict[str, str] = {}
     for m in re.finditer(r"<input\b[^>]*>", html, re.I):
@@ -202,6 +301,13 @@ def _opcoes_select(html: str, select_id: str) -> list[tuple[str, str]]:
 
 
 def _linhas_tabela(html: str, table_id: str) -> list[list[str]]:
+    linhas = []
+    for cels in _celulas_html_tabela(html, table_id):
+        linhas.append([_texto_html(cel) for cel in cels])
+    return linhas
+
+
+def _celulas_html_tabela(html: str, table_id: str) -> list[list[str]]:
     m = re.search(
         rf'<table\b[^>]*id=["\']{re.escape(table_id)}["\'][^>]*>(.*?)</table>',
         html,
@@ -211,13 +317,96 @@ def _linhas_tabela(html: str, table_id: str) -> list[list[str]]:
         return []
     linhas = []
     for tr in re.finditer(r"<tr\b[^>]*>(.*?)</tr>", m.group(1), re.I | re.S):
-        cels = [
-            _texto_html(cel)
-            for cel in re.findall(r"<t[hd]\b[^>]*>(.*?)</t[hd]>", tr.group(1), re.I | re.S)
-        ]
+        cels = re.findall(r"<t[hd]\b[^>]*>(.*?)</t[hd]>", tr.group(1), re.I | re.S)
         if cels:
             linhas.append(cels)
     return linhas
+
+
+def _texto_com_linhas(fragmento: str) -> list[str]:
+    texto = re.sub(r"<script\b[^>]*>.*?</script>", " ", fragmento, flags=re.I | re.S)
+    texto = re.sub(r"</?br\s*/?>", "\n", texto, flags=re.I)
+    texto = re.sub(r"</p>", "\n", texto, flags=re.I)
+    texto = re.sub(r"<[^>]+>", " ", texto)
+    linhas = []
+    for ln in texto.splitlines():
+        ln = htmlmod.unescape(re.sub(r"[ \t]+", " ", ln)).strip()
+        if ln:
+            linhas.append(ln)
+    return linhas
+
+
+_RE_CODIGO_INTERNO = re.compile(r"^\d+\.[A-Z0-9.]+", re.I)
+
+
+def _parse_celula_mutuario(html_celula: str) -> dict[str, str]:
+    linhas = _texto_com_linhas(html_celula)
+    dados = {
+        "nome": "",
+        "id_mutuario": "",
+        "cpf": "",
+        "conjunto": "",
+        "endereco": "",
+        "bloco": "",
+        "apartamento": "",
+        "cidade": "",
+        "uf": "",
+    }
+    if not linhas:
+        return dados
+    cabeca = re.match(r"^(.*?)\s*\((\d+)\)\s*$", linhas[0])
+    if cabeca:
+        dados["nome"] = cabeca.group(1).strip()
+        dados["id_mutuario"] = cabeca.group(2)
+    else:
+        dados["nome"] = linhas[0]
+    for ln in linhas[1:]:
+        compacto = ln.replace(" ", "")
+        if _RE_CODIGO_INTERNO.match(compacto):
+            continue
+        low = ln.lower()
+        if low.startswith("cpf"):
+            dados["cpf"] = re.sub(r"(?i)^cpf:\s*", "", ln).strip()
+            continue
+        if re.match(r"(?i)^endere", ln):
+            dados["endereco"] = re.sub(r"(?i)^endere[cç]o:\s*", "", ln).strip()
+            continue
+        if "cidade/uf" in low:
+            resto = re.sub(r"(?i).*cidade/uf:\s*", "", ln).strip()
+            if "/" in resto:
+                cidade, uf = [p.strip() for p in resto.rsplit("/", 1)]
+                dados["cidade"] = cidade
+                dados["uf"] = uf
+            else:
+                dados["cidade"] = resto
+            continue
+        if "bloco:" in low or "apartamento:" in low:
+            bloco = re.search(r"(?i)bloco:\s*(\S*)", ln)
+            apto = re.search(r"(?i)apartamento:\s*(\S*)", ln)
+            if bloco:
+                dados["bloco"] = bloco.group(1).strip()
+            if apto:
+                dados["apartamento"] = apto.group(1).strip()
+            continue
+        if not dados["conjunto"]:
+            dados["conjunto"] = ln
+    return dados
+
+
+def _valor_hidden(html: str, input_id: str) -> str:
+    m = re.search(
+        rf'id=["\']{re.escape(input_id)}["\'][^>]*value=["\']([^"\']*)["\']',
+        html,
+        re.I,
+    )
+    if m:
+        return htmlmod.unescape(m.group(1))
+    m = re.search(
+        rf'value=["\']([^"\']*)["\'][^>]*id=["\']{re.escape(input_id)}["\']',
+        html,
+        re.I,
+    )
+    return htmlmod.unescape(m.group(1)) if m else ""
 
 
 def _event_targets_ambientes(html: str) -> list[str]:
@@ -331,8 +520,12 @@ class IdebrasClient:
 
     def pesquisar_plantas(self, conjunto_id: str) -> list[PlantaIdebras]:
         self.garantir_login()
-        if not self._html or "dropconjuntopesquisa" not in self._html:
+        if not self._html or "btnpesquisarplanta" not in self._html:
             self._get("/ItensParecer/PlantaImovel")
+            if self._ainda_login(self._html):
+                self.logado = False
+                self.login()
+                self._get("/ItensParecer/PlantaImovel")
         campos = _campos_form(self._html)
         campos["ctl00$body$dropconjuntopesquisa"] = conjunto_id
         campos["ctl00$body$btnpesquisarplanta"] = "Pesquisar"
@@ -383,3 +576,59 @@ class IdebrasClient:
             )
         self.ambientes = ambientes
         return ambientes
+
+    def pesquisar_pareceres_finalizados(
+        self,
+        nome_cliente: str = "",
+        conjunto_id: str = "",
+    ) -> ResultadoPesquisaPareceres:
+        self.garantir_login()
+        html = self._get("/ParecerTecnico/ParecerFinalizado")
+        if self._ainda_login(html):
+            self.logado = False
+            self.login()
+            html = self._get("/ParecerTecnico/ParecerFinalizado")
+        campos = _campos_form(html)
+        campos["ctl00$body$txtnomecliente"] = (nome_cliente or "").strip()
+        campos["ctl00$body$dropconjuntopesquisa"] = conjunto_id or "SELECIONE"
+        campos["ctl00$body$btnpesquisarparecer"] = "Pesquisar"
+        html = self._post("/ParecerTecnico/ParecerFinalizado", campos)
+        campos = _campos_form(html)
+        if "ctl00$body$droppagesize" in campos and campos.get("ctl00$body$droppagesize") != "0":
+            campos["ctl00$body$droppagesize"] = "0"
+            campos["__EVENTTARGET"] = "ctl00$body$droppagesize"
+            campos["__EVENTARGUMENT"] = ""
+            campos.pop("ctl00$body$btnpesquisarparecer", None)
+            html = self._post("/ParecerTecnico/ParecerFinalizado", campos)
+        pareceres: list[ParecerFinalizado] = []
+        for cels in _celulas_html_tabela(html, "body_gridparecer"):
+            if not cels:
+                continue
+            texto0 = _texto_html(cels[0]).lower()
+            if "mutu" in texto0 and "cpf" not in texto0:
+                continue
+            dados = _parse_celula_mutuario(cels[0])
+            if not dados["nome"] or not dados["id_mutuario"]:
+                continue
+            data = _texto_html(cels[1]) if len(cels) > 1 else ""
+            pareceres.append(
+                ParecerFinalizado(
+                    nome=dados["nome"],
+                    id_mutuario=dados["id_mutuario"],
+                    cpf=dados["cpf"],
+                    conjunto=dados["conjunto"],
+                    conjunto_id=conjunto_id or "",
+                    endereco=dados["endereco"],
+                    bloco=dados["bloco"],
+                    apartamento=dados["apartamento"],
+                    cidade=dados["cidade"],
+                    uf=dados["uf"],
+                    data=data,
+                )
+            )
+        total_txt = _valor_hidden(html, "body_hfTotalGridImoveis")
+        try:
+            total = int(total_txt)
+        except ValueError:
+            total = len(pareceres)
+        return ResultadoPesquisaPareceres(pareceres=pareceres, total=total)

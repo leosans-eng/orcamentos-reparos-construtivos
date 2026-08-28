@@ -11,6 +11,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 
+from app_paths import asset_path
 from core.app_state import ALTURA_TREE_MIN, NOMES_GRUPOS_REPARO
 from core.idebras_client import (
     IdebrasClient,
@@ -22,6 +23,7 @@ from core.idebras_client import (
 )
 from core.municipios_br import resolver_uf_conjunto
 from core.sinapi_busca import obter_item_sinapi
+from core.ui_prefs import definir_pref, obter_pref
 from core.vicios_storage import COMODOS_AREA_PRIVATIVA, comodos_permitidos_anomalia, nomes_anomalias
 from ui.dialogo_admin_usuarios import usuario_atual_eh_admin
 from ui.dialogo_ambientes_planta import DialogoAmbientesPlanta
@@ -39,6 +41,7 @@ from ui.widgets import (
     CampoListaPesquisavel,
     criar_barra_modulo,
     formatar_moeda_br,
+    perguntar_escolha,
     vincular_tooltip,
 )
 
@@ -64,7 +67,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
     corpo = tk.Frame(wrapper, bg="#ececec")
     corpo.pack(fill="both", expand=True, padx=12, pady=(0, 8))
     corpo.columnconfigure(0, weight=1)
-    corpo.rowconfigure(2, weight=1)
+    corpo.rowconfigure(1, weight=1)
 
     # ---------------------------- #
     # FRAME DADOS DO ORÇAMENTO     #
@@ -74,10 +77,15 @@ def criar_area_privativa(parent, ctx, on_voltar):
     )
     frame_dados.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
-    linha_autor = tk.Frame(frame_dados, bg="#ececec")
-    linha_autor.pack(fill="x")
+    linha_topo = tk.Frame(frame_dados, bg="#ececec")
+    linha_topo.pack(fill="x")
 
-    tk.Label(linha_autor, text="Autor(a):", bg="#ececec").pack(side="left")
+    bloco_autor = tk.Frame(linha_topo, bg="#ececec")
+    bloco_autor.pack(side="left", fill="x", expand=True)
+    bloco_valores = tk.Frame(linha_topo, bg="#ececec")
+    bloco_valores.pack(side="left", fill="x", expand=True, padx=(12, 0))
+
+    tk.Label(bloco_autor, text="Autor(a):", bg="#ececec").pack(side="left")
 
     var_proprietario = tk.StringVar()
 
@@ -87,7 +95,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     var_proprietario.trace_add("write", forcar_maiusculo)
 
-    entrada_proprietario = tk.Entry(linha_autor, textvariable=var_proprietario)
+    entrada_proprietario = tk.Entry(bloco_autor, textvariable=var_proprietario)
     entrada_proprietario.pack(side="left", fill="x", expand=True, padx=(6, 6))
 
     ctrl_idebras = {
@@ -130,20 +138,20 @@ def criar_area_privativa(parent, ctx, on_voltar):
         )
 
     btn_importar_autor = criar_botao_ttk_so_icone(
-        linha_autor,
+        bloco_autor,
         nome_icone="cloud-download-outline",
         command=abrir_importar_autor,
         refs=_refs_icones,
     )
-    btn_importar_autor.pack(side="left", padx=(0, 12))
+    btn_importar_autor.pack(side="left")
     vincular_tooltip(btn_importar_autor, "Importar autor do Idebras")
 
-    tk.Label(linha_autor, text="Estado:", bg="#ececec").pack(side="left")
+    tk.Label(bloco_valores, text="Estado:", bg="#ececec").pack(side="left")
 
     estados = ctx.obter_estados()
 
-    combo_estado = ttk.Combobox(linha_autor, values=estados, width=8, state="readonly")
-    combo_estado.pack(side="left", padx=(6, 0))
+    combo_estado = ttk.Combobox(bloco_valores, values=estados, width=8, state="readonly")
+    combo_estado.pack(side="left", padx=(6, 16))
 
     def estado_alterado(event=None):
         atualizar_valores()
@@ -164,58 +172,107 @@ def criar_area_privativa(parent, ctx, on_voltar):
     def linha_sinapi_codigo(codigo, estado):
         return obter_item_sinapi(ctx.sinapi, str(codigo).strip(), estado)
 
-    linha_opcoes = tk.Frame(frame_dados, bg="#ececec")
-    linha_opcoes.pack(fill="x", pady=(8, 0))
-
-    var_acompanhamento = tk.BooleanVar(value=True)
-    chk_acompanhamento = tk.Checkbutton(
-        linha_opcoes,
-        text="Acompanhamento técnico",
-        variable=var_acompanhamento,
-        bg="#ececec",
-        activebackground="#ececec",
-    )
-    chk_acompanhamento.pack(side="left")
-
-    var_eventuais = tk.BooleanVar(value=False)
-    chk_eventuais = tk.Checkbutton(
-        linha_opcoes,
-        text="Eventuais (10%)",
-        variable=var_eventuais,
-        bg="#ececec",
-        activebackground="#ececec",
-    )
-    chk_eventuais.pack(side="left", padx=(12, 0))
-
-    tk.Frame(linha_opcoes, bg="#ececec").pack(side="left", fill="x", expand=True)
-
-    tk.Label(linha_opcoes, text="Aluguel (R$):", bg="#ececec").pack(side="left")
-    entrada_aluguel = tk.Entry(linha_opcoes, width=10)
+    tk.Label(bloco_valores, text="Aluguel (R$):", bg="#ececec").pack(side="left")
+    entrada_aluguel = tk.Entry(bloco_valores, width=10)
     entrada_aluguel.pack(side="left", padx=(6, 16))
     entrada_aluguel.insert(0, "1000")
 
-    tk.Label(linha_opcoes, text="BDI (%):", bg="#ececec").pack(side="left")
-    entrada_bdi = ttk.Entry(linha_opcoes, width=8)
+    tk.Label(bloco_valores, text="BDI (%):", bg="#ececec").pack(side="left")
+    entrada_bdi = ttk.Entry(bloco_valores, width=8)
     entrada_bdi.pack(side="left", padx=(6, 0))
     entrada_bdi.insert(0, "30,45")
 
-    frame_idebras_host = tk.Frame(corpo, bg="#ececec")
-    frame_idebras_host.grid(row=1, column=0, sticky="ew", pady=(0, 6))
+    var_acompanhamento = tk.BooleanVar(value=True)
+    var_eventuais = tk.BooleanVar(value=False)
+    checks_opcoes = []
+
+    def _montar_checks_orcamento(parent):
+        bloco = tk.Frame(parent, bg="#ececec")
+        chk_acompanhamento = tk.Checkbutton(
+            bloco,
+            text="Acompanhamento técnico",
+            variable=var_acompanhamento,
+            bg="#ececec",
+            activebackground="#ececec",
+        )
+        chk_acompanhamento.pack(side="left")
+        chk_eventuais = tk.Checkbutton(
+            bloco,
+            text="Eventuais (10%)",
+            variable=var_eventuais,
+            bg="#ececec",
+            activebackground="#ececec",
+        )
+        chk_eventuais.pack(side="left", padx=(16, 0))
+        checks_opcoes.extend([chk_acompanhamento, chk_eventuais])
+        return bloco
+
+    bloco_checks_topo = _montar_checks_orcamento(bloco_valores)
+    bloco_checks_topo.pack(side="left", padx=(16, 0))
+
+    linha_opcoes = tk.Frame(frame_dados, bg="#ececec")
+    bloco_checks_baixo = _montar_checks_orcamento(linha_opcoes)
+    bloco_checks_baixo.pack(side="left")
+    _checks_na_segunda_linha = {"ativo": False}
+
+    def _mostrar_checks_primeira_linha():
+        if linha_opcoes.winfo_manager():
+            linha_opcoes.pack_forget()
+        if not bloco_checks_topo.winfo_manager():
+            bloco_checks_topo.pack(side="left", padx=(16, 0))
+        _checks_na_segunda_linha["ativo"] = False
+
+    def _mostrar_checks_segunda_linha():
+        if bloco_checks_topo.winfo_manager():
+            bloco_checks_topo.pack_forget()
+        if not linha_opcoes.winfo_manager():
+            linha_opcoes.pack(fill="x", pady=(8, 0), after=linha_topo)
+        _checks_na_segunda_linha["ativo"] = True
+
+    def _reflow_linha_dados(event=None):
+        if event is not None and event.widget is not frame_dados:
+            return
+        largura = frame_dados.winfo_width()
+        if largura <= 1:
+            return
+        margem = 16
+        histerese = 48
+        if not _checks_na_segunda_linha["ativo"]:
+            if linha_topo.winfo_reqwidth() > largura - margem:
+                _mostrar_checks_segunda_linha()
+            elif not bloco_checks_topo.winfo_manager():
+                _mostrar_checks_primeira_linha()
+            return
+        extra = bloco_checks_baixo.winfo_reqwidth() + 16
+        if linha_topo.winfo_reqwidth() + extra + histerese <= largura - margem:
+            _mostrar_checks_primeira_linha()
+            return
+        if not linha_opcoes.winfo_manager():
+            _mostrar_checks_segunda_linha()
+
+    frame_dados.bind("<Configure>", _reflow_linha_dados)
+
+    frame_idebras_host = tk.Frame(frame_dados, bg="#ececec")
+    frame_idebras_host.pack(fill="x", pady=(8, 0))
 
     # ---------------------------- #
     # COLUNAS PRINCIPAIS           #
     # ---------------------------- #
-    frame_conteudo = tk.Frame(corpo, bg="#ececec")
-    frame_conteudo.grid(row=2, column=0, sticky="nsew")
-    frame_conteudo.columnconfigure(0, weight=1)
-    frame_conteudo.columnconfigure(1, weight=1)
-    frame_conteudo.columnconfigure(2, weight=2)
-    frame_conteudo.rowconfigure(0, weight=1)
+    painel_colunas = tk.PanedWindow(
+        corpo,
+        orient=tk.HORIZONTAL,
+        sashwidth=6,
+        sashrelief="flat",
+        showhandle=False,
+        bd=0,
+        bg="#ececec",
+        opaqueresize=True,
+    )
+    painel_colunas.grid(row=1, column=0, sticky="nsew", pady=(0, 0))
 
     frame_metragem = tk.LabelFrame(
-        frame_conteudo, text="2. Metragem dos cômodos", bg="#ececec", padx=8, pady=6
+        painel_colunas, text="2. Metragem dos cômodos", bg="#ececec", padx=8, pady=6
     )
-    frame_metragem.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
 
     frame_tabela = tk.Frame(frame_metragem, bg="#ececec")
     frame_tabela.pack(fill="both", expand=True)
@@ -281,15 +338,23 @@ def criar_area_privativa(parent, ctx, on_voltar):
             "rev_cer": entrada_rev_cer
         }
 
-    def limpar_metragens():
+    def limpar_campos_metragem():
         for campos in comodos.values():
             for entrada in campos.values():
                 if str(entrada.cget("state")) == "disabled":
                     continue
                 entrada.delete(0, "end")
+
+    def limpar_metragens():
+        limpar_campos_metragem()
         atualizar_valores()
         registrar_historico("Limpar metragens")
         mostrar_feedback("Metragens dos cômodos limpas.", "orange")
+
+    def ao_trocar_conjunto_limpar_metragens():
+        limpar_campos_metragem()
+        atualizar_valores()
+        registrar_historico("Limpar metragens ao trocar conjunto")
 
     botoes_metragem = tk.Frame(frame_metragem, bg="#ececec")
     botoes_metragem.pack(fill="x", pady=(6, 0))
@@ -301,6 +366,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
     ).pack(side="left")
 
     def preencher_metragens(medidas):
+        limpar_campos_metragem()
         preenchidos = []
         for comodo, valores in medidas.items():
             if comodo not in comodos:
@@ -326,23 +392,31 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # FRAME SELEÇÃO DE ANOMALIA    #
     # ---------------------------- #
     frame_anomalia = tk.LabelFrame(
-        frame_conteudo, text="3. Selecionar anomalia", bg="#ececec", padx=8, pady=6
+        painel_colunas, text="3. Selecionar anomalia", bg="#ececec", padx=8, pady=6
     )
-    frame_anomalia.grid(row=0, column=1, sticky="nsew", padx=(0, 6))
 
     def obter_vicios():
-        return nomes_anomalias(ctx.dados_json)
+        nomes = nomes_anomalias(ctx.dados_json)
+        return sorted(nomes, key=lambda nome: (normalizar_ambiente(nome), nome))
 
-    frame_combo_anomalia = tk.Frame(frame_anomalia)
+    frame_combo_anomalia = tk.Frame(frame_anomalia, bg="#ececec")
     frame_combo_anomalia.pack(fill="x", padx=6, pady=5)
 
-    combo_vicio = ttk.Combobox(
+    var_vicio = tk.StringVar()
+    campo_vicio = CampoListaPesquisavel(
         frame_combo_anomalia,
-        width=42,
-        values=obter_vicios(),
-        state="readonly",
+        textvariable=var_vicio,
+        normalizar=normalizar_ambiente,
+        on_escolher=lambda _nome: atualizar_checkboxes_por_vicio(),
+        altura_lista=16,
+        largura_minima_lista=420,
+        bg="#ececec",
     )
-    combo_vicio.pack(side="left", fill="x", expand=True)
+    campo_vicio.pack(side="left", fill="x", expand=True)
+    campo_vicio.definir_opcoes(obter_vicios())
+    campo_vicio.entrada.bind(
+        "<KeyRelease>", lambda _e: atualizar_checkboxes_por_vicio(), add="+"
+    )
 
     # ---------------------------- #
     # CHECKBOXES DE CÔMODOS        #
@@ -387,9 +461,24 @@ def criar_area_privativa(parent, ctx, on_voltar):
     frame_check.columnconfigure(0, weight=1)
     frame_check.columnconfigure(1, weight=1)
 
+    def anomalia_escolhida(*, completar=False):
+        nome = var_vicio.get().strip()
+        valores = obter_vicios()
+        if nome in valores:
+            return nome
+        chave = normalizar_ambiente(nome)
+        if not chave:
+            return ""
+        matches = [item for item in valores if chave in normalizar_ambiente(item)]
+        if len(matches) == 1:
+            if completar:
+                var_vicio.set(matches[0])
+            return matches[0]
+        return ""
+
     def atualizar_checkboxes_por_vicio(event=None):
 
-        vicio_selecionado = combo_vicio.get()
+        vicio_selecionado = anomalia_escolhida()
         dados_vicio = ctx.dados_json.get("anomalias", {}).get(vicio_selecionado, {})
         permitidos = set(comodos_permitidos_anomalia(dados_vicio, lista_comodos))
 
@@ -404,16 +493,14 @@ def criar_area_privativa(parent, ctx, on_voltar):
             else:
                 chk.config(state="normal")
 
-    combo_vicio.bind("<<ComboboxSelected>>", atualizar_checkboxes_por_vicio)
-
     def atualizar_lista_vicios():
-        atual = combo_vicio.get()
+        atual = var_vicio.get()
         valores = obter_vicios()
-        combo_vicio["values"] = valores
+        campo_vicio.definir_opcoes(valores)
         if atual in valores:
-            combo_vicio.set(atual)
+            var_vicio.set(atual)
         elif atual:
-            combo_vicio.set("")
+            var_vicio.set("")
         atualizar_checkboxes_por_vicio()
 
     def abrir_config_anomalias():
@@ -454,11 +541,110 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # LISTA DE ANOMALIAS           #
     # ---------------------------- #
     frame_lista = tk.LabelFrame(
-        frame_conteudo, text="4. Anomalias adicionadas", bg="#ececec", padx=8, pady=6
+        painel_colunas, text="4. Anomalias adicionadas", bg="#ececec", padx=8, pady=6
     )
-    frame_lista.grid(row=0, column=2, sticky="nsew")
     frame_lista.rowconfigure(0, weight=1)
     frame_lista.columnconfigure(0, weight=1)
+
+    min_metragem, min_anomalia, min_lista = 200, 200, 260
+    painel_colunas.add(frame_metragem, minsize=min_metragem, stretch="never", width=240)
+    painel_colunas.add(frame_anomalia, minsize=min_anomalia, stretch="never", width=240)
+    painel_colunas.add(frame_lista, minsize=min_lista, stretch="always", width=720)
+
+    _fracoes_colunas = {
+        "vals": list(obter_pref("area_privativa_colunas", [0.20, 0.20, 0.60]))
+    }
+    _arrastando_colunas = {"ok": False}
+    _job_aplicar_colunas = {"id": None}
+
+    def _sashes_das_fracoes(largura, fracoes):
+        sash0 = int(round(largura * fracoes[0]))
+        sash1 = int(round(largura * (fracoes[0] + fracoes[1])))
+        sash0 = max(min_metragem, sash0)
+        sash1 = max(sash0 + min_anomalia, sash1)
+        sash1 = min(sash1, largura - min_lista)
+        sash0 = min(sash0, sash1 - min_anomalia)
+        sash0 = max(min_metragem, sash0)
+        return sash0, sash1
+
+    def _fracoes_das_sashes(largura):
+        c0 = painel_colunas.sash_coord(0)[0]
+        c1 = painel_colunas.sash_coord(1)[0]
+        f0 = max(c0, 1) / largura
+        f1 = max(c1 - c0, 1) / largura
+        f2 = max(1.0 - f0 - f1, 0.05)
+        total = f0 + f1 + f2
+        return [round(f0 / total, 4), round(f1 / total, 4), round(f2 / total, 4)]
+
+    def _aplicar_colunas():
+        if _arrastando_colunas["ok"]:
+            return
+        largura = painel_colunas.winfo_width()
+        if largura < 500:
+            return
+        alvo0, alvo1 = _sashes_das_fracoes(largura, _fracoes_colunas["vals"])
+        try:
+            atual0 = painel_colunas.sash_coord(0)[0]
+            atual1 = painel_colunas.sash_coord(1)[0]
+            if abs(atual0 - alvo0) < 3 and abs(atual1 - alvo1) < 3:
+                return
+            painel_colunas.sash_place(0, alvo0, 1)
+            painel_colunas.sash_place(1, alvo1, 1)
+        except tk.TclError:
+            return
+
+    def _agendar_aplicar_colunas(_event=None):
+        if _event is not None and _event.widget is not painel_colunas:
+            return
+        if _arrastando_colunas["ok"]:
+            return
+        if _job_aplicar_colunas["id"] is not None:
+            return
+        def _rodar():
+            _job_aplicar_colunas["id"] = None
+            _aplicar_colunas()
+        _job_aplicar_colunas["id"] = painel_colunas.after_idle(_rodar)
+
+    def _sash_foi_clicado(event) -> bool:
+        try:
+            ident = painel_colunas.identify(event.x, event.y)
+        except tk.TclError:
+            return False
+        if not ident:
+            return False
+        tipo = ident[0] if isinstance(ident, (tuple, list)) else ident
+        return str(tipo).lower() == "sash"
+
+    def _ao_pressionar_colunas(event):
+        if _sash_foi_clicado(event):
+            _arrastando_colunas["ok"] = True
+
+    def _ao_mover_colunas(_event=None):
+        _arrastando_colunas["ok"] = True
+
+    def _ao_soltar_colunas(_event=None):
+        if not _arrastando_colunas["ok"]:
+            return
+        _arrastando_colunas["ok"] = False
+        try:
+            largura = painel_colunas.winfo_width()
+            if largura >= 500:
+                atuais = _fracoes_das_sashes(largura)
+                alvo0, alvo1 = _sashes_das_fracoes(largura, _fracoes_colunas["vals"])
+                atual0 = painel_colunas.sash_coord(0)[0]
+                atual1 = painel_colunas.sash_coord(1)[0]
+                if abs(atual0 - alvo0) >= 8 or abs(atual1 - alvo1) >= 8:
+                    _fracoes_colunas["vals"] = atuais
+                    definir_pref("area_privativa_colunas", _fracoes_colunas["vals"])
+        except (tk.TclError, OSError):
+            pass
+        _agendar_aplicar_colunas()
+
+    painel_colunas.bind("<ButtonPress-1>", _ao_pressionar_colunas)
+    painel_colunas.bind("<B1-Motion>", _ao_mover_colunas)
+    painel_colunas.bind("<ButtonRelease-1>", _ao_soltar_colunas)
+    painel_colunas.bind("<Configure>", _agendar_aplicar_colunas)
+    painel_colunas.after(50, _aplicar_colunas)
 
     lista_anomalias = []
 
@@ -517,7 +703,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # ---------------------------- #
     def adicionar_anomalia():
 
-        vicio = combo_vicio.get()
+        vicio = anomalia_escolhida(completar=True)
 
         if not vicio:
             mostrar_feedback("Selecione uma anomalia.", "red")
@@ -754,12 +940,16 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # ---------------------------- #
     # RODAPÉ: FEEDBACK + GERAR     #
     # ---------------------------- #
-    frame_rodape_modulo = tk.Frame(corpo, bg="#ececec")
-    frame_rodape_modulo.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-    frame_rodape_modulo.columnconfigure(1, weight=1)
+    frame_rodape_modulo = tk.Frame(
+        corpo, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
+    )
+    frame_rodape_modulo.grid(row=2, column=0, sticky="ew", pady=(8, 0))
 
-    container_historico = tk.Frame(frame_rodape_modulo, bg="#ececec")
-    container_historico.grid(row=0, column=0, sticky="w", padx=(0, 8))
+    linha_rodape = tk.Frame(frame_rodape_modulo, bg="#f5fafc")
+    linha_rodape.pack(fill="x")
+
+    container_historico = tk.Frame(linha_rodape, bg="#f5fafc")
+    container_historico.pack(side="left", padx=10, pady=6)
 
     btn_desfazer = criar_botao_ttk_so_icone(
         container_historico,
@@ -777,29 +967,32 @@ def criar_area_privativa(parent, ctx, on_voltar):
         command=lambda: refazer(),
         refs=_refs_icones,
     )
-    btn_refazer.pack(side="left")
+    btn_refazer.pack(side="left", padx=(0, 10))
     vincular_tooltip(btn_refazer, "Refazer (Ctrl+Y)")
     definir_estado_botao_icone(btn_refazer, "disabled")
 
     feedback_label = tk.Label(
-        frame_rodape_modulo,
+        linha_rodape,
         text="",
         font=("Arial", 10, "bold"),
         fg="#a67c00",
-        bg="#ececec",
+        bg="#f5fafc",
         anchor="w",
     )
-    feedback_label.grid(row=0, column=1, sticky="ew", padx=(0, 12))
+    feedback_label.pack(side="left", fill="x", expand=True, padx=(0, 12))
+
+    container_total = tk.Frame(linha_rodape, bg="#f5fafc")
+    container_total.pack(side="right", padx=10, pady=6)
 
     var_total = tk.StringVar(value="Total geral: R$ 0,00")
-    tk.Label(
-        frame_rodape_modulo,
+    label_total = tk.Label(
+        container_total,
         textvariable=var_total,
         font=("Arial", 11, "bold"),
         fg="#006699",
-        bg="#ececec",
+        bg="#f5fafc",
         anchor="e",
-    ).grid(row=0, column=2, padx=(0, 12))
+    )
 
     # ---------------------------- #
     # FUNÇÃO CALCULAR QUANTIDADE   #
@@ -1661,22 +1854,68 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # ---------------------------- #
     # BOTÃO GERAR ORÇAMENTO        #
     # ---------------------------- #
-    botao_gerar = criar_botao_ttk_com_icone(
-        frame_rodape_modulo,
-        texto="Gerar orçamento",
-        nome_icone="save-outline",
-        command=gerar_orcamento,
-        estilo="Add.TButton",
-        refs=_refs_icones,
+    wrapper._icone_excel_export = None
+    wrapper._icone_word_parecer = None
+    kwargs_botao_word = {
+        "text": "Parecer de atualização",
+        "state": "disabled",
+        "font": ("Arial", 10, "bold"),
+        "fg": "#000000",
+        "disabledforeground": "#9e9e9e",
+        "bg": "#f5fafc",
+        "activebackground": "#f5fafc",
+        "relief": "flat",
+        "bd": 0,
+        "padx": 2,
+        "pady": 0,
+        "highlightthickness": 0,
+        "takefocus": 0,
+    }
+    caminho_icone_word = asset_path("icons", "microsoft-word-24.png")
+    if caminho_icone_word is not None:
+        wrapper._icone_word_parecer = tk.PhotoImage(file=str(caminho_icone_word))
+        kwargs_botao_word["image"] = wrapper._icone_word_parecer
+        kwargs_botao_word["compound"] = "right"
+    host_parecer = tk.Frame(container_total, bg="#f5fafc")
+    host_parecer.pack(side="left", padx=(0, 12))
+    btn_parecer = tk.Button(host_parecer, **kwargs_botao_word)
+    btn_parecer.pack()
+    vincular_tooltip(
+        host_parecer,
+        "Em breve: gerar Parecer de Atualização de Orçamento.",
     )
-    botao_gerar.grid(row=0, column=3, sticky="e")
+
+    kwargs_botao_excel = {
+        "text": "Gerar orçamento",
+        "command": gerar_orcamento,
+        "font": ("Arial", 10, "bold"),
+        "fg": "#000000",
+        "activeforeground": "#000000",
+        "bg": "#f5fafc",
+        "activebackground": "#e8f0f3",
+        "relief": "flat",
+        "bd": 0,
+        "padx": 2,
+        "pady": 0,
+        "cursor": "hand2",
+        "highlightthickness": 0,
+    }
+    caminho_icone_excel = asset_path("icons", "excel-preto.png")
+    if caminho_icone_excel is not None:
+        wrapper._icone_excel_export = tk.PhotoImage(file=str(caminho_icone_excel))
+        kwargs_botao_excel["image"] = wrapper._icone_excel_export
+        kwargs_botao_excel["compound"] = "right"
+    tk.Button(container_total, **kwargs_botao_excel).pack(
+        side="left", padx=(0, 16)
+    )
+    label_total.pack(side="left")
 
     def ao_opcao_orcamento(_event=None):
         atualizar_valores()
         registrar_historico("Alterar opções do orçamento")
 
-    chk_acompanhamento.config(command=ao_opcao_orcamento)
-    chk_eventuais.config(command=ao_opcao_orcamento)
+    for chk in checks_opcoes:
+        chk.config(command=ao_opcao_orcamento)
     entrada_bdi.bind("<KeyRelease>", agendar_recalculo)
     entrada_bdi.bind("<FocusOut>", atualizar_valores)
     entrada_aluguel.bind("<KeyRelease>", agendar_recalculo)
@@ -1861,13 +2100,35 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 )
             return
         if resultado.motivo == "ambigua":
-            ufs = ", ".join(resultado.ufs_possiveis)
-            mostrar_feedback(
-                f"Cidade '{resultado.cidade}' existe em mais de um estado ({ufs}). "
-                "Selecione o Estado manualmente.",
-                "orange",
-                temporario=False,
+            cidade = str(resultado.cidade or "").title()
+            ufs = sorted(resultado.ufs_possiveis)
+            escolhido = perguntar_escolha(
+                root,
+                "Selecionar estado",
+                f"A cidade '{cidade}' existe em mais de um estado.\n"
+                "Qual é o estado deste conjunto?",
+                ufs,
             )
+            if escolhido and escolhido in valores:
+                combo_estado.set(escolhido)
+                atualizar_valores()
+                registrar_historico("Definir estado pelo conjunto")
+                mostrar_feedback(
+                    f"Estado definido: {escolhido}.",
+                    "green",
+                )
+            elif escolhido:
+                mostrar_feedback(
+                    f"Estado {escolhido} identificado, mas não há SINAPI para essa UF.",
+                    "orange",
+                    temporario=False,
+                )
+            else:
+                mostrar_feedback(
+                    f"Selecione o Estado de '{cidade}' ({', '.join(ufs)}).",
+                    "orange",
+                    temporario=False,
+                )
             return
         if resultado.cidade:
             mostrar_feedback(
@@ -1884,6 +2145,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
             preencher_metragens,
             _refs_icones,
             on_conjunto=ao_conjunto_idebras,
+            on_limpar_metragens=ao_trocar_conjunto_limpar_metragens,
         )
     )
 
@@ -1897,11 +2159,14 @@ def criar_area_privativa(parent, ctx, on_voltar):
     wrapper.ativar_scroll = ativar_scroll
     wrapper.desativar_scroll = desativar_scroll
     wrapper.focar = lambda: entrada_proprietario.focus()
+    root.after_idle(_reflow_linha_dados)
 
     return wrapper
 
 
-def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conjunto=None):
+def _montar_painel_idebras(
+    host, root, preencher_metragens, refs_icones, on_conjunto=None, on_limpar_metragens=None
+):
     """Painel de conjunto/planta do Idebras, preenchido de forma assíncrona."""
     cliente = IdebrasClient()
     conjuntos = []
@@ -1909,7 +2174,7 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
     conjunto_por_nome = {}
     conjunto_carregado_id = None
 
-    frame = tk.LabelFrame(host, text="Planta do conjunto (Idebras)", bg="#ececec", padx=8, pady=6)
+    frame = tk.Frame(host, bg="#ececec")
     frame.pack(fill="x")
     frame.columnconfigure(1, weight=1)
     frame.columnconfigure(3, weight=1)
@@ -1923,6 +2188,8 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
         frame,
         textvariable=var_conjunto,
         normalizar=normalizar_ambiente,
+        altura_lista=12,
+        largura_minima_lista=420,
         bg="#ececec",
     )
     campo_conjunto.grid(row=0, column=1, padx=(0, 10), sticky="ew")
@@ -2019,6 +2286,8 @@ def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conj
             on_conjunto(conjunto.nome)
         if conjunto.id == conjunto_carregado_id and plantas:
             return
+        if on_limpar_metragens is not None and conjunto.id != conjunto_carregado_id:
+            on_limpar_metragens()
         conjunto_carregado_id = conjunto.id
         var_status.set(f"Buscando plantas de {conjunto.nome}...")
         var_planta.set("")

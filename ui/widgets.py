@@ -240,6 +240,58 @@ def perguntar_texto(
     return resultado[0]
 
 
+def perguntar_escolha(parent, titulo, mensagem, opcoes):
+    """Diálogo com um botão por opção. Retorna a opção escolhida ou None."""
+    escolhido = {"valor": None}
+    dialog = tk.Toplevel(parent)
+    preparar_toplevel(dialog)
+    dialog.title(titulo)
+    aplicar_icone_janela(dialog)
+    dialog.transient(parent)
+    dialog.grab_set()
+    dialog.resizable(False, False)
+    dialog.configure(bg="#ececec")
+
+    painel = tk.Frame(dialog, bg="#ececec", padx=20, pady=16)
+    painel.pack(fill="both", expand=True)
+
+    tk.Label(
+        painel,
+        text=mensagem,
+        bg="#ececec",
+        justify="left",
+        anchor="w",
+        wraplength=420,
+    ).pack(fill="x", pady=(0, 14))
+
+    botoes = tk.Frame(painel, bg="#ececec")
+    botoes.pack()
+
+    def escolher(valor):
+        escolhido["valor"] = valor
+        dialog.destroy()
+
+    for opcao in opcoes:
+        ttk.Button(
+            botoes,
+            text=str(opcao),
+            command=lambda valor=opcao: escolher(valor),
+            style="Compact.TButton",
+            width=8,
+        ).pack(side="left", padx=6)
+
+    linha_fechar = tk.Frame(painel, bg="#ececec")
+    linha_fechar.pack(fill="x", pady=(16, 0))
+    criar_botao_fechar(linha_fechar, command=dialog.destroy).pack(side="right")
+
+    dialog.bind("<Escape>", lambda _e: dialog.destroy())
+    dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+    dialog.update_idletasks()
+    centralizar_janela(dialog, parent)
+    parent.wait_window(dialog)
+    return escolhido["valor"]
+
+
 def centralizar_janela_principal(janela, largura, altura):
     janela.update_idletasks()
     area_x, area_y, area_largura, area_altura = _obter_area_util_tela(janela)
@@ -893,14 +945,24 @@ class CampoListaPesquisavel(tk.Frame):
     def _popup_ativo(self) -> bool:
         return self._popup is not None and bool(self._popup.winfo_exists())
 
+    def _altura_popup_px(self) -> int:
+        return max(8, int(self._altura_lista)) * 22 + 6
+
     def _posicionar_popup(self):
         if not self._popup_ativo():
             return
         self.update_idletasks()
-        x = self.entrada.winfo_rootx()
-        y = self.entrada.winfo_rooty() + self.entrada.winfo_height()
+        topo = self.winfo_toplevel()
+        try:
+            topo.update_idletasks()
+            x = self.entrada.winfo_rootx() - topo.winfo_rootx()
+            y = self.entrada.winfo_rooty() + self.entrada.winfo_height() - topo.winfo_rooty()
+        except tk.TclError:
+            return
         largura = max(self.entrada.winfo_width(), self._largura_minima_lista)
-        self._popup.geometry(f"{largura}x180+{x}+{y}")
+        altura = self._altura_popup_px()
+        self._popup.place(x=x, y=y, width=largura, height=altura)
+        self._popup.lift()
 
     def _ponto_interno(self, x, y) -> bool:
         widgets = [self, self.entrada]
@@ -932,10 +994,13 @@ class CampoListaPesquisavel(tk.Frame):
         self.fechar_lista()
 
     def _criar_popup(self):
-        popup = tk.Toplevel(self.winfo_toplevel())
-        popup.overrideredirect(True)
-        popup.transient(self.winfo_toplevel())
-        popup.configure(bg="#ffffff")
+        topo = self.winfo_toplevel()
+        popup = tk.Frame(
+            topo,
+            bg="#ffffff",
+            highlightbackground="#888888",
+            highlightthickness=1,
+        )
         lista = tk.Listbox(
             popup,
             height=self._altura_lista,
@@ -943,8 +1008,9 @@ class CampoListaPesquisavel(tk.Frame):
             activestyle="dotbox",
             font=("Segoe UI", 9),
             bg="#ffffff",
-            relief="solid",
-            borderwidth=1,
+            relief="flat",
+            borderwidth=0,
+            takefocus=True,
         )
         scroll = ttk.Scrollbar(popup, orient="vertical", command=lista.yview)
         lista.configure(yscrollcommand=scroll.set)
@@ -952,7 +1018,7 @@ class CampoListaPesquisavel(tk.Frame):
         scroll.pack(side="right", fill="y")
         lista.bind("<ButtonRelease-1>", self._ao_escolher)
         lista.bind("<Return>", self._ao_escolher)
-        lista.bind("<Escape>", lambda _e: self.fechar_lista())
+        lista.bind("<Escape>", lambda _e: self._fechar_e_focar())
         self._popup = popup
         self._lista = lista
 
@@ -971,7 +1037,6 @@ class CampoListaPesquisavel(tk.Frame):
                 self._lista.activate(0)
                 self._lista.see(0)
             self._posicionar_popup()
-            self._popup.deiconify()
             self._popup.lift()
         finally:
             try:

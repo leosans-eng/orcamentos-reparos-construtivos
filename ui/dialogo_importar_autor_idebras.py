@@ -107,6 +107,8 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
             filtros,
             textvariable=self.var_conjunto,
             normalizar=normalizar_ambiente,
+            altura_lista=14,
+            largura_minima_lista=480,
             bg="#ececec",
         )
         self.campo_conjunto.definir_opcoes([c.nome for c in self.conjuntos])

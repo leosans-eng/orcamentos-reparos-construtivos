@@ -44,7 +44,7 @@ class OrcApp:
         configurar_estilos_ttk(self.janela)
 
         self.janela.title(TITULOS_JANELA["hub"])
-        self.janela.minsize(860, 520)
+        self.janela.minsize(940, 620)
         centralizar_janela_principal(
             self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
         )
@@ -199,6 +199,7 @@ class OrcApp:
             self._frames["area_privativa"].desativar_scroll()
 
         modulos_expandidos = (
+            "area_privativa",
             "consulta_sinapi",
             "orcamento_customizado",
             "composicoes_proprias",
@@ -239,15 +240,15 @@ class OrcApp:
                 centralizar_janela_principal(
                     self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
                 )
-            elif nome == "area_privativa":
-                self._frames[nome].ativar_scroll()
-                self._frames[nome].focar()
             elif nome in (
+                "area_privativa",
                 "consulta_sinapi",
                 "orcamento_customizado",
                 "composicoes_proprias",
                 "etapas_predefinidas",
             ):
+                if nome == "area_privativa":
+                    self._frames[nome].ativar_scroll()
                 self._frames[nome].focar()
         except Exception as exc:
             print(f"[ORC] Falha ao abrir módulo {nome}: {exc}")

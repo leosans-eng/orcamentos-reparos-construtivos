@@ -49,17 +49,36 @@ def sinapi_referencia_dir() -> Path:
     return pasta
 
 
+def env_path() -> Path:
+    return app_dir() / ".env"
+
+
 def vicios_construtivos_path() -> Path:
-    for candidate in (
-        bundle_dir() / "vicios_construtivos.json",
-        app_dir() / "vicios_construtivos.json",
-    ):
+    gravacao = app_dir() / "vicios_construtivos.json"
+    bundle = bundle_dir() / "vicios_construtivos.json"
+    for candidate in (gravacao, bundle):
         if candidate.is_file():
             return candidate
     raise FileNotFoundError(
         "vicios_construtivos.json não encontrado. "
         f"Procurado em {bundle_dir()} e {app_dir()}."
     )
+
+
+def vicios_construtivos_path_gravacao() -> Path:
+    """Caminho gravável do JSON de vícios (pasta do programa, não o bundle)."""
+    return app_dir() / "vicios_construtivos.json"
+
+
+def municipios_uf_path() -> Path | None:
+    """JSON compacto município → UF (IBGE), empacotado com o aplicativo."""
+    for candidate in (
+        bundle_dir() / "dados" / "municipios_uf.json",
+        app_dir() / "dados" / "municipios_uf.json",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def dados_usuario_dir() -> Path:

@@ -4,17 +4,16 @@ Aplicativo desktop para elaboração de orçamentos de reparos de vícios constr
 
 Desenvolvido em **Python** com interface **Tkinter**, voltado ao uso em perícias e laudos de vícios construtivos.
 
-**Versão atual: 1.4.0**
+**Versão atual: 1.5.0**
 
-## Destaques da 1.4.0
+## Destaques da 1.5.0
 
-- **UF por item**: é possível alterar o estado de um único item SINAPI, permitindo usá-lo com preço de qualquer UF
-- **Substituição automática** de itens que existem em um estado e não em outro, ao trocar a UF de referência
-- **Etapa modelo** com filtro por digitação na barra de seleção
-- **Busca por código SINAPI** ordenada por relevância (código exato → prefixo → substring)
-- **Expressões nos quantitativos**, para contas rápidas direto no campo de quantidade
-- **Calculadora** no Orçamento Customizado
-- **Edição inline** do nome das etapas (sem janela pop-up)
+- **Integração com o Idebras** na Área Privativa: conjunto, planta e ambientes entram direto no orçamento
+- **Importar autor** a partir dos pareceres finalizados (pesquisa por nome e/ou conjunto, com todos os resultados de uma vez)
+- **Preencher metragens** da planta nos cômodos (piso, revestimento argamassado e cerâmico), com conferência opcional dos ambientes
+- **Estado (UF)** definido automaticamente pela cidade do conjunto (municípios IBGE)
+- **Prévia da anomalia** pela lupa, com as composições e valores usados no reparo
+- **Desfazer e refazer** (Ctrl+Z / Ctrl+Y) na Área Privativa
 
 ## Funcionalidades
 
@@ -24,7 +23,7 @@ Tela inicial com acesso aos módulos:
 
 | Módulo | Status | Descrição |
 |--------|--------|-----------|
-| **Área Privativa** | Disponível | Orçamento de reparos em unidades autônomas |
+| **Área Privativa** | Disponível | Orçamento de reparos em unidades autônomas, com planta e autor do Idebras |
 | **Área Comum** | Em breve | Orçamento de reparos em áreas comuns |
 | **Consulta SINAPI** | Disponível | Pesquisa de composições e preços da base |
 | **Orçamento Customizado** | Disponível | Montagem livre do orçamento com etapas e itens |
@@ -34,11 +33,18 @@ Tela inicial com acesso aos módulos:
 ### Área Privativa
 
 - Cadastro de metragens por cômodo (piso, revestimento argamassado e cerâmico)
-- Seleção de anomalias mapeadas em `vicios_construtivos.json`
+- Integração com o **Idebras**: seleção pesquisável de conjunto e planta, visualização dos ambientes e preenchimento das metragens
+- Importação do **autor** a partir de pareceres finalizados (nome do cliente e/ou conjunto); o conjunto, a planta e o estado são carregados em seguida
+- **Estado** preenchido pela cidade do conjunto, com aviso se o município for ambíguo ou não reconhecido
+- Seleção de anomalias mapeadas em `vicios_construtivos.json`, com cômodos permitidos por anomalia
+- Prévia das composições SINAPI de cada anomalia adicionada
 - Cálculo automático de quantidades e valores com base nas composições SINAPI
 - Agrupamento por tipo de reparo (pisos cerâmicos, azulejos, trincas, esquadrias, umidade, DR etc.)
-- Aplicação de **BDI** e opção de **eventuais** (10%)
+- Aplicação de **BDI**, **aluguel** e opção de **eventuais** (10%)
+- Desfazer e refazer alterações no orçamento
 - Exportação do orçamento para **Excel** (.xlsx)
+
+A conexão com o Idebras usa `user_idebras` e `password_idebras` no arquivo `.env` (opcionalmente `IDEBRAS_URL`). O arquivo não vai para o git.
 
 ### Orçamento Customizado
 
@@ -104,7 +110,7 @@ Assim, qualquer computador com o ORC instalado e autenticado na mesma URL de API
 ## Instalação (usuário final)
 
 1. Baixe o instalador mais recente na [página de releases](https://github.com/leosans-eng/orcamento-reparos-construtivos/releases) ou pelo link em `version.json`.
-2. Execute `ORC_Instalador_1.4.0.exe` (ou o instalador indicado em `version.json`) e siga o assistente. O app será instalado em `C:\ORC` por padrão.
+2. Execute `ORC_Instalador_1.5.0.exe` (ou o instalador indicado em `version.json`) e siga o assistente. O app será instalado em `C:\ORC` por padrão.
 3. Abra o ORC e faça **login** com seu usuário.
 
 ## Desenvolvimento
@@ -130,7 +136,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-> **Nota:** na primeira execução, o app tentará baixar a base SINAPI. Se não houver conexão, coloque manualmente um CSV processado em `sinapi/sinapi_processado/` ou um arquivo `sinapi_precos.csv` na raiz do projeto como fallback. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`.
+> **Nota:** na primeira execução, o app tentará baixar a base SINAPI. Se não houver conexão, coloque manualmente um CSV processado em `sinapi/sinapi_processado/` ou um arquivo `sinapi_precos.csv` na raiz do projeto como fallback. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`. Para usar a Área Privativa com o Idebras, crie um `.env` na raiz com `user_idebras` e `password_idebras`.
 
 ## Dados: o que é compartilhado e o que fica no PC
 
@@ -140,6 +146,8 @@ python app.py
 | Composições próprias | Banco via API | Sim |
 | Etapas pré-definidas | Banco via API | Sim |
 | Base SINAPI processada | `sinapi/` na pasta do programa | Não (por máquina) |
+| Mapeamento de anomalias (`vicios_construtivos.json`) | Pasta do programa | Não (por máquina) |
+| Credenciais do Idebras (`.env`) | Pasta do programa | Não (por máquina) |
 | Preferências de login (URL / usuário / senha salvos) | Configuração local do desktop | Não (por máquina) |
 
 Arquivos JSON em `%LOCALAPPDATA%\ORC\` ou `dados_usuario/` podem existir no **modo offline** / legado de testes; no fluxo normal com login, a fonte da verdade é o **banco no servidor**.
@@ -154,11 +162,15 @@ orcamento-reparos-construtivos/
 ├── atualizacao.py                  # Verificação de atualização do app via GitHub
 ├── vicios_construtivos.json        # Mapeamento anomalia → composições SINAPI
 ├── version.json                    # Versão e link do instalador (publicado no GitHub)
+├── dados/
+│   └── municipios_uf.json          # Município → UF (IBGE), para o estado do conjunto
 ├── assets/                         # Ícones e modelos de planilha/Word para exportação
-├── api/                            # Backend FastAPI + banco (dados compartilhados)
 ├── core/
 │   ├── app_state.py                # Estado global, APP_VERSION, callbacks SINAPI
 │   ├── api_client.py               # Cliente HTTP da API / autenticação
+│   ├── idebras_client.py           # Login e consulta ao Idebras (conjuntos, plantas, autores)
+│   ├── municipios_br.py            # Resolução de UF pela cidade do conjunto
+│   ├── vicios_storage.py           # Leitura/gravação de anomalias e cômodos permitidos
 │   ├── sinapi_loader.py            # Carregamento e recarga da base SINAPI
 │   ├── sinapi_busca.py             # Pesquisa na base SINAPI
 │   ├── orcamento_customizado.py    # Modelo de dados do orçamento customizado
@@ -182,6 +194,10 @@ orcamento-reparos-construtivos/
 │   ├── etapas_predefinidas.py      # Cadastro de etapas pré-definidas
 │   ├── consulta_sinapi.py          # Módulo de consulta SINAPI
 │   ├── dialogo_configuracoes.py    # Diálogo de configurações (SINAPI)
+│   ├── dialogo_config_anomalias.py # Cadastro de anomalias (admin)
+│   ├── dialogo_importar_autor_idebras.py
+│   ├── dialogo_ambientes_planta.py # Ambientes da planta Idebras
+│   ├── dialogo_previa_anomalia.py  # Prévia SINAPI da anomalia
 │   ├── grade_orcamento.py          # Grade hierárquica etapas/itens
 │   ├── icones.py                   # Ícones SVG (tksvg) para botões e cartões
 │   ├── dialogo_importar_i9.py
@@ -212,7 +228,7 @@ setup\orc_installer.bat
 Saídas:
 
 - `dist\ORC\ORC.exe` — executável portátil
-- `setup\output\ORC_Instalador_1.4.0.exe` — instalador Windows
+- `setup\output\ORC_Instalador_1.5.0.exe` — instalador Windows
 
 Após publicar uma nova versão, atualize `version.json` no GitHub com a versão e o link do instalador correspondente.
 
@@ -228,6 +244,17 @@ Após publicar uma nova versão, atualize `version.json` no GitHub com a versão
 A referência SINAPI em uso aparece no rodapé da interface (ex.: `05/2026`).
 
 ## Histórico de versões
+
+### 1.5.0
+
+- Integração da **Área Privativa** com o **Idebras**: conjuntos, plantas e ambientes
+- Importação do **autor** pelos pareceres finalizados (nome e/ou conjunto), carregando conjunto, planta e estado
+- A pesquisa de autores passa a pedir **Todos** no paginador do Idebras, para listar o conjunto inteiro de uma vez
+- Preenchimento das **metragens** a partir da planta (com visualização opcional dos ambientes)
+- **UF** definida pela cidade do conjunto, com base nos municípios do IBGE
+- **Prévia** das etapas SINAPI de cada anomalia (ícone de lupa)
+- Desfazer e refazer (Ctrl+Z / Ctrl+Y) na Área Privativa
+- Ampulheta de carregamento nas consultas ao Idebras
 
 ### 1.4.0
 

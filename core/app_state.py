@@ -22,10 +22,10 @@ from core.sinapi_loader import (
 )
 from core.sinapi_base import SinapiBase
 
-APP_VERSION = "1.4.7"
+APP_VERSION = "1.5.0"
 
-LARGURA_JANELA_PADRAO = 990
-ALTURA_JANELA_PADRAO = 660
+LARGURA_JANELA_PADRAO = 1080
+ALTURA_JANELA_PADRAO = 720
 ALTURA_TREE_MIN = 11
 
 RODAPE_CSV_SUMIR_APOS_MS = 3000
@@ -116,6 +116,10 @@ class AppContext:
         if isinstance(dados, list):
             dados = dados[0]
         return dados
+
+    def recarregar_dados_json(self):
+        self.dados_json = self._carregar_dados_json()
+        return self.dados_json
 
     def registrar_callback_sinapi(self, callback):
         self._sinapi_callbacks.append(callback)

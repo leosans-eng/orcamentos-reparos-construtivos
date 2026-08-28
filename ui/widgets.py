@@ -401,6 +401,19 @@ def configurar_estilos_ttk(root):
         )
 
     style.configure(
+        "Close.TButton",
+        background="#fffafa",
+        foreground="#b71c1c",
+        borderwidth=0,
+        focuscolor="none",
+        padding=(8, 3),
+    )
+    style.map(
+        "Close.TButton",
+        background=[("active", "#ffebee"), ("pressed", "#ffcdd2")],
+        foreground=[("active", "#b71c1c"), ("pressed", "#7f0000")],
+    )
+    style.configure(
         "Secondary.TButton",
         background="#eceff1",
         foreground="#37474f",
@@ -785,3 +798,308 @@ class ControleAtualizacaoPagina:
             self.label.pack_forget()
         self.label.config(text="")
         self.botao.state(["!disabled"])
+
+
+def criar_botao_fechar(parent, command, texto="Fechar"):
+    """Botão Fechar com borda vermelha e texto vermelho (não parece desabilitado)."""
+    borda = tk.Frame(parent, bg="#c62828", padx=1, pady=1)
+    ttk.Button(
+        borda,
+        text=texto,
+        command=command,
+        style="Close.TButton",
+    ).pack()
+    return borda
+
+
+class CampoListaPesquisavel(tk.Frame):
+    """Campo com lista suspensa pesquisável (abre no clique e fecha ao clicar fora)."""
+
+    def __init__(
+        self,
+        parent,
+        *,
+        textvariable=None,
+        on_escolher=None,
+        normalizar=None,
+        altura_lista=8,
+        largura_minima_lista=280,
+        bg=None,
+    ):
+        super().__init__(parent, bg=bg)
+        self.on_escolher = on_escolher
+        self._normalizar = normalizar
+        self._altura_lista = altura_lista
+        self._largura_minima_lista = largura_minima_lista
+        self._opcoes = []
+        self._popup = None
+        self._lista = None
+        self._ignorando_foco = False
+        self._id_clique_fora = None
+        self.var = textvariable if textvariable is not None else tk.StringVar()
+
+        self.entrada = ttk.Entry(self, textvariable=self.var)
+        self.entrada.pack(fill="x", expand=True)
+
+        self.entrada.bind("<ButtonRelease-1>", self._ao_clicar)
+        self.entrada.bind("<KeyRelease>", self._ao_digitar)
+        self.entrada.bind("<Down>", self._ao_seta_baixo)
+        self.entrada.bind("<Return>", self._ao_return)
+        self.entrada.bind("<Escape>", self._ao_escape)
+        self.entrada.bind("<FocusOut>", self._ao_foco_sair)
+        self.bind("<Destroy>", self._ao_destruir)
+        self._id_clique_fora = self.bind_all(
+            "<ButtonPress-1>", self._ao_clique_fora, add="+"
+        )
+
+    def definir_opcoes(self, opcoes):
+        self._opcoes = list(opcoes)
+
+    def get(self) -> str:
+        return self.var.get()
+
+    def set(self, valor: str):
+        self.var.set(valor or "")
+
+    def fechar_lista(self):
+        if self._popup_ativo():
+            try:
+                self._popup.destroy()
+            except tk.TclError:
+                pass
+        self._popup = None
+        self._lista = None
+
+    def _normalizar_texto(self, texto: str) -> str:
+        if self._normalizar is not None:
+            return self._normalizar(texto)
+        return (texto or "").casefold()
+
+    def _consulta_filtro(self) -> str:
+        return self._normalizar_texto(self.var.get().strip())
+
+    def _opcoes_filtradas(self, forcar_todas: bool = False):
+        if forcar_todas:
+            return list(self._opcoes)
+        consulta = self._consulta_filtro()
+        if not consulta:
+            return list(self._opcoes)
+        return [
+            opcao
+            for opcao in self._opcoes
+            if consulta in self._normalizar_texto(opcao)
+        ]
+
+    def _popup_ativo(self) -> bool:
+        return self._popup is not None and bool(self._popup.winfo_exists())
+
+    def _posicionar_popup(self):
+        if not self._popup_ativo():
+            return
+        self.update_idletasks()
+        x = self.entrada.winfo_rootx()
+        y = self.entrada.winfo_rooty() + self.entrada.winfo_height()
+        largura = max(self.entrada.winfo_width(), self._largura_minima_lista)
+        self._popup.geometry(f"{largura}x180+{x}+{y}")
+
+    def _ponto_interno(self, x, y) -> bool:
+        widgets = [self, self.entrada]
+        if self._popup_ativo():
+            widgets.extend([self._popup, self._lista])
+        for widget in widgets:
+            try:
+                if not widget.winfo_ismapped():
+                    continue
+                x0 = widget.winfo_rootx()
+                y0 = widget.winfo_rooty()
+                x1 = x0 + widget.winfo_width()
+                y1 = y0 + widget.winfo_height()
+                if x0 <= x < x1 and y0 <= y < y1:
+                    return True
+            except tk.TclError:
+                continue
+        return False
+
+    def _ao_clique_fora(self, event):
+        if not self._popup_ativo():
+            return
+        try:
+            interno = self._ponto_interno(event.x_root, event.y_root)
+        except tk.TclError:
+            interno = False
+        if interno:
+            return
+        self.fechar_lista()
+
+    def _criar_popup(self):
+        popup = tk.Toplevel(self.winfo_toplevel())
+        popup.overrideredirect(True)
+        popup.transient(self.winfo_toplevel())
+        popup.configure(bg="#ffffff")
+        lista = tk.Listbox(
+            popup,
+            height=self._altura_lista,
+            exportselection=False,
+            activestyle="dotbox",
+            font=("Segoe UI", 9),
+            bg="#ffffff",
+            relief="solid",
+            borderwidth=1,
+        )
+        scroll = ttk.Scrollbar(popup, orient="vertical", command=lista.yview)
+        lista.configure(yscrollcommand=scroll.set)
+        lista.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        lista.bind("<ButtonRelease-1>", self._ao_escolher)
+        lista.bind("<Return>", self._ao_escolher)
+        lista.bind("<Escape>", lambda _e: self.fechar_lista())
+        self._popup = popup
+        self._lista = lista
+
+    def _mostrar_lista(self, forcar_todas: bool = False):
+        opcoes = self._opcoes_filtradas(forcar_todas=forcar_todas)
+        self._ignorando_foco = True
+        try:
+            if not self._popup_ativo():
+                self._criar_popup()
+            self._lista.delete(0, "end")
+            for opcao in opcoes:
+                self._lista.insert("end", opcao)
+            if opcoes:
+                self._lista.selection_clear(0, "end")
+                self._lista.selection_set(0)
+                self._lista.activate(0)
+                self._lista.see(0)
+            self._posicionar_popup()
+            self._popup.deiconify()
+            self._popup.lift()
+        finally:
+            try:
+                self.entrada.focus_set()
+            except tk.TclError:
+                pass
+            self.after(200, self._liberar_foco)
+
+    def _liberar_foco(self):
+        self._ignorando_foco = False
+
+    def _selecionar_texto(self):
+        try:
+            self.entrada.focus_set()
+            self.entrada.selection_range(0, "end")
+            self.entrada.icursor("end")
+        except tk.TclError:
+            pass
+
+    def _ao_clicar(self, _event=None):
+        self.after_idle(self._abrir_no_clique)
+
+    def _abrir_no_clique(self):
+        self._mostrar_lista(forcar_todas=True)
+        self.after_idle(self._selecionar_texto)
+
+    def _ao_seta_baixo(self, _event=None):
+        self._mostrar_lista()
+        if self._popup_ativo() and self._lista.size() > 0:
+            self._ignorando_foco = True
+            self._lista.focus_set()
+            self.after(50, lambda: setattr(self, "_ignorando_foco", False))
+        return "break"
+
+    def _resolver_unico(self):
+        texto = self.var.get().strip()
+        if not texto:
+            return None
+        if texto in self._opcoes:
+            return texto
+        filtradas = self._opcoes_filtradas()
+        if len(filtradas) == 1:
+            return filtradas[0]
+        return None
+
+    def _ao_return(self, _event=None):
+        if self._popup_ativo() and self._lista is not None and self._lista.size() > 0:
+            if not self._lista.curselection():
+                self._lista.selection_set(0)
+            self._ao_escolher()
+            return "break"
+        unico = self._resolver_unico()
+        if unico is not None:
+            self._confirmar_valor(unico)
+            return "break"
+        return None
+
+    def _ao_escape(self, _event=None):
+        if self._popup_ativo():
+            self.fechar_lista()
+            return "break"
+        return None
+
+    def _ao_foco_sair(self, _event=None):
+        if self._ignorando_foco:
+            return
+        self.after(120, self._esconder_lista_se_foco_fora)
+
+    def _esconder_lista_se_foco_fora(self):
+        if self._ignorando_foco:
+            return
+        try:
+            foco = self.focus_get()
+        except tk.TclError:
+            self.fechar_lista()
+            return
+        if foco is self.entrada or foco is self._lista:
+            return
+        self.fechar_lista()
+
+    def _ao_digitar(self, event=None):
+        if event is not None and event.keysym in (
+            "Up",
+            "Down",
+            "Left",
+            "Right",
+            "Return",
+            "Tab",
+            "Escape",
+            "Shift_L",
+            "Shift_R",
+            "Control_L",
+            "Control_R",
+            "Home",
+            "End",
+        ):
+            return
+        self._mostrar_lista(forcar_todas=False)
+
+    def _ao_escolher(self, _event=None):
+        if not self._popup_ativo() or self._lista is None:
+            return
+        selecao = self._lista.curselection()
+        if not selecao:
+            return
+        self._confirmar_valor(self._lista.get(selecao[0]))
+
+    def _confirmar_valor(self, valor: str):
+        self.var.set(valor)
+        self.fechar_lista()
+        try:
+            self.entrada.focus_set()
+            self.entrada.selection_range(0, "end")
+        except tk.TclError:
+            pass
+        if self.on_escolher is not None:
+            self.on_escolher(valor)
+
+    def _ao_destruir(self, event):
+        if event.widget is not self:
+            return
+        self.fechar_lista()
+        funcid = self._id_clique_fora
+        self._id_clique_fora = None
+        if not funcid:
+            return
+        try:
+            self._unbind(("bind", "all", "<ButtonPress-1>"), funcid)
+        except (tk.TclError, TypeError, AttributeError):
+            pass
+

@@ -20,6 +20,7 @@ from core.etapas_predefinidas_storage import (
 from ui.icones import (
     criar_botao_inserir_prominente,
     criar_botao_ttk_com_icone,
+    criar_label_icone,
 )
 from ui.orcamento_customizado import DialogoBuscaComposicaoPropria, DialogoBuscaSinapi
 from ui.recarga_catalogo import RecarregadorCatalogo
@@ -171,9 +172,13 @@ class EtapasPredefinidasFrame(tk.Frame):
         self.var_busca.trace_add("write", lambda *_a: self._atualizar_lista_etapas())
         linha_busca = tk.Frame(esquerda, bg="#ececec")
         linha_busca.pack(fill="x", pady=(0, 6))
-        tk.Label(linha_busca, text="Filtrar:", bg="#ececec").pack(side="left")
+        criar_label_icone(
+            linha_busca,
+            "funnel-outline",
+            refs=self._icones_botoes,
+        ).pack(side="left", padx=(0, 4))
         ttk.Entry(linha_busca, textvariable=self.var_busca, width=28).pack(
-            side="left", padx=(4, 0), fill="x", expand=True
+            side="left", padx=(0, 0), fill="x", expand=True
         )
 
         container_tree = tk.Frame(esquerda, bg="#ececec")

@@ -2,16 +2,45 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import math
 import os
+import threading
 import unicodedata
+from copy import deepcopy
 from datetime import datetime
 
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 
-from core.app_state import ALTURA_TREE_MIN, LARGURA_JANELA_PADRAO, NOMES_GRUPOS_REPARO
+from core.app_state import ALTURA_TREE_MIN, NOMES_GRUPOS_REPARO
+from core.idebras_client import (
+    IdebrasClient,
+    IdebrasError,
+    formatar_decimal_br,
+    localizar_conjunto_parecer,
+    medidas_para_orcamento,
+    normalizar_ambiente,
+)
+from core.municipios_br import resolver_uf_conjunto
 from core.sinapi_busca import obter_item_sinapi
-from ui.widgets import criar_barra_modulo
+from core.vicios_storage import COMODOS_AREA_PRIVATIVA, comodos_permitidos_anomalia, nomes_anomalias
+from ui.dialogo_admin_usuarios import usuario_atual_eh_admin
+from ui.dialogo_ambientes_planta import DialogoAmbientesPlanta
+from ui.dialogo_config_anomalias import DialogoConfigAnomalias
+from ui.dialogo_importar_autor_idebras import DialogoImportarAutorIdebras
+from ui.dialogo_previa_anomalia import DialogoPreviaAnomalia
+from ui.icones import (
+    IndicadorAmpulheta,
+    criar_botao_ttk_com_icone,
+    criar_botao_ttk_so_icone,
+    criar_icone_svg,
+    definir_estado_botao_icone,
+)
+from ui.widgets import (
+    CampoListaPesquisavel,
+    criar_barra_modulo,
+    formatar_moeda_br,
+    vincular_tooltip,
+)
 
 
 def criar_area_privativa(parent, ctx, on_voltar):
@@ -19,104 +48,36 @@ def criar_area_privativa(parent, ctx, on_voltar):
     root = parent.winfo_toplevel()
     lista_anomalias = []
     _feedback_timer = None
+    _refs_icones = []
+    _job_recalculo = None
+    _historico_undo = []
+    _historico_redo = []
+    _snapshot_base = None
+    _aplicando_historico = False
+    _binds_historico = []
 
-    wrapper = tk.Frame(parent)
+    wrapper = tk.Frame(parent, bg="#ececec")
+    wrapper._refs_icones = _refs_icones
 
     criar_barra_modulo(wrapper, "Área Privativa", on_voltar)
 
-    # SCROLL DA JANELA             #
-    # ---------------------------- #
-    container = tk.Frame(wrapper)
-    container.pack(fill="both", expand=True)
-
-    canvas = tk.Canvas(container, highlightthickness=0, bg="#ececec")
-    scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
-
-    frame_principal = tk.Frame(canvas, bg=canvas["bg"])
-
-    def _atualizar_scrollregion(_event=None):
-        canvas.configure(scrollregion=canvas.bbox("all"))
-
-    frame_principal.bind("<Configure>", _atualizar_scrollregion)
-
-    canvas_window = canvas.create_window((0, 0), window=frame_principal, anchor="nw")
-
-    canvas.configure(yscrollcommand=scrollbar.set)
-
-    def _conteudo_cabe_no_canvas():
-        bbox = canvas.bbox("all")
-        if not bbox:
-            return True
-        return (bbox[3] - bbox[1]) <= canvas.winfo_height()
-
-    def _on_mousewheel(event):
-
-        widget = root.winfo_containing(event.x_root, event.y_root)
-
-        if isinstance(widget, ttk.Combobox):
-            return
-
-        if _conteudo_cabe_no_canvas():
-            return
-
-        pos = canvas.yview()
-
-        if event.delta > 0 and pos[0] <= 0:
-            return
-
-        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-
-    def ajustar_layout_canvas(event):
-        largura_canvas = event.width
-        altura_canvas = event.height
-        largura_conteudo = min(largura_canvas, LARGURA_JANELA_PADRAO)
-        offset_x = max(0, (largura_canvas - largura_conteudo) // 2)
-
-        canvas.itemconfig(canvas_window, width=largura_conteudo)
-        canvas.coords(canvas_window, offset_x, 0)
-
-        if not getattr(ajustar_layout_canvas, "_pronto", False):
-            _atualizar_scrollregion()
-            return
-
-        frame_conteudo.pack_propagate(True)
-        frame_conteudo.configure(height=0)
-        frame_principal.update_idletasks()
-        altura_natural = frame_principal.winfo_reqheight()
-
-        if altura_canvas > altura_natural + 8:
-            margem = 28
-            altura_fixa = (
-                frame_dados.winfo_reqheight()
-                + frame_feedback.winfo_reqheight()
-                + botao_gerar.winfo_reqheight()
-                + margem
-            )
-            altura_conteudo = max(300, altura_canvas - altura_fixa)
-            frame_conteudo.pack_propagate(False)
-            frame_conteudo.configure(height=altura_conteudo)
-
-        if _conteudo_cabe_no_canvas():
-            canvas.yview_moveto(0)
-
-        _atualizar_scrollregion()
-
-    # mousewheel: ativar_scroll()
-
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
+    corpo = tk.Frame(wrapper, bg="#ececec")
+    corpo.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+    corpo.columnconfigure(0, weight=1)
+    corpo.rowconfigure(2, weight=1)
 
     # ---------------------------- #
     # FRAME DADOS DO ORÇAMENTO     #
     # ---------------------------- #
-    frame_dados = tk.LabelFrame(frame_principal, text="1. Dados do Orçamento")
-    frame_dados.pack(fill="x", padx=10, pady=10)
+    frame_dados = tk.LabelFrame(
+        corpo, text="1. Dados do orçamento", bg="#ececec", padx=8, pady=6
+    )
+    frame_dados.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
-    frame_checkboxes = tk.Frame(frame_dados)
-    frame_checkboxes.grid(row=1, column=0, columnspan=2, sticky="w", padx=5)
+    linha_autor = tk.Frame(frame_dados, bg="#ececec")
+    linha_autor.pack(fill="x")
 
-    # linha 1 - Proprietário / Autor
-    tk.Label(frame_dados, text="Autor(a):").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+    tk.Label(linha_autor, text="Autor(a):", bg="#ececec").pack(side="left")
 
     var_proprietario = tk.StringVar()
 
@@ -126,22 +87,67 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     var_proprietario.trace_add("write", forcar_maiusculo)
 
-    entrada_proprietario = tk.Entry(frame_dados, textvariable=var_proprietario)
-    entrada_proprietario.grid(row=0, column=1, columnspan=3, sticky="ew", padx=5)
+    entrada_proprietario = tk.Entry(linha_autor, textvariable=var_proprietario)
+    entrada_proprietario.pack(side="left", fill="x", expand=True, padx=(6, 6))
 
-    frame_dados.columnconfigure(1, weight=1)
+    ctrl_idebras = {
+        "cliente": None,
+        "obter_conjuntos": lambda: [],
+        "selecionar_conjunto": lambda _nome: None,
+    }
 
-    tk.Label(frame_dados, text="Estado:").grid(row=0, column=4, padx=5)
+    def abrir_importar_autor():
+        cliente = ctrl_idebras.get("cliente")
+        conjuntos = list((ctrl_idebras.get("obter_conjuntos") or (lambda: []))())
+        if cliente is None or not conjuntos:
+            mostrar_feedback("Aguarde a conexão com o Idebras.", "orange")
+            return
+
+        def ao_importar(parecer):
+            var_proprietario.set(parecer.nome)
+            conjunto = localizar_conjunto_parecer(conjuntos, parecer)
+            selecionar = ctrl_idebras.get("selecionar_conjunto")
+            if conjunto is not None and selecionar:
+                selecionar(conjunto.nome)
+                mostrar_feedback(
+                    f"Autor importado: {parecer.nome}.",
+                    "green",
+                )
+            else:
+                mostrar_feedback(
+                    f"Autor importado: {parecer.nome}. "
+                    "O conjunto não foi localizado automaticamente.",
+                    "orange",
+                    temporario=False,
+                )
+
+        DialogoImportarAutorIdebras(
+            root,
+            cliente=cliente,
+            conjuntos=conjuntos,
+            on_importar=ao_importar,
+            refs_icones=_refs_icones,
+        )
+
+    btn_importar_autor = criar_botao_ttk_so_icone(
+        linha_autor,
+        nome_icone="cloud-download-outline",
+        command=abrir_importar_autor,
+        refs=_refs_icones,
+    )
+    btn_importar_autor.pack(side="left", padx=(0, 12))
+    vincular_tooltip(btn_importar_autor, "Importar autor do Idebras")
+
+    tk.Label(linha_autor, text="Estado:", bg="#ececec").pack(side="left")
 
     estados = ctx.obter_estados()
 
-    combo_estado = ttk.Combobox(frame_dados, values=estados, width=6, state="readonly")
-    combo_estado.grid(row=0, column=5, padx=5)
+    combo_estado = ttk.Combobox(linha_autor, values=estados, width=8, state="readonly")
+    combo_estado.pack(side="left", padx=(6, 0))
 
     def estado_alterado(event=None):
-
-        if lista_anomalias:
-            atualizar_tree()
+        atualizar_valores()
+        registrar_historico("Alterar estado")
 
     combo_estado.bind("<<ComboboxSelected>>", estado_alterado)
 
@@ -158,111 +164,116 @@ def criar_area_privativa(parent, ctx, on_voltar):
     def linha_sinapi_codigo(codigo, estado):
         return obter_item_sinapi(ctx.sinapi, str(codigo).strip(), estado)
 
-    # linha 2 - Acompanhamento Técnico, Eventuais, Estado, Aluguel e BDI
+    linha_opcoes = tk.Frame(frame_dados, bg="#ececec")
+    linha_opcoes.pack(fill="x", pady=(8, 0))
+
     var_acompanhamento = tk.BooleanVar(value=True)
-
     chk_acompanhamento = tk.Checkbutton(
-        frame_dados,
-        text="Acompanhamento Técnico |",
-        variable=var_acompanhamento
+        linha_opcoes,
+        text="Acompanhamento técnico",
+        variable=var_acompanhamento,
+        bg="#ececec",
+        activebackground="#ececec",
     )
-
-    chk_acompanhamento.pack(in_=frame_checkboxes, side="left")
+    chk_acompanhamento.pack(side="left")
 
     var_eventuais = tk.BooleanVar(value=False)
-
     chk_eventuais = tk.Checkbutton(
-        frame_dados,
+        linha_opcoes,
         text="Eventuais (10%)",
-        variable=var_eventuais
+        variable=var_eventuais,
+        bg="#ececec",
+        activebackground="#ececec",
     )
+    chk_eventuais.pack(side="left", padx=(12, 0))
 
-    chk_eventuais.pack(in_=frame_checkboxes, side="left")
+    tk.Frame(linha_opcoes, bg="#ececec").pack(side="left", fill="x", expand=True)
 
-    tk.Label(frame_dados, text="Aluguel (R$):").grid(row=1, column=2, padx=5)
-
-    entrada_aluguel = tk.Entry(frame_dados, width=10)
-    entrada_aluguel.grid(row=1, column=3, padx=5)
+    tk.Label(linha_opcoes, text="Aluguel (R$):", bg="#ececec").pack(side="left")
+    entrada_aluguel = tk.Entry(linha_opcoes, width=10)
+    entrada_aluguel.pack(side="left", padx=(6, 16))
     entrada_aluguel.insert(0, "1000")
 
-    tk.Label(frame_dados, text="BDI (%):").grid(row=1, column=4, padx=5)
-
-    entrada_bdi = tk.Entry(frame_dados, width=8)
-    entrada_bdi.grid(row=1, column=5, padx=5)
+    tk.Label(linha_opcoes, text="BDI (%):", bg="#ececec").pack(side="left")
+    entrada_bdi = ttk.Entry(linha_opcoes, width=8)
+    entrada_bdi.pack(side="left", padx=(6, 0))
     entrada_bdi.insert(0, "30,45")
 
-    # ---------------------------- #
-    # FRAME METRAGEM DOS CÔMODOS   #
-    # ---------------------------- #
-    frame_conteudo = tk.Frame(frame_principal)
-    frame_conteudo.pack(fill="both", expand=True)
+    frame_idebras_host = tk.Frame(corpo, bg="#ececec")
+    frame_idebras_host.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 
-    frame_conteudo.columnconfigure(0, weight=0)
+    # ---------------------------- #
+    # COLUNAS PRINCIPAIS           #
+    # ---------------------------- #
+    frame_conteudo = tk.Frame(corpo, bg="#ececec")
+    frame_conteudo.grid(row=2, column=0, sticky="nsew")
+    frame_conteudo.columnconfigure(0, weight=1)
     frame_conteudo.columnconfigure(1, weight=1)
+    frame_conteudo.columnconfigure(2, weight=2)
     frame_conteudo.rowconfigure(0, weight=1)
-    frame_conteudo.rowconfigure(1, weight=1)
 
-    frame_metragem = tk.LabelFrame(frame_conteudo, text="2. Metragem dos Cômodos")
-    frame_metragem.grid(row=0, column=0, sticky="nw", padx=10, pady=5)
+    frame_metragem = tk.LabelFrame(
+        frame_conteudo, text="2. Metragem dos cômodos", bg="#ececec", padx=8, pady=6
+    )
+    frame_metragem.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
 
-    frame_tabela = tk.Frame(frame_metragem)
-    frame_tabela.pack(pady=5)
+    frame_tabela = tk.Frame(frame_metragem, bg="#ececec")
+    frame_tabela.pack(fill="both", expand=True)
 
-    tk.Label(frame_tabela, text="Cômodo", width=15, font=("Arial", 10, "bold")).grid(row=0, column=0)
-    tk.Label(frame_tabela, text="Piso (m²)", width=10, font=("Arial", 10, "bold")).grid(row=0, column=1)
-    tk.Label(frame_tabela, text="Rev. Arg. (m²)", width=12, font=("Arial", 10, "bold")).grid(row=0, column=2)
-    tk.Label(frame_tabela, text="Rev. Cer. (m²)", width=12, font=("Arial", 10, "bold")).grid(row=0, column=3)
+    tk.Label(
+        frame_tabela, text="Cômodo", font=("Arial", 9, "bold"), bg="#ececec", anchor="w"
+    ).grid(row=0, column=0, sticky="ew", padx=2, pady=(0, 4))
+    tk.Label(
+        frame_tabela, text="Piso (m²)", font=("Arial", 9, "bold"), bg="#ececec"
+    ).grid(row=0, column=1, padx=2, pady=(0, 4))
+    tk.Label(
+        frame_tabela, text="Rev. Arg. (m²)", font=("Arial", 9, "bold"), bg="#ececec"
+    ).grid(row=0, column=2, padx=2, pady=(0, 4))
+    tk.Label(
+        frame_tabela, text="Rev. Cer. (m²)", font=("Arial", 9, "bold"), bg="#ececec"
+    ).grid(row=0, column=3, padx=2, pady=(0, 4))
+    frame_tabela.columnconfigure(0, weight=1)
 
-    lista_comodos = [
-        "Sala",
-        "Dormitório 1",
-        "Dormitório 2",
-        "Banheiro",
-        "Cozinha",
-        "Área de Serviço"
-    ]
+    lista_comodos = list(COMODOS_AREA_PRIVATIVA)
 
     comodos_area_molhada = [
         "Banheiro",
         "Cozinha",
-        "Área de Serviço"
+        "Área de Serviço",
     ]
 
     comodos_area_seca = [
         "Sala",
         "Dormitório 1",
-        "Dormitório 2"
+        "Dormitório 2",
+        "Circulação",
     ]
 
-    comodos_dr = [
-        "Dormitório 1",
-        "Dormitório 2",
-        "Banheiro",
-        "Cozinha",
-        "Área de Serviço"
-    ]
+    comodos_com_rev_cer = set(comodos_area_molhada) | {
+        "Área Externa",
+        "Varanda",
+    }
 
     comodos = {}
 
     for i, c in enumerate(lista_comodos, start=1):
 
-        tk.Label(frame_tabela, text=c).grid(row=i, column=0)
+        tk.Label(frame_tabela, text=c, bg="#ececec", anchor="w").grid(
+            row=i, column=0, sticky="ew", padx=2, pady=2
+        )
 
-        entrada_piso = tk.Entry(frame_tabela, width=10)
-        entrada_piso.grid(row=i, column=1)
+        entrada_piso = tk.Entry(frame_tabela, width=9, justify="right")
+        entrada_piso.grid(row=i, column=1, padx=2, pady=2)
 
-        entrada_rev_arg = tk.Entry(frame_tabela, width=10)
-        entrada_rev_arg.grid(row=i, column=2)
+        entrada_rev_arg = tk.Entry(frame_tabela, width=9, justify="right")
+        entrada_rev_arg.grid(row=i, column=2, padx=2, pady=2)
 
-        if c in comodos_area_molhada:
-
-            entrada_rev_cer = tk.Entry(frame_tabela, width=10)
-
+        if c in comodos_com_rev_cer:
+            entrada_rev_cer = tk.Entry(frame_tabela, width=9, justify="right")
         else:
+            entrada_rev_cer = tk.Entry(frame_tabela, width=9, justify="right", state="disabled")
 
-            entrada_rev_cer = tk.Entry(frame_tabela, width=10, state="disabled")
-
-        entrada_rev_cer.grid(row=i, column=3)
+        entrada_rev_cer.grid(row=i, column=3, padx=2, pady=2)
 
         comodos[c] = {
             "piso": entrada_piso,
@@ -270,53 +281,85 @@ def criar_area_privativa(parent, ctx, on_voltar):
             "rev_cer": entrada_rev_cer
         }
 
+    def limpar_metragens():
+        for campos in comodos.values():
+            for entrada in campos.values():
+                if str(entrada.cget("state")) == "disabled":
+                    continue
+                entrada.delete(0, "end")
+        atualizar_valores()
+        registrar_historico("Limpar metragens")
+        mostrar_feedback("Metragens dos cômodos limpas.", "orange")
+
+    botoes_metragem = tk.Frame(frame_metragem, bg="#ececec")
+    botoes_metragem.pack(fill="x", pady=(6, 0))
+    ttk.Button(
+        botoes_metragem,
+        text="Limpar",
+        command=limpar_metragens,
+        style="Compact.TButton",
+    ).pack(side="left")
+
+    def preencher_metragens(medidas):
+        preenchidos = []
+        for comodo, valores in medidas.items():
+            if comodo not in comodos:
+                continue
+            for chave in ("piso", "rev_arg", "rev_cer"):
+                entrada = comodos[comodo][chave]
+                if str(entrada.cget("state")) == "disabled":
+                    continue
+                entrada.delete(0, "end")
+                entrada.insert(0, formatar_decimal_br(valores.get(chave, 0)))
+            preenchidos.append(comodo)
+        atualizar_valores()
+        registrar_historico("Preencher metragens da planta")
+        if preenchidos:
+            mostrar_feedback(
+                f"Metragens preenchidas: {', '.join(preenchidos)}.",
+                "green",
+            )
+        else:
+            mostrar_feedback("Nenhum cômodo da planta corresponde à tabela.", "orange")
+
     # ---------------------------- #
     # FRAME SELEÇÃO DE ANOMALIA    #
     # ---------------------------- #
-    frame_anomalia = tk.LabelFrame(frame_conteudo, text="3. Selecionar Anomalia")
-    frame_anomalia.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+    frame_anomalia = tk.LabelFrame(
+        frame_conteudo, text="3. Selecionar anomalia", bg="#ececec", padx=8, pady=6
+    )
+    frame_anomalia.grid(row=0, column=1, sticky="nsew", padx=(0, 6))
 
-    vicios = [
-        "Desplacamento de pisos cerâmicos em área seca",
-        "Desplacamento de pisos cerâmicos em área molhada",
-        "Desplacamento de azulejos",
-        "Manchas nos pisos",
-        "Manchas nos azulejos",
-        "Falta de DR",
-        "Infiltração pela esquadria",
-        "Infiltração pela cobertura",
-        "Umidade na parede",
-        "Trinca saindo da janela",
-        "Trinca em parede",
-        "Trinca contígua à esquadria",
-        "Trinca na laje percorrendo o eletroduto",
-        "Pintura de parede"
-    ]
+    def obter_vicios():
+        return nomes_anomalias(ctx.dados_json)
 
-    combo_vicio = ttk.Combobox(frame_anomalia, width=50, values=vicios, state="readonly")
-    combo_vicio.pack(pady=5)
+    frame_combo_anomalia = tk.Frame(frame_anomalia)
+    frame_combo_anomalia.pack(fill="x", padx=6, pady=5)
 
-    comodos_bloqueados_por_vicio = {
-        "Desplacamento de azulejos": comodos_area_seca,
-        "Desplacamento de pisos cerâmicos em área molhada": comodos_area_seca,
-        "Desplacamento de pisos cerâmicos em área seca": comodos_area_molhada,
-        "Manchas nos azulejos": comodos_area_seca,
-        "Manchas nos pisos": comodos_area_seca,
-        "Falta de DR": comodos_dr
-    }
+    combo_vicio = ttk.Combobox(
+        frame_combo_anomalia,
+        width=42,
+        values=obter_vicios(),
+        state="readonly",
+    )
+    combo_vicio.pack(side="left", fill="x", expand=True)
 
     # ---------------------------- #
     # CHECKBOXES DE CÔMODOS        #
     # ---------------------------- #
-    tk.Label(frame_anomalia, text="Cômodos afetados:").pack()
+    tk.Label(
+        frame_anomalia, text="Cômodos afetados:", bg="#ececec", anchor="w"
+    ).pack(fill="x", padx=6, pady=(4, 0))
 
-    frame_check = tk.Frame(frame_anomalia)
-    frame_check.pack(pady=5)
+    frame_check = tk.Frame(frame_anomalia, bg="#ececec")
+    frame_check.pack(fill="x", padx=6, pady=4)
 
     linhas = [
         ["Sala", "Banheiro"],
-        ["Dormitório 1", "Cozinha"],
-        ["Dormitório 2", "Área de Serviço"]
+        ["Circulação", "Cozinha"],
+        ["Dormitório 1", "Área de Serviço"],
+        ["Dormitório 2", "Área Externa"],
+        ["Varanda", "Residência Inteira"],
     ]
 
     checkbox_comodos = {}
@@ -327,32 +370,66 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
             var = tk.BooleanVar()
 
-            chk = tk.Checkbutton(frame_check, text=comodo, variable=var)
-            chk.grid(row=r, column=c, sticky="w", padx=10)
+            chk = tk.Checkbutton(
+                frame_check,
+                text=comodo,
+                variable=var,
+                bg="#ececec",
+                activebackground="#ececec",
+                anchor="w",
+            )
+            chk.grid(row=r, column=c, sticky="w", padx=(0, 12), pady=1)
 
             checkbox_comodos[comodo] = {
                 "var": var,
                 "widget": chk
             }
+    frame_check.columnconfigure(0, weight=1)
+    frame_check.columnconfigure(1, weight=1)
 
     def atualizar_checkboxes_por_vicio(event=None):
 
         vicio_selecionado = combo_vicio.get()
-
-        comodos_bloqueados = comodos_bloqueados_por_vicio.get(vicio_selecionado, set())
+        dados_vicio = ctx.dados_json.get("anomalias", {}).get(vicio_selecionado, {})
+        permitidos = set(comodos_permitidos_anomalia(dados_vicio, lista_comodos))
 
         for comodo, dados in checkbox_comodos.items():
 
             var = dados["var"]
             chk = dados["widget"]
 
-            if comodo in comodos_bloqueados:
+            if vicio_selecionado and comodo not in permitidos:
                 var.set(False)
                 chk.config(state="disabled")
             else:
                 chk.config(state="normal")
 
     combo_vicio.bind("<<ComboboxSelected>>", atualizar_checkboxes_por_vicio)
+
+    def atualizar_lista_vicios():
+        atual = combo_vicio.get()
+        valores = obter_vicios()
+        combo_vicio["values"] = valores
+        if atual in valores:
+            combo_vicio.set(atual)
+        elif atual:
+            combo_vicio.set("")
+        atualizar_checkboxes_por_vicio()
+
+    def abrir_config_anomalias():
+        DialogoConfigAnomalias(root, ctx, on_salvo=atualizar_lista_vicios)
+
+    if usuario_atual_eh_admin():
+        criar_botao_ttk_com_icone(
+            frame_combo_anomalia,
+            texto="Configurar",
+            nome_icone="cog-outline",
+            command=abrir_config_anomalias,
+            refs=_refs_icones,
+        ).pack(side="left", padx=(6, 0))
+
+    frame_btn_adicionar = tk.Frame(frame_anomalia, bg="#ececec")
+    frame_btn_adicionar.pack(fill="x", padx=6, pady=(8, 4))
 
     # ---------------------------- #
     # FEEDBACK VISUAL              #
@@ -376,8 +453,10 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # ---------------------------- #
     # LISTA DE ANOMALIAS           #
     # ---------------------------- #
-    frame_lista = tk.LabelFrame(frame_conteudo, text="4. Anomalias adicionadas")
-    frame_lista.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=10, pady=5)
+    frame_lista = tk.LabelFrame(
+        frame_conteudo, text="4. Anomalias adicionadas", bg="#ececec", padx=8, pady=6
+    )
+    frame_lista.grid(row=0, column=2, sticky="nsew")
     frame_lista.rowconfigure(0, weight=1)
     frame_lista.columnconfigure(0, weight=1)
 
@@ -398,6 +477,11 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     tree_anomalias.column("#0", width=350, minwidth=200, stretch=True)
     tree_anomalias.column("subtotal", width=100, minwidth=90, stretch=False, anchor="e")
+
+    icone_previa = criar_icone_svg(
+        tree_anomalias, "search-outline", altura=14, cor="#006699"
+    )
+    _refs_icones.append(icone_previa)
 
     def ajustar_altura_treeview(event=None):
         frame_listbox.update_idletasks()
@@ -421,6 +505,13 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     scroll_lista.pack(side="right", fill="y")
 
+    def ao_tecla_delete(_event=None):
+        if tree_anomalias.selection():
+            remover_anomalia()
+        return "break"
+
+    tree_anomalias.bind("<Delete>", ao_tecla_delete)
+
     # ---------------------------- #
     # FUNÇÃO ADICIONAR ANOMALIA    #
     # ---------------------------- #
@@ -432,6 +523,13 @@ def criar_area_privativa(parent, ctx, on_voltar):
             mostrar_feedback("Selecione uma anomalia.", "red")
             return
 
+        if vicio not in ctx.dados_json.get("anomalias", {}):
+            mostrar_feedback(
+                "Anomalia não encontrada no cadastro.",
+                "red",
+            )
+            return
+
         comodos_afetados = [
             c for c in lista_comodos if checkbox_comodos[c]["var"].get()
         ]
@@ -439,6 +537,36 @@ def criar_area_privativa(parent, ctx, on_voltar):
         if not comodos_afetados:
             mostrar_feedback("Selecione ao menos um cômodo.", "red")
             return
+
+        zerados = []
+        for comodo in comodos_afetados:
+            campos = comodos[comodo]
+            tem_medida = False
+            for chave in ("piso", "rev_arg", "rev_cer"):
+                entrada = campos[chave]
+                if str(entrada.cget("state")) == "disabled":
+                    continue
+                bruto = entrada.get().strip().replace(",", ".")
+                try:
+                    if bruto and float(bruto) > 0:
+                        tem_medida = True
+                        break
+                except ValueError:
+                    if entrada.get().strip():
+                        tem_medida = True
+                        break
+            if not tem_medida:
+                zerados.append(comodo)
+        if zerados:
+            lista_zerados = ", ".join(zerados)
+            if not messagebox.askyesno(
+                "Metragem zerada",
+                "O(s) cômodo(s) a seguir estão com metragem zerada:\n\n"
+                f"{lista_zerados}\n\n"
+                "Deseja adicionar a anomalia mesmo assim?",
+                parent=root,
+            ):
+                return
 
         # procurar se a anomalia já foi adicionada
         for item in lista_anomalias:
@@ -456,6 +584,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 if novos:
 
                     atualizar_tree()
+                    registrar_historico("Adicionar cômodo à anomalia")
 
                     mostrar_feedback(
                         f"Cômodo(s) adicionado(s): {', '.join(novos)}",
@@ -488,6 +617,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
             dados["var"].set(False)
 
         mostrar_feedback("Anomalia adicionada com sucesso.", "green")
+        registrar_historico("Adicionar anomalia")
 
     def atualizar_tree():
 
@@ -503,6 +633,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 "",
                 "end",
                 text=item["vicio"],
+                image=icone_previa,
                 values=(subtotal_str,),
                 open=True
             )
@@ -515,6 +646,8 @@ def criar_area_privativa(parent, ctx, on_voltar):
                     text=comodo,
                     values=("",)
                 )
+
+        atualizar_total_rodape()
 
 
     def aplicar_sinapi_na_interface():
@@ -533,7 +666,9 @@ def criar_area_privativa(parent, ctx, on_voltar):
         ctx.atualizar_rodape()
 
         if lista_anomalias:
-            atualizar_tree()
+            atualizar_valores()
+        else:
+            atualizar_total_rodape()
 
 
     # FUNÇÃO REMOVER ANOMALIA      #
@@ -556,6 +691,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
             indice = tree_anomalias.index(item_id)
             del lista_anomalias[indice]
             atualizar_tree()
+            registrar_historico("Remover anomalia")
             mostrar_feedback("Anomalia removida.", "orange red")
 
         # SE SELECIONAR UM CÔMODO
@@ -570,7 +706,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 del lista_anomalias[indice_anomalia]
 
             atualizar_tree()
-
+            registrar_historico("Remover cômodo")
             mostrar_feedback(f"Cômodo removido: {comodo}", "orange")
 
     def remover_todas_anomalias():
@@ -581,44 +717,89 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
         lista_anomalias.clear()
         atualizar_tree()
+        registrar_historico("Remover todas as anomalias")
         mostrar_feedback("Todas as anomalias foram removidas.", "orange red")
 
     # ---------------------------- #
     # BOTÕES                       #
     # ---------------------------- #
-    tk.Button(
-        frame_anomalia,
-        text="Adicionar Anomalia",
-        command=adicionar_anomalia
-    ).pack(pady=10)
+    criar_botao_ttk_com_icone(
+        frame_btn_adicionar,
+        texto="Adicionar anomalia",
+        nome_icone="add-circle-outline",
+        command=adicionar_anomalia,
+        estilo="Add.TButton",
+        refs=_refs_icones,
+    ).pack(fill="x")
 
-    tk.Button(
-        frame_lista,
-        text="Remover Anomalia Selecionada",
-        command=remover_anomalia
-    ).grid(row=1, column=0, pady=5)
-
-    tk.Button(
-        frame_lista,
-        text="Remover Todas as Anomalias",
-        underline=8,
-        command=remover_todas_anomalias
-    ).grid(row=2, column=0, pady=5)
+    botoes_lista = tk.Frame(frame_lista, bg="#ececec")
+    botoes_lista.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+    criar_botao_ttk_com_icone(
+        botoes_lista,
+        texto="Remover selecionada",
+        nome_icone="remove-circle-outline",
+        command=remover_anomalia,
+        estilo="Delete.Compact.TButton",
+        refs=_refs_icones,
+    ).pack(side="left")
+    criar_botao_ttk_com_icone(
+        botoes_lista,
+        texto="Remover todas",
+        nome_icone="trash-outline",
+        command=remover_todas_anomalias,
+        estilo="Delete.Compact.TButton",
+        refs=_refs_icones,
+    ).pack(side="left", padx=(6, 0))
 
     # ---------------------------- #
-    # ÁREA DE FEEDBACK             #
+    # RODAPÉ: FEEDBACK + GERAR     #
     # ---------------------------- #
-    frame_feedback = tk.Frame(frame_principal)
-    frame_feedback.pack(pady=(5,0))
+    frame_rodape_modulo = tk.Frame(corpo, bg="#ececec")
+    frame_rodape_modulo.grid(row=3, column=0, sticky="ew", pady=(8, 0))
+    frame_rodape_modulo.columnconfigure(1, weight=1)
+
+    container_historico = tk.Frame(frame_rodape_modulo, bg="#ececec")
+    container_historico.grid(row=0, column=0, sticky="w", padx=(0, 8))
+
+    btn_desfazer = criar_botao_ttk_so_icone(
+        container_historico,
+        nome_icone="caret-back-outline",
+        command=lambda: desfazer(),
+        refs=_refs_icones,
+    )
+    btn_desfazer.pack(side="left", padx=(0, 4))
+    vincular_tooltip(btn_desfazer, "Desfazer (Ctrl+Z)")
+    definir_estado_botao_icone(btn_desfazer, "disabled")
+
+    btn_refazer = criar_botao_ttk_so_icone(
+        container_historico,
+        nome_icone="caret-forward-outline",
+        command=lambda: refazer(),
+        refs=_refs_icones,
+    )
+    btn_refazer.pack(side="left")
+    vincular_tooltip(btn_refazer, "Refazer (Ctrl+Y)")
+    definir_estado_botao_icone(btn_refazer, "disabled")
 
     feedback_label = tk.Label(
-        frame_feedback,
+        frame_rodape_modulo,
         text="",
         font=("Arial", 10, "bold"),
-        fg="#a67c00"
+        fg="#a67c00",
+        bg="#ececec",
+        anchor="w",
     )
+    feedback_label.grid(row=0, column=1, sticky="ew", padx=(0, 12))
 
-    feedback_label.pack()
+    var_total = tk.StringVar(value="Total geral: R$ 0,00")
+    tk.Label(
+        frame_rodape_modulo,
+        textvariable=var_total,
+        font=("Arial", 11, "bold"),
+        fg="#006699",
+        bg="#ececec",
+        anchor="e",
+    ).grid(row=0, column=2, padx=(0, 12))
 
     # ---------------------------- #
     # FUNÇÃO CALCULAR QUANTIDADE   #
@@ -634,8 +815,14 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
         try:
             return float(valor)
-        except:
-            raise ValueError
+        except ValueError as exc:
+            raise ValueError from exc
+
+    def ler_float_seguro(entry):
+        try:
+            return ler_float(entry)
+        except ValueError:
+            return 0
 
     def calcular_quantidade(etapa, medidas):
 
@@ -666,15 +853,18 @@ def criar_area_privativa(parent, ctx, on_voltar):
         total = 0
 
         nome_anomalia = item["vicio"]
-        etapas = ctx.dados_json["anomalias"][nome_anomalia]["etapas"]
+        dados_anomalia = ctx.dados_json.get("anomalias", {}).get(nome_anomalia)
+        if not dados_anomalia:
+            return 0
+        etapas = dados_anomalia.get("etapas", [])
 
         for comodo in item["comodos"]:
 
-            piso = ler_float(comodos[comodo]["piso"])
-            arg = ler_float(comodos[comodo]["rev_arg"])
+            piso = ler_float_seguro(comodos[comodo]["piso"])
+            arg = ler_float_seguro(comodos[comodo]["rev_arg"])
 
             if comodos[comodo]["rev_cer"].cget("state") != "disabled":
-                cer = ler_float(comodos[comodo]["rev_cer"])
+                cer = ler_float_seguro(comodos[comodo]["rev_cer"])
             else:
                 cer = 0
 
@@ -701,6 +891,141 @@ def criar_area_privativa(parent, ctx, on_voltar):
                 total += quantidade * valor
 
         return total
+
+    def medidas_do_comodo(comodo):
+        piso = ler_float_seguro(comodos[comodo]["piso"])
+        arg = ler_float_seguro(comodos[comodo]["rev_arg"])
+        if comodos[comodo]["rev_cer"].cget("state") != "disabled":
+            cer = ler_float_seguro(comodos[comodo]["rev_cer"])
+        else:
+            cer = 0
+        return {"piso": piso, "rev_arg": arg, "rev_cer": cer}
+
+    def montar_linhas_previa(item):
+        linhas = []
+        nome_anomalia = item["vicio"]
+        dados_anomalia = ctx.dados_json.get("anomalias", {}).get(nome_anomalia) or {}
+        etapas = dados_anomalia.get("etapas") or []
+        estado = combo_estado.get().strip()
+        repintura_executada = set()
+        for comodo in item["comodos"]:
+            medidas = medidas_do_comodo(comodo)
+            for etapa in etapas:
+                quantidade = calcular_quantidade(etapa, medidas)
+                codigo = str(etapa.get("codigo_sinapi", "")).strip()
+                grupo_planilha = etapa.get("grupo_planilha", "")
+                if grupo_planilha == "repintura":
+                    chave = (comodo, codigo)
+                    if chave in repintura_executada:
+                        continue
+                    repintura_executada.add(chave)
+                linha_sinapi = linha_sinapi_codigo(codigo, estado) if estado else None
+                if linha_sinapi is not None:
+                    descricao = linha_sinapi.get("descricao", "")
+                    valor = linha_sinapi.get("custo", 0)
+                else:
+                    descricao = (
+                        "Selecione um Estado"
+                        if not estado
+                        else "Código não encontrado"
+                    )
+                    valor = 0
+                linhas.append({
+                    "comodo": comodo,
+                    "codigo": codigo,
+                    "descricao": descricao,
+                    "unidade": etapa.get("unidade", ""),
+                    "quantidade": quantidade,
+                    "valor_unit": valor,
+                    "total": quantidade * valor,
+                    "grupo": grupo_planilha,
+                })
+        return linhas
+
+    def abrir_previa_anomalia(item):
+        if not item:
+            return
+        DialogoPreviaAnomalia(
+            root,
+            nome_anomalia=item["vicio"],
+            comodos=list(item.get("comodos") or []),
+            estado=combo_estado.get().strip(),
+            linhas=montar_linhas_previa(item),
+            subtotal=calcular_subtotal_anomalia(item),
+        )
+
+    def ao_clicar_previa(event):
+        row = tree_anomalias.identify_row(event.y)
+        if not row or tree_anomalias.parent(row):
+            return
+        elemento = str(tree_anomalias.identify_element(event.x, event.y) or "")
+        if "image" not in elemento.lower():
+            return
+        indice = tree_anomalias.index(row)
+        if 0 <= indice < len(lista_anomalias):
+            abrir_previa_anomalia(lista_anomalias[indice])
+
+    def ao_mover_lista(event):
+        row = tree_anomalias.identify_row(event.y)
+        elemento = str(tree_anomalias.identify_element(event.x, event.y) or "")
+        if row and not tree_anomalias.parent(row) and "image" in elemento.lower():
+            tree_anomalias.configure(cursor="hand2")
+        else:
+            tree_anomalias.configure(cursor="")
+
+    tree_anomalias.bind("<ButtonRelease-1>", ao_clicar_previa)
+    tree_anomalias.bind("<Motion>", ao_mover_lista)
+
+    def calcular_total_geral():
+        total_itens = 0.0
+        for item in lista_anomalias:
+            total_itens += calcular_subtotal_anomalia(item)
+
+        itens_gerais = ctx.dados_json.get("itens_gerais", {})
+        estado = combo_estado.get().strip()
+        for chave, item in itens_gerais.items():
+            incluir = False
+            if item.get("tipo") == "automatico":
+                incluir = True
+            elif item.get("tipo") == "checkbox":
+                if chave == "acompanhamento_tecnico" and var_acompanhamento.get():
+                    incluir = True
+            if not incluir:
+                continue
+            for etapa in item.get("etapas", []):
+                quantidade = calcular_quantidade(etapa, {})
+                linha_sinapi = linha_sinapi_codigo(str(etapa["codigo_sinapi"]), estado)
+                valor = linha_sinapi.get("custo", 0) if linha_sinapi is not None else 0
+                total_itens += quantidade * valor
+
+        try:
+            bdi = ler_float_seguro(entrada_bdi) / 100
+        except Exception:
+            bdi = 0
+        valor_bdi = total_itens * bdi
+        valor_eventuais = (total_itens + valor_bdi) * 0.10 if var_eventuais.get() else 0
+        aluguel = ler_float_seguro(entrada_aluguel)
+        return total_itens + valor_bdi + valor_eventuais + aluguel
+
+    def atualizar_total_rodape():
+        var_total.set(f"Total geral: {formatar_moeda_br(calcular_total_geral())}")
+
+    def atualizar_valores(_event=None):
+        atualizar_tree()
+
+    def agendar_recalculo(_event=None):
+        nonlocal _job_recalculo
+        if _job_recalculo is not None:
+            try:
+                root.after_cancel(_job_recalculo)
+            except tk.TclError:
+                pass
+
+        def _tick():
+            atualizar_valores()
+            registrar_historico("Editar metragem, BDI ou aluguel", coalescer=True)
+
+        _job_recalculo = root.after(180, _tick)
 
     # ---------------- #
     # NOME DE ARQUIVOS #
@@ -775,7 +1100,13 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
             nome_anomalia = item["vicio"]
             comodos_afetados = item["comodos"]
-            dados_anomalia = ctx.dados_json["anomalias"][nome_anomalia]
+            dados_anomalia = ctx.dados_json.get("anomalias", {}).get(nome_anomalia)
+            if not dados_anomalia:
+                mostrar_feedback(
+                    f"Anomalia não encontrada no cadastro: {nome_anomalia}",
+                    "red",
+                )
+                return
             grupo_reparo = dados_anomalia.get("grupo_reparo", nome_anomalia)
             etapas = dados_anomalia["etapas"]
 
@@ -1330,47 +1661,237 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # ---------------------------- #
     # BOTÃO GERAR ORÇAMENTO        #
     # ---------------------------- #
-    botao_gerar = tk.Button(
-        frame_principal,
-        text="Gerar Orçamento",
-        font=("Arial", 11, "bold"),
-        padx=12,
-        pady=6,
-        #   # cores do botão
-        #   bg="#006699",
-        #   fg="white",
-        #   activebackground="#00557a",
-        #   activeforeground="white",
-        #   relief="flat",
-        #   bd=0,
-        #   cursor="hand2",
-
-        command=gerar_orcamento
+    botao_gerar = criar_botao_ttk_com_icone(
+        frame_rodape_modulo,
+        texto="Gerar orçamento",
+        nome_icone="save-outline",
+        command=gerar_orcamento,
+        estilo="Add.TButton",
+        refs=_refs_icones,
     )
+    botao_gerar.grid(row=0, column=3, sticky="e")
 
-    botao_gerar.pack(pady=(5,10))
+    def ao_opcao_orcamento(_event=None):
+        atualizar_valores()
+        registrar_historico("Alterar opções do orçamento")
 
-    ajustar_layout_canvas._pronto = True
-    canvas.bind("<Configure>", ajustar_layout_canvas)
-    root.update_idletasks()
-    ajustar_layout_canvas(
-        type("Evt", (), {
-            "width": canvas.winfo_width(),
-            "height": canvas.winfo_height(),
-        })()
-    )
+    chk_acompanhamento.config(command=ao_opcao_orcamento)
+    chk_eventuais.config(command=ao_opcao_orcamento)
+    entrada_bdi.bind("<KeyRelease>", agendar_recalculo)
+    entrada_bdi.bind("<FocusOut>", atualizar_valores)
+    entrada_aluguel.bind("<KeyRelease>", agendar_recalculo)
+    entrada_aluguel.bind("<FocusOut>", atualizar_valores)
+    for campos in comodos.values():
+        for entrada in campos.values():
+            entrada.bind("<KeyRelease>", agendar_recalculo)
+            entrada.bind("<FocusOut>", atualizar_valores)
+
+    HISTORICO_MAX = 40
+
+    def capturar_snapshot():
+        metragens = {}
+        for nome, campos in comodos.items():
+            metragens[nome] = {
+                chave: campos[chave].get()
+                for chave in ("piso", "rev_arg", "rev_cer")
+            }
+        return {
+            "anomalias": deepcopy(lista_anomalias),
+            "metragens": metragens,
+            "bdi": entrada_bdi.get(),
+            "aluguel": entrada_aluguel.get(),
+            "acompanhamento": bool(var_acompanhamento.get()),
+            "eventuais": bool(var_eventuais.get()),
+            "estado": combo_estado.get(),
+        }
+
+    def aplicar_snapshot(snap):
+        nonlocal _aplicando_historico
+        _aplicando_historico = True
+        try:
+            lista_anomalias.clear()
+            lista_anomalias.extend(deepcopy(snap.get("anomalias") or []))
+            for nome, valores in (snap.get("metragens") or {}).items():
+                if nome not in comodos:
+                    continue
+                for chave, valor in valores.items():
+                    entrada = comodos[nome][chave]
+                    if str(entrada.cget("state")) == "disabled":
+                        continue
+                    entrada.delete(0, "end")
+                    entrada.insert(0, valor)
+            entrada_bdi.delete(0, "end")
+            entrada_bdi.insert(0, snap.get("bdi", ""))
+            entrada_aluguel.delete(0, "end")
+            entrada_aluguel.insert(0, snap.get("aluguel", ""))
+            var_acompanhamento.set(bool(snap.get("acompanhamento")))
+            var_eventuais.set(bool(snap.get("eventuais")))
+            estado = str(snap.get("estado") or "")
+            if estado:
+                combo_estado.set(estado)
+            atualizar_valores()
+        finally:
+            _aplicando_historico = False
+
+    def atualizar_botoes_historico():
+        definir_estado_botao_icone(
+            btn_desfazer, "normal" if _historico_undo else "disabled"
+        )
+        definir_estado_botao_icone(
+            btn_refazer, "normal" if _historico_redo else "disabled"
+        )
+
+    def registrar_historico(descricao, *, coalescer=False):
+        nonlocal _snapshot_base
+        if _aplicando_historico:
+            return
+        depois = capturar_snapshot()
+        antes = _snapshot_base if _snapshot_base is not None else depois
+        if antes == depois:
+            _snapshot_base = depois
+            return
+        if (
+            coalescer
+            and _historico_undo
+            and _historico_undo[-1]["descricao"] == descricao
+        ):
+            _historico_undo[-1]["depois"] = depois
+        else:
+            _historico_undo.append(
+                {"antes": antes, "depois": depois, "descricao": descricao}
+            )
+            if len(_historico_undo) > HISTORICO_MAX:
+                del _historico_undo[0 : len(_historico_undo) - HISTORICO_MAX]
+        _historico_redo.clear()
+        _snapshot_base = depois
+        atualizar_botoes_historico()
+
+    def desfazer():
+        nonlocal _snapshot_base
+        if not _historico_undo or _aplicando_historico:
+            return
+        entrada = _historico_undo.pop()
+        _historico_redo.append(entrada)
+        aplicar_snapshot(entrada["antes"])
+        _snapshot_base = capturar_snapshot()
+        atualizar_botoes_historico()
+        mostrar_feedback(f"Desfeita — {entrada['descricao']}", "orange")
+
+    def refazer():
+        nonlocal _snapshot_base
+        if not _historico_redo or _aplicando_historico:
+            return
+        entrada = _historico_redo.pop()
+        _historico_undo.append(entrada)
+        aplicar_snapshot(entrada["depois"])
+        _snapshot_base = capturar_snapshot()
+        atualizar_botoes_historico()
+        mostrar_feedback(f"Refeita — {entrada['descricao']}", "green")
+
+    def widget_do_modulo(widget):
+        atual = widget
+        while atual is not None:
+            if atual is wrapper:
+                return True
+            try:
+                atual = atual.master
+            except (tk.TclError, AttributeError):
+                return False
+        return False
+
+    def ao_tecla_desfazer(event):
+        if not widget_do_modulo(event.widget):
+            return
+        desfazer()
+        return "break"
+
+    def ao_tecla_refazer(event):
+        if not widget_do_modulo(event.widget):
+            return
+        refazer()
+        return "break"
+
+    def desvincular_atalhos(_event=None):
+        if _event is not None and _event.widget is not wrapper:
+            return
+        for widget, sequencia, func_id in _binds_historico:
+            try:
+                widget.unbind(sequencia, func_id)
+            except tk.TclError:
+                pass
+        _binds_historico.clear()
+
+    for sequencia, callback in (
+        ("<Control-z>", ao_tecla_desfazer),
+        ("<Control-Z>", ao_tecla_desfazer),
+        ("<Control-y>", ao_tecla_refazer),
+        ("<Control-Y>", ao_tecla_refazer),
+        ("<Control-Shift-z>", ao_tecla_refazer),
+        ("<Control-Shift-Z>", ao_tecla_refazer),
+    ):
+        func_id = root.bind(sequencia, callback, add="+")
+        _binds_historico.append((root, sequencia, func_id))
+    wrapper.bind("<Destroy>", desvincular_atalhos)
+
+    _snapshot_base = capturar_snapshot()
+    atualizar_botoes_historico()
+
     ctx.registrar_callback_sinapi(aplicar_sinapi_na_interface)
     aplicar_sinapi_na_interface()
+    atualizar_total_rodape()
+
+    def ao_conjunto_idebras(nome_conjunto):
+        resultado = resolver_uf_conjunto(nome_conjunto)
+        valores = list(combo_estado["values"] or [])
+        if resultado.uf:
+            if resultado.uf not in valores:
+                mostrar_feedback(
+                    f"Estado {resultado.uf} identificado, mas não há SINAPI para essa UF.",
+                    "orange",
+                    temporario=False,
+                )
+                return
+            if combo_estado.get().strip() != resultado.uf:
+                combo_estado.set(resultado.uf)
+                atualizar_valores()
+                registrar_historico("Definir estado pelo conjunto")
+                mostrar_feedback(
+                    f"Estado definido a partir do conjunto: {resultado.uf}.",
+                    "green",
+                )
+            return
+        if resultado.motivo == "ambigua":
+            ufs = ", ".join(resultado.ufs_possiveis)
+            mostrar_feedback(
+                f"Cidade '{resultado.cidade}' existe em mais de um estado ({ufs}). "
+                "Selecione o Estado manualmente.",
+                "orange",
+                temporario=False,
+            )
+            return
+        if resultado.cidade:
+            mostrar_feedback(
+                f"Cidade '{resultado.cidade}' não reconhecida para preencher o Estado. "
+                "Selecione o Estado e informe o suporte/administrador.",
+                "orange",
+                temporario=False,
+            )
+
+    ctrl_idebras.update(
+        _montar_painel_idebras(
+            frame_idebras_host,
+            root,
+            preencher_metragens,
+            _refs_icones,
+            on_conjunto=ao_conjunto_idebras,
+        )
+    )
 
     def ativar_scroll():
-        if not getattr(ativar_scroll, "_ativo", False):
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
-            ativar_scroll._ativo = True
+        return None
 
     def desativar_scroll():
-        if getattr(ativar_scroll, "_ativo", False):
-            root.unbind_all("<MouseWheel>")
-            ativar_scroll._ativo = False
+        return None
 
     wrapper.aplicar_sinapi = aplicar_sinapi_na_interface
     wrapper.ativar_scroll = ativar_scroll
@@ -1378,3 +1899,308 @@ def criar_area_privativa(parent, ctx, on_voltar):
     wrapper.focar = lambda: entrada_proprietario.focus()
 
     return wrapper
+
+
+def _montar_painel_idebras(host, root, preencher_metragens, refs_icones, on_conjunto=None):
+    """Painel de conjunto/planta do Idebras, preenchido de forma assíncrona."""
+    cliente = IdebrasClient()
+    conjuntos = []
+    plantas = []
+    conjunto_por_nome = {}
+    conjunto_carregado_id = None
+
+    frame = tk.LabelFrame(host, text="Planta do conjunto (Idebras)", bg="#ececec", padx=8, pady=6)
+    frame.pack(fill="x")
+    frame.columnconfigure(1, weight=1)
+    frame.columnconfigure(3, weight=1)
+
+    var_status = tk.StringVar(value="Conectando ao Idebras...")
+    var_conjunto = tk.StringVar()
+    var_planta = tk.StringVar()
+
+    tk.Label(frame, text="Conjunto:", bg="#ececec").grid(row=0, column=0, padx=(0, 4), sticky="w")
+    campo_conjunto = CampoListaPesquisavel(
+        frame,
+        textvariable=var_conjunto,
+        normalizar=normalizar_ambiente,
+        bg="#ececec",
+    )
+    campo_conjunto.grid(row=0, column=1, padx=(0, 10), sticky="ew")
+
+    tk.Label(frame, text="Planta:", bg="#ececec").grid(row=0, column=2, padx=(0, 4), sticky="w")
+    combo_planta = ttk.Combobox(frame, textvariable=var_planta, state="readonly")
+    combo_planta.grid(row=0, column=3, sticky="ew")
+
+    linha_status = tk.Frame(frame, bg="#ececec")
+    linha_status.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+    linha_status.columnconfigure(0, weight=1)
+
+    tk.Label(
+        linha_status,
+        textvariable=var_status,
+        fg="#555555",
+        bg="#ececec",
+        anchor="w",
+    ).grid(row=0, column=0, sticky="ew", padx=(0, 8))
+
+    slot_ampulheta = tk.Frame(linha_status, bg="#ececec", width=30, height=26)
+    slot_ampulheta.grid(row=0, column=1, padx=(0, 8), sticky="e")
+    slot_ampulheta.pack_propagate(False)
+    ampulheta = IndicadorAmpulheta(
+        slot_ampulheta,
+        altura=24,
+        cor="#006699",
+        bg="#ececec",
+        refs=refs_icones,
+    )
+
+    btn_visualizar = criar_botao_ttk_com_icone(
+        linha_status,
+        texto="Visualizar ambientes",
+        nome_icone="search-outline",
+        command=lambda: None,
+        refs=refs_icones,
+    )
+    btn_visualizar.grid(row=0, column=2, sticky="e")
+
+    btn_preencher = criar_botao_ttk_com_icone(
+        linha_status,
+        texto="Preencher metragens",
+        nome_icone="color-wand-outline",
+        command=lambda: None,
+        refs=refs_icones,
+    )
+    btn_preencher.grid(row=0, column=3, sticky="e", padx=(6, 0))
+    vincular_tooltip(
+        btn_preencher,
+        "Preencher metragens da planta nos cômodos",
+    )
+
+    def na_ui(fn):
+        try:
+            if root.winfo_exists():
+                root.after(0, fn)
+        except tk.TclError:
+            pass
+
+    def atualizar_combo_conjuntos():
+        campo_conjunto.definir_opcoes([c.nome for c in conjuntos])
+
+    def conjunto_selecionado():
+        nome = var_conjunto.get().strip()
+        encontrado = conjunto_por_nome.get(nome)
+        if encontrado is not None:
+            return encontrado
+        chave = normalizar_ambiente(nome)
+        if not chave:
+            return None
+        matches = [c for c in conjuntos if chave in normalizar_ambiente(c.nome)]
+        if len(matches) == 1:
+            var_conjunto.set(matches[0].nome)
+            return matches[0]
+        return None
+
+    def planta_selecionada():
+        nome = var_planta.get()
+        for planta in plantas:
+            rotulo = _rotulo_planta(planta)
+            if rotulo == nome:
+                return planta
+        return plantas[0] if plantas else None
+
+    def ao_escolher_conjunto(_event=None):
+        nonlocal conjunto_carregado_id
+        conjunto = conjunto_selecionado()
+        if conjunto is None:
+            return
+        if var_conjunto.get() != conjunto.nome:
+            var_conjunto.set(conjunto.nome)
+        if on_conjunto is not None:
+            on_conjunto(conjunto.nome)
+        if conjunto.id == conjunto_carregado_id and plantas:
+            return
+        conjunto_carregado_id = conjunto.id
+        var_status.set(f"Buscando plantas de {conjunto.nome}...")
+        var_planta.set("")
+        combo_planta["values"] = []
+
+        def trabalho():
+            try:
+                encontradas = cliente.pesquisar_plantas(conjunto.id)
+            except IdebrasError as exc:
+                msg = str(exc)
+                na_ui(lambda m=msg: var_status.set(m))
+                return
+            except Exception as exc:
+                msg = f"Erro ao buscar plantas: {exc}"
+                na_ui(lambda m=msg: var_status.set(m))
+                return
+
+            def aplicar():
+                nonlocal plantas
+                plantas = encontradas
+                combo_planta["values"] = [_rotulo_planta(p) for p in plantas]
+                if plantas:
+                    var_planta.set(_rotulo_planta(plantas[0]))
+                    var_status.set(
+                        f"{len(plantas)} planta(s) encontrada(s) para {conjunto.nome}."
+                    )
+                else:
+                    var_status.set("Nenhuma planta cadastrada para este conjunto.")
+
+            na_ui(aplicar)
+
+        threading.Thread(target=trabalho, daemon=True).start()
+
+    def iniciar_carregamento(mensagem):
+        var_status.set(mensagem)
+        ampulheta.iniciar()
+        definir_estado_botao_icone(btn_visualizar, "disabled")
+        definir_estado_botao_icone(btn_preencher, "disabled")
+
+    def parar_carregamento():
+        ampulheta.parar()
+        definir_estado_botao_icone(btn_visualizar, "normal")
+        definir_estado_botao_icone(btn_preencher, "normal")
+
+    def carregar_ambientes(ao_sucesso, mensagem):
+        conjunto = conjunto_selecionado()
+        planta = planta_selecionada()
+        if conjunto is None:
+            var_status.set("Digite ou selecione um conjunto.")
+            return
+        if on_conjunto is not None:
+            on_conjunto(conjunto.nome)
+        if planta is None and var_planta.get().strip():
+            var_status.set("Selecione uma planta.")
+            return
+        if planta is not None and not planta.event_target_ambientes:
+            var_status.set("Esta planta não possui ambientes para visualizar.")
+            return
+        iniciar_carregamento(mensagem)
+
+        def trabalho():
+            try:
+                encontradas = cliente.pesquisar_plantas(conjunto.id)
+                if not encontradas:
+                    na_ui(lambda: (
+                        parar_carregamento(),
+                        var_status.set("Nenhuma planta cadastrada para este conjunto."),
+                    ))
+                    return
+                if planta is not None:
+                    planta_atual = next(
+                        (p for p in encontradas if p.nome == planta.nome),
+                        encontradas[0],
+                    )
+                else:
+                    planta_atual = encontradas[0]
+                if not planta_atual.event_target_ambientes:
+                    na_ui(lambda: (
+                        parar_carregamento(),
+                        var_status.set("Esta planta não possui ambientes para visualizar."),
+                    ))
+                    return
+                ambientes = cliente.obter_ambientes(planta_atual.event_target_ambientes)
+            except IdebrasError as exc:
+                msg = str(exc)
+                na_ui(lambda m=msg: (parar_carregamento(), var_status.set(m)))
+                return
+            except Exception as exc:
+                msg = f"Erro ao carregar ambientes: {exc}"
+                na_ui(lambda m=msg: (parar_carregamento(), var_status.set(m)))
+                return
+
+            def concluir():
+                parar_carregamento()
+                ao_sucesso(conjunto, planta_atual, ambientes)
+
+            na_ui(concluir)
+
+        threading.Thread(target=trabalho, daemon=True).start()
+
+    def visualizar_ambientes():
+        def abrir(conjunto, planta_atual, ambientes):
+            if not ambientes:
+                var_status.set("A planta não possui ambientes cadastrados.")
+                return
+            DialogoAmbientesPlanta(
+                root,
+                conjunto_nome=conjunto.nome,
+                planta=planta_atual,
+                ambientes=ambientes,
+                on_aplicar=preencher_metragens,
+            )
+            var_status.set(
+                f"{len(ambientes)} ambiente(s) carregados de {planta_atual.nome}."
+            )
+
+        carregar_ambientes(abrir, "Carregando ambientes da planta...")
+
+    def preencher_metragens_planta():
+        def aplicar(conjunto, planta_atual, ambientes):
+            if not ambientes:
+                var_status.set("A planta não possui ambientes cadastrados.")
+                return
+            preencher_metragens(medidas_para_orcamento(ambientes))
+            mapeados = sum(1 for amb in ambientes if amb.comodo_orc)
+            var_status.set(
+                f"Metragens preenchidas a partir de {planta_atual.nome} "
+                f"({mapeados} cômodo(s) mapeado(s))."
+            )
+
+        carregar_ambientes(aplicar, "Preenchendo metragens da planta...")
+
+    def selecionar_conjunto(nome):
+        if not nome:
+            return
+        var_conjunto.set(nome)
+        ao_escolher_conjunto()
+
+    btn_visualizar.configure(command=visualizar_ambientes)
+    btn_visualizar._orc_command = visualizar_ambientes
+    btn_preencher.configure(command=preencher_metragens_planta)
+    btn_preencher._orc_command = preencher_metragens_planta
+    campo_conjunto.on_escolher = lambda _nome: ao_escolher_conjunto()
+
+    def conectar():
+        def trabalho():
+            try:
+                carregados = cliente.listar_conjuntos()
+            except IdebrasError as exc:
+                msg = str(exc)
+                na_ui(lambda m=msg: var_status.set(m))
+                return
+            except Exception as exc:
+                msg = f"Erro Idebras: {exc}"
+                na_ui(lambda m=msg: var_status.set(m))
+                return
+
+            def aplicar():
+                nonlocal conjuntos, conjunto_por_nome
+                conjuntos = carregados
+                conjunto_por_nome = {c.nome: c for c in conjuntos}
+                atualizar_combo_conjuntos()
+                var_status.set(
+                    f"Conectado no Idebras · {len(conjuntos)} conjuntos."
+                )
+
+            na_ui(aplicar)
+
+        threading.Thread(target=trabalho, daemon=True).start()
+
+    conectar()
+    return {
+        "cliente": cliente,
+        "obter_conjuntos": lambda: conjuntos,
+        "selecionar_conjunto": selecionar_conjunto,
+    }
+
+
+def _rotulo_planta(planta):
+    partes = [planta.nome]
+    if planta.area_total:
+        partes.append(f"{planta.area_total} m²")
+    if planta.metodo_construtivo:
+        partes.append(planta.metodo_construtivo)
+    return " · ".join(partes)

@@ -3,6 +3,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 datas = [
     ('vicios_construtivos.json', '.'),
+    ('dados/municipios_uf.json', 'dados'),
     ('icone.ico', '.'),
     ('assets/icons', 'assets/icons'),
     ('assets/modelos', 'assets/modelos'),
@@ -58,6 +59,9 @@ a = Analysis(
         'ui.orcamento_customizado_modulo',
         'ui.selecao_orcamentos_customizado',
         'core.precarga_catalogos',
+        'core.idebras_client',
+        'core.municipios_br',
+        'core.vicios_storage',
     ],
     hookspath=[],
     hooksconfig={},

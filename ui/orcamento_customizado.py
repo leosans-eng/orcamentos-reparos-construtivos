@@ -60,6 +60,7 @@ from ui.icones import (
     criar_botao_ttk_com_icone,
     criar_botao_ttk_so_icone,
     criar_icone_svg,
+    criar_label_icone,
     definir_estado_botao_icone,
 )
 from ui.recarga_catalogo import RecarregadorCatalogo
@@ -732,6 +733,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.texto_item_substituindo = (texto_item_substituindo or "").strip() or None
         self.label_item_substituindo = None
         self._job_busca = None
+        self._refs_icones = []
         self.mostrar_quantidade = mostrar_quantidade
         self.texto_confirmar = texto_confirmar
         self.texto_confirmar_fechar = texto_confirmar_fechar
@@ -795,9 +797,11 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.combo_tipo.grid(row=0, column=5, padx=4, pady=3, sticky="w")
         self.combo_tipo.set(TIPO_TODOS)
 
-        tk.Label(linha_filtros, text="Buscar:", bg="#ececec").grid(
-            row=1, column=0, padx=(0, 4), pady=3, sticky="w"
-        )
+        criar_label_icone(
+            linha_filtros,
+            "funnel-outline",
+            refs=self._refs_icones,
+        ).grid(row=1, column=0, padx=(0, 4), pady=3, sticky="w")
         self.var_busca = tk.StringVar()
         self.entrada_busca = ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36)
         self.entrada_busca.grid(row=1, column=1, padx=4, pady=3, sticky="ew")
@@ -1217,6 +1221,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         self.mostrar_quantidade = mostrar_quantidade
         self.texto_confirmar = texto_confirmar
         self._ultima_largura_wrap = 0
+        self._refs_icones = []
 
         self.title(titulo)
         self.geometry("900x620")
@@ -1257,9 +1262,11 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         else:
             self.combo_estado.set(PLACEHOLDER_ESTADO)
 
-        tk.Label(linha_filtros, text="Filtrar:", bg="#ececec").grid(
-            row=1, column=0, padx=(0, 4), pady=3, sticky="w"
-        )
+        criar_label_icone(
+            linha_filtros,
+            "funnel-outline",
+            refs=self._refs_icones,
+        ).grid(row=1, column=0, padx=(0, 4), pady=3, sticky="w")
         self.var_busca = tk.StringVar()
         self.var_busca.trace_add("write", lambda *_a: self._atualizar_lista())
         self.entrada_busca = ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36)
@@ -1712,13 +1719,17 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         painel_grade.pack(fill="both", expand=True, padx=4, pady=(0, 6))
 
         self._barra_filtro_grade = tk.Frame(painel_grade, bg="#ececec")
-        tk.Label(self._barra_filtro_grade, text="Filtrar:", bg="#ececec").pack(side="left")
+        criar_label_icone(
+            self._barra_filtro_grade,
+            "funnel-outline",
+            refs=self._icones_botoes,
+        ).pack(side="left", padx=(0, 4))
         self.var_filtro_grade = tk.StringVar()
         self.var_filtro_grade.trace_add("write", self._ao_filtrar_grade)
         self._entrada_filtro_grade = ttk.Entry(
             self._barra_filtro_grade, textvariable=self.var_filtro_grade, width=28
         )
-        self._entrada_filtro_grade.pack(side="left", padx=(4, 8))
+        self._entrada_filtro_grade.pack(side="left", padx=(0, 8))
         tk.Label(
             self._barra_filtro_grade,
             text="código ou descrição  ·  Esc",

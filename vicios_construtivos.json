@@ -1,206 +1,203 @@
 {
   "anomalias": {
-
     "Desplacamento de pisos cerâmicos em área seca": {
       "grupo_reparo": "reparo_pisos_ceramicos",
       "etapas": [
-
         {
           "codigo_sinapi": "97633",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "97632",
           "unidade": "m",
           "tipo_calculo": "perimetro",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "87247",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "88648",
           "unidade": "m",
           "tipo_calculo": "perimetro",
           "coeficiente": 1.0
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Circulação",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Área Externa",
+        "Varanda"
       ]
     },
-
     "Desplacamento de pisos cerâmicos em área molhada": {
       "grupo_reparo": "reparo_pisos_ceramicos",
       "etapas": [
-
         {
           "codigo_sinapi": "97633",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "98554",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "87757",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "87247",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "1381",
           "unidade": "KG",
           "tipo_calculo": "area_piso",
           "coeficiente": 5.0
         }
-
+      ],
+      "comodos_permitidos": [
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Varanda"
       ]
     },
-
     "Manchas nos pisos": {
       "grupo_reparo": "reparo_pisos_ceramicos",
       "etapas": [
-
         {
           "codigo_sinapi": "97633",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "87247",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1.0
         }
-
+      ],
+      "comodos_permitidos": [
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Varanda"
       ]
     },
-
     "Desplacamento de azulejos": {
       "grupo_reparo": "reparo_azulejos",
       "etapas": [
-
         {
           "codigo_sinapi": "97633",
           "unidade": "m²",
           "tipo_calculo": "area_rev_cer",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "87275",
           "unidade": "m²",
           "tipo_calculo": "area_rev_cer",
           "coeficiente": 1.0
         }
-
+      ],
+      "comodos_permitidos": [
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço"
       ]
     },
-
     "Manchas nos azulejos": {
       "grupo_reparo": "reparo_azulejos",
       "etapas": [
-
         {
           "codigo_sinapi": "97633",
           "unidade": "m²",
           "tipo_calculo": "area_rev_cer",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "87275",
           "unidade": "m²",
           "tipo_calculo": "area_rev_cer",
           "coeficiente": 1.0
         }
-
+      ],
+      "comodos_permitidos": [
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço"
       ]
     },
-
     "Falta de DR": {
       "grupo_reparo": "reparo_dr",
       "etapas": [
-
         {
           "codigo_sinapi": "88264",
           "unidade": "H",
           "tipo_calculo": "fixo",
           "coeficiente": 4.0
         },
-
         {
           "codigo_sinapi": "39447",
           "unidade": "Un",
           "tipo_calculo": "fixo",
           "coeficiente": 1.0
         }
-
+      ],
+      "comodos_permitidos": [
+        "Residência Inteira"
       ]
     },
-
     "Infiltração pela esquadria": {
       "grupo_reparo": "reparo_esquadrias",
       "etapas": [
-
         {
           "codigo_sinapi": "88309",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 4
         },
-
         {
           "codigo_sinapi": "88316",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 2
         },
-
         {
           "codigo_sinapi": "98562",
           "unidade": "m²",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1
         },
-
         {
           "codigo_sinapi": "101965",
           "unidade": "m",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "142",
           "unidade": "un",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1
         },
-
         {
           "codigo_sinapi": "88485",
           "unidade": "m²",
@@ -208,7 +205,6 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         },
-
         {
           "codigo_sinapi": "104642",
           "unidade": "m²",
@@ -216,35 +212,37 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço"
       ]
     },
-
     "Infiltração pela cobertura": {
       "grupo_reparo": "reparo_umidade_teto",
       "etapas": [
-
         {
           "codigo_sinapi": "88316",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 2.0
         },
-
         {
           "codigo_sinapi": "98546",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1
         },
-
         {
           "codigo_sinapi": "87769",
           "unidade": "m²",
           "tipo_calculo": "area_piso",
           "coeficiente": 1
         },
-
         {
           "codigo_sinapi": "104640",
           "unidade": "m²",
@@ -252,28 +250,33 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Circulação",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Varanda"
       ]
     },
-
     "Umidade na parede": {
       "grupo_reparo": "reparo_umidade_parede",
       "etapas": [
-
         {
           "codigo_sinapi": "97631",
           "unidade": "m²",
           "tipo_calculo": "area_rev_arg",
           "coeficiente": 0.125
         },
-
         {
           "codigo_sinapi": "98562",
           "unidade": "m²",
           "tipo_calculo": "area_rev_arg",
           "coeficiente": 0.125
         },
-
         {
           "codigo_sinapi": "88485",
           "unidade": "m²",
@@ -281,7 +284,6 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         },
-
         {
           "codigo_sinapi": "104642",
           "unidade": "m²",
@@ -289,28 +291,34 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Circulação",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Área Externa",
+        "Varanda"
       ]
     },
-
     "Trinca na laje percorrendo o eletroduto": {
       "grupo_reparo": "reparo_trincas",
       "etapas": [
-
         {
           "codigo_sinapi": "88309",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 2.0
         },
-
         {
           "codigo_sinapi": "157",
           "unidade": "KG",
           "tipo_calculo": "por_comodo",
           "coeficiente": 0.2
         },
-
         {
           "codigo_sinapi": "104640",
           "unidade": "m²",
@@ -318,70 +326,69 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Circulação",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Varanda"
       ]
     },
-
     "Trinca saindo da janela": {
       "grupo_reparo": "reparo_trincas",
       "etapas": [
-
         {
           "codigo_sinapi": "5318",
           "unidade": "L",
           "tipo_calculo": "por_comodo",
           "coeficiente": 0.12
         },
-
         {
           "codigo_sinapi": "88316",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "97631",
           "unidade": "m²",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "87777",
           "unidade": "m²",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "34558",
           "unidade": "m",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "157",
           "unidade": "KG",
           "tipo_calculo": "por_comodo",
           "coeficiente": 0.35
         },
-
         {
           "codigo_sinapi": "88309",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "43465",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "88485",
           "unidade": "m²",
@@ -389,79 +396,76 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         },
-
         {
           "codigo_sinapi": "104642",
           "unidade": "m²",
           "tipo_calculo": "area_rev_arg",
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
-
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Circulação",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Área Externa"
       ]
     },
-
     "Trinca em parede": {
       "grupo_reparo": "reparo_trincas",
       "etapas": [
-
         {
           "codigo_sinapi": "5318",
           "unidade": "L",
           "tipo_calculo": "por_comodo",
           "coeficiente": 0.12
         },
-
         {
           "codigo_sinapi": "88316",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "97631",
           "unidade": "m²",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "87777",
           "unidade": "m²",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "34558",
           "unidade": "m",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.0
         },
-
         {
           "codigo_sinapi": "157",
           "unidade": "KG",
           "tipo_calculo": "por_comodo",
           "coeficiente": 0.35
         },
-
         {
           "codigo_sinapi": "88309",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "43465",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 1.2
         },
-
         {
           "codigo_sinapi": "88485",
           "unidade": "m²",
@@ -469,7 +473,6 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         },
-
         {
           "codigo_sinapi": "104642",
           "unidade": "m²",
@@ -477,28 +480,34 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Circulação",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Área Externa",
+        "Varanda"
       ]
     },
-
     "Trinca contígua à esquadria": {
       "grupo_reparo": "reparo_trincas",
       "etapas": [
-
         {
           "codigo_sinapi": "88309",
           "unidade": "H",
           "tipo_calculo": "por_comodo",
           "coeficiente": 2.0
         },
-
         {
           "codigo_sinapi": "157",
           "unidade": "KG",
           "tipo_calculo": "por_comodo",
           "coeficiente": 0.2
         },
-
         {
           "codigo_sinapi": "88485",
           "unidade": "m²",
@@ -506,7 +515,6 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         },
-
         {
           "codigo_sinapi": "104642",
           "unidade": "m²",
@@ -514,14 +522,21 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Circulação",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Área Externa"
       ]
     },
-
     "Pintura de parede": {
       "grupo_reparo": "repintura",
       "etapas": [
-
         {
           "codigo_sinapi": "88485",
           "unidade": "m²",
@@ -529,7 +544,6 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         },
-
         {
           "codigo_sinapi": "104642",
           "unidade": "m²",
@@ -537,55 +551,56 @@
           "coeficiente": 1.0,
           "grupo_planilha": "repintura"
         }
-
+      ],
+      "comodos_permitidos": [
+        "Sala",
+        "Circulação",
+        "Dormitório 1",
+        "Dormitório 2",
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Área Externa",
+        "Varanda",
+        "Residência Inteira"
       ]
     }
-
   },
-
-  "itens_gerais":{
-
+  "itens_gerais": {
     "acompanhamento_tecnico": {
       "descricao": "Acompanhamento Técnico",
       "tipo": "checkbox",
       "etapas": [
-        
         {
           "codigo_sinapi": "90778",
           "unidade": "H",
           "tipo_calculo": "fixo",
           "coeficiente": 16
         }
-
       ]
     },
-
     "limpeza_geral": {
       "descricao": "Destinação de entulho e limpeza geral",
       "tipo": "automatico",
       "etapas": [
-
         {
           "codigo_sinapi": "100981",
           "unidade": "m³",
           "tipo_calculo": "fixo",
           "coeficiente": 15
         },
-
         {
           "codigo_sinapi": "88316",
           "unidade": "H",
           "tipo_calculo": "fixo",
           "coeficiente": 16
         },
-
         {
           "codigo_sinapi": "99811",
           "unidade": "m²",
           "tipo_calculo": "fixo",
           "coeficiente": 30
         }
-
       ]
     }
   }

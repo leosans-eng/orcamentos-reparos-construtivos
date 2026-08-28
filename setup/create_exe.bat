@@ -18,7 +18,7 @@ for /f "delims=" %%V in ('"%PYTHON%" setup\read_app_version.py') do set "APPVER=
 echo Versao do app: %APPVER%
 
 echo.
-echo [1/2] Instalando dependencias de build...
+echo [1/3] Instalando dependencias de build...
 "%PYTHON%" -m pip install -r requirements.txt --quiet
 if errorlevel 1 (
     echo ERRO ao instalar dependencias.
@@ -27,13 +27,24 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/2] Gerando executavel com PyInstaller...
+echo [2/3] Criptografando credenciais do Idebras...
+"%PYTHON%" setup\empacotar_credenciais_idebras.py
+if errorlevel 1 (
+    echo ERRO ao empacotar credenciais do Idebras.
+    set "EXITCODE=1"
+    goto :fim
+)
+
+echo.
+echo [3/3] Gerando executavel com PyInstaller...
 "%PYTHON%" -m PyInstaller --noconfirm ORC.spec
 if errorlevel 1 (
     echo ERRO ao gerar o executavel com PyInstaller.
     set "EXITCODE=1"
     goto :fim
 )
+
+if exist "dist\ORC\.env" del /f /q "dist\ORC\.env" >nul 2>&1
 
 echo.
 echo Concluido:

@@ -50,7 +50,24 @@ def sinapi_referencia_dir() -> Path:
 
 
 def env_path() -> Path:
+    """Caminho preferencial do .env (instalação, ao lado do executável)."""
+    for candidato in env_paths():
+        if candidato.is_file():
+            return candidato
     return app_dir() / ".env"
+
+
+def env_paths() -> tuple[Path, ...]:
+    """Locais onde o .env pode estar no desenvolvimento e no executável instalado."""
+    vistos: list[Path] = []
+    for candidato in (
+        dados_usuario_dir() / ".env",
+        app_dir() / ".env",
+        bundle_dir() / ".env",
+    ):
+        if candidato not in vistos:
+            vistos.append(candidato)
+    return tuple(vistos)
 
 
 def vicios_construtivos_path() -> Path:

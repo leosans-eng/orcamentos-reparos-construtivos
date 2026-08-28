@@ -1,4 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_data_files
 
 datas = [
@@ -8,6 +10,8 @@ datas = [
     ('assets/icons', 'assets/icons'),
     ('assets/modelos', 'assets/modelos'),
 ]
+if Path('dados/idebras.dat').is_file():
+    datas.append(('dados/idebras.dat', 'dados'))
 datas += collect_data_files('certifi')
 datas += collect_data_files('docx')
 datas += collect_data_files('tksvg')
@@ -60,6 +64,7 @@ a = Analysis(
         'ui.selecao_orcamentos_customizado',
         'core.precarga_catalogos',
         'core.idebras_client',
+        'core.idebras_secrets',
         'core.municipios_br',
         'core.vicios_storage',
     ],

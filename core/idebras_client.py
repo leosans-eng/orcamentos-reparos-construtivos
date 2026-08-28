@@ -11,7 +11,11 @@ from pathlib import Path
 
 import requests
 
-from app_paths import env_path
+from app_paths import env_paths, is_frozen
+from core.idebras_secrets import (
+    carregar_credenciais_empacotadas,
+    usar_apenas_credenciais_empacotadas,
+)
 
 URL_IDEBRAS_PADRAO = "http://andreserver:5050"
 TIMEOUT = 30
@@ -91,41 +95,67 @@ class ResultadoPesquisaPareceres:
     total: int
 
 
-def carregar_credenciais_idebras(caminho: Path | None = None) -> dict[str, str]:
-    origem = caminho or env_path()
+def _ler_arquivo_env(origem: Path) -> dict[str, str]:
     valores: dict[str, str] = {}
-    if origem.is_file():
-        for linha in origem.read_text(encoding="utf-8").splitlines():
-            linha = linha.strip()
-            if not linha or linha.startswith("#") or "=" not in linha:
-                continue
-            chave, valor = linha.split("=", 1)
-            valores[chave.strip()] = valor.strip()
-    url = (
-        os.environ.get("IDEBRAS_URL")
-        or valores.get("IDEBRAS_URL")
-        or valores.get("url_idebras")
-        or URL_IDEBRAS_PADRAO
-    )
-    usuario = (
-        os.environ.get("user_idebras")
-        or os.environ.get("USER_IDEBRAS")
-        or valores.get("user_idebras")
-        or valores.get("USER_IDEBRAS")
-        or ""
-    )
-    senha = (
-        os.environ.get("password_idebras")
-        or os.environ.get("PASSWORD_IDEBRAS")
-        or valores.get("password_idebras")
-        or valores.get("PASSWORD_IDEBRAS")
-        or ""
-    )
+    if origem is None or not origem.is_file():
+        return valores
+    for linha in origem.read_text(encoding="utf-8").splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=" not in linha:
+            continue
+        chave, valor = linha.split("=", 1)
+        valores[chave.strip()] = valor.strip()
+    return valores
+
+
+def _credenciais_de_valores(valores: dict[str, str], *, usar_environ: bool) -> dict[str, str]:
+    url = valores.get("IDEBRAS_URL") or valores.get("url_idebras") or ""
+    usuario = valores.get("user_idebras") or valores.get("USER_IDEBRAS") or ""
+    senha = valores.get("password_idebras") or valores.get("PASSWORD_IDEBRAS") or ""
+    if usar_environ:
+        url = os.environ.get("IDEBRAS_URL") or url
+        usuario = (
+            os.environ.get("user_idebras")
+            or os.environ.get("USER_IDEBRAS")
+            or usuario
+        )
+        senha = (
+            os.environ.get("password_idebras")
+            or os.environ.get("PASSWORD_IDEBRAS")
+            or senha
+        )
     return {
-        "url": url.rstrip("/"),
+        "url": (url or URL_IDEBRAS_PADRAO).rstrip("/"),
         "usuario": usuario.strip(),
         "senha": senha,
     }
+
+
+def carregar_credenciais_idebras(caminho: Path | None = None) -> dict[str, str]:
+    if caminho is not None:
+        return _credenciais_de_valores(_ler_arquivo_env(caminho), usar_environ=False)
+
+    empacotadas = carregar_credenciais_empacotadas() or {}
+    if usar_apenas_credenciais_empacotadas():
+        return {
+            "url": (empacotadas.get("url") or URL_IDEBRAS_PADRAO).rstrip("/"),
+            "usuario": (empacotadas.get("usuario") or "").strip(),
+            "senha": empacotadas.get("senha") or "",
+        }
+
+    valores: dict[str, str] = {}
+    for origem in env_paths():
+        valores = _ler_arquivo_env(origem)
+        if valores:
+            break
+    lidas = _credenciais_de_valores(valores, usar_environ=True)
+    if not lidas["usuario"] and empacotadas.get("usuario"):
+        lidas["usuario"] = empacotadas["usuario"].strip()
+    if not lidas["senha"] and empacotadas.get("senha"):
+        lidas["senha"] = empacotadas["senha"]
+    if lidas["url"] == URL_IDEBRAS_PADRAO and empacotadas.get("url"):
+        lidas["url"] = empacotadas["url"].rstrip("/")
+    return lidas
 
 
 def normalizar_ambiente(texto: str) -> str:
@@ -484,6 +514,11 @@ class IdebrasClient:
 
     def login(self) -> None:
         if not self.usuario or not self.senha:
+            if is_frozen():
+                raise IdebrasError(
+                    "Credenciais do Idebras ausentes no pacote. "
+                    "Gere o instalador com o arquivo .env na máquina de build."
+                )
             raise IdebrasError(
                 "Credenciais do Idebras ausentes. "
                 "Informe user_idebras e password_idebras no arquivo .env."

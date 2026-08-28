@@ -30,3 +30,4 @@ api/backups/
 api/
 tests/
 .env
+dados/idebras.dat

@@ -44,7 +44,7 @@ Tela inicial com acesso aos módulos:
 - Desfazer e refazer alterações no orçamento
 - Exportação do orçamento para **Excel** (.xlsx)
 
-A conexão com o Idebras usa `user_idebras` e `password_idebras` no arquivo `.env` (opcionalmente `IDEBRAS_URL`). O arquivo não vai para o git.
+A conexão com o Idebras usa `user_idebras` e `password_idebras` no arquivo `.env` **somente na máquina de desenvolvimento**. Esse arquivo não vai para o git. Ao gerar o instalador, as credenciais são **criptografadas** e embutidas no pacote (`dados/idebras.dat`): o programa descriptografa em memória, e quem abrir a pasta do ORC não encontra usuário e senha em texto.
 
 ### Orçamento Customizado
 
@@ -136,7 +136,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-> **Nota:** na primeira execução, o app tentará baixar a base SINAPI. Se não houver conexão, coloque manualmente um CSV processado em `sinapi/sinapi_processado/` ou um arquivo `sinapi_precos.csv` na raiz do projeto como fallback. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`. Para usar a Área Privativa com o Idebras, crie um `.env` na raiz com `user_idebras` e `password_idebras`.
+> **Nota:** na primeira execução, o app tentará baixar a base SINAPI. Se não houver conexão, coloque manualmente um CSV processado em `sinapi/sinapi_processado/` ou um arquivo `sinapi_precos.csv` na raiz do projeto como fallback. Para pular a verificação de atualização do app durante o desenvolvimento: `$env:SKIP_UPDATE_CHECK = "1"`. Para usar a Área Privativa com o Idebras em desenvolvimento, crie um `.env` na raiz com `user_idebras` e `password_idebras`.
 
 ## Dados: o que é compartilhado e o que fica no PC
 
@@ -147,7 +147,7 @@ python app.py
 | Etapas pré-definidas | Banco via API | Sim |
 | Base SINAPI processada | `sinapi/` na pasta do programa | Não (por máquina) |
 | Mapeamento de anomalias (`vicios_construtivos.json`) | Pasta do programa | Não (por máquina) |
-| Credenciais do Idebras (`.env`) | Pasta do programa | Não (por máquina) |
+| Credenciais do Idebras | Criptografadas no pacote (não há `.env` na pasta instalada) | — |
 | Preferências de login (URL / usuário / senha salvos) | Configuração local do desktop | Não (por máquina) |
 
 Arquivos JSON em `%LOCALAPPDATA%\ORC\` ou `dados_usuario/` podem existir no **modo offline** / legado de testes; no fluxo normal com login, a fonte da verdade é o **banco no servidor**.
@@ -169,6 +169,7 @@ orcamento-reparos-construtivos/
 │   ├── app_state.py                # Estado global, APP_VERSION, callbacks SINAPI
 │   ├── api_client.py               # Cliente HTTP da API / autenticação
 │   ├── idebras_client.py           # Login e consulta ao Idebras (conjuntos, plantas, autores)
+│   ├── idebras_secrets.py          # Criptografia das credenciais do Idebras no .exe
 │   ├── municipios_br.py            # Resolução de UF pela cidade do conjunto
 │   ├── vicios_storage.py           # Leitura/gravação de anomalias e cômodos permitidos
 │   ├── sinapi_loader.py            # Carregamento e recarga da base SINAPI
@@ -210,6 +211,7 @@ orcamento-reparos-construtivos/
     ├── create_exe.bat              # Gera dist\ORC\ORC.exe (PyInstaller)
     ├── orc_installer.bat           # create_exe.bat + Inno Setup
     ├── orc_installer.iss           # Definição do instalador Windows
+    ├── empacotar_credenciais_idebras.py
     └── read_app_version.py         # Lê a versão de core/app_state.py
 ```
 

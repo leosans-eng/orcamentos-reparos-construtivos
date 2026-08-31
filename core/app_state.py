@@ -1,5 +1,6 @@
 import json
 import os
+import queue
 import threading
 import tkinter as tk
 from typing import Any, Callable
@@ -31,6 +32,7 @@ ALTURA_TREE_MIN = 11
 RODAPE_CSV_SUMIR_APOS_MS = 3000
 RODAPE_CSV_DESLIZE_INTERVALO_MS = 35
 RODAPE_CSV_DESLIZE_PASSO_PX = 4
+INTERVALO_FILA_UI_MS = 80
 
 NOMES_GRUPOS_REPARO = {
     "reparo_pisos_ceramicos": "Reparo de Pisos Cerâmicos",
@@ -61,6 +63,8 @@ class AppContext:
         self._sinapi_verificando = False
         self._sinapi_carregando = False
         self._after_jobs: list[tuple[tk.Misc, str]] = []
+        self._fila_ui: queue.Queue = queue.Queue()
+        self._consumindo_fila_ui = False
 
     def _agendar_after(self, widget: tk.Misc, delay_ms: int, callback) -> str | None:
         """Agenda after e guarda o id para cancelar no logout."""
@@ -96,20 +100,65 @@ class AppContext:
             except (tk.TclError, RuntimeError, ValueError):
                 pass
 
-    def _agendar_na_janela(self, callback) -> None:
-        janela = self.janela
-        if janela is None:
+    def iniciar_consumo_fila_ui(self) -> None:
+        """Liga o laço que aplica os recados das threads. Só na thread principal."""
+        if self._consumindo_fila_ui:
             return
+        if self.janela is None:
+            return
+        self._consumindo_fila_ui = True
+        self._consumir_fila_ui()
+
+    def _consumir_fila_ui(self) -> None:
+        janela = self.janela
         try:
-            if not janela.winfo_exists():
+            if janela is None or not janela.winfo_exists():
+                self._consumindo_fila_ui = False
                 return
-            self._agendar_after(janela, 0, callback)
-        except (tk.TclError, RuntimeError):
-            pass
+        except tk.TclError:
+            self._consumindo_fila_ui = False
+            return
+
+        while True:
+            try:
+                callback = self._fila_ui.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                callback()
+            except tk.TclError:
+                pass
+            except Exception as exc:
+                print("Erro ao aplicar atualização de interface:", exc)
+
+        if self._agendar_after(janela, INTERVALO_FILA_UI_MS, self._consumir_fila_ui) is None:
+            self._consumindo_fila_ui = False
+
+    def _agendar_na_janela(self, callback) -> None:
+        """Encaminha trabalho para a interface a partir de qualquer thread.
+
+        Tk só pode ser tocado pela thread principal; por isso a thread de fundo
+        apenas deposita o recado na fila, e quem o executa é o laço de consumo.
+        """
+        if self.janela is None:
+            return
+        if threading.current_thread() is threading.main_thread():
+            self._agendar_after(self.janela, 0, callback)
+            return
+        self._fila_ui.put(callback)
+
+    def _descartar_fila_ui(self) -> None:
+        while True:
+            try:
+                self._fila_ui.get_nowait()
+            except queue.Empty:
+                return
 
     def desligar_ui(self) -> None:
         """Evita callbacks Tk após destroy da janela (logout / reinício)."""
         self._cancelar_afters()
+        self._consumindo_fila_ui = False
+        self._descartar_fila_ui()
         self.janela = None
         self.frame_rodape = None
         self.label_rodape = None
@@ -122,6 +171,7 @@ class AppContext:
     def iniciar_carregamento_sinapi(self) -> None:
         if self._sinapi_carregando:
             return
+        self.iniciar_consumo_fila_ui()
         self._sinapi_carregando = True
         threading.Thread(
             target=self._carregar_sinapi_inicial_background,
@@ -309,6 +359,7 @@ class AppContext:
             return False
         if self._sinapi_verificando:
             return False
+        self.iniciar_consumo_fila_ui()
         self._sinapi_verificando = True
         thread = threading.Thread(
             target=self._verificar_atualizacao_sinapi,

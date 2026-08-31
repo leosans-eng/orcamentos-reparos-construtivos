@@ -37,6 +37,7 @@ class OrcApp:
         self._modulo_atual = None
         self._frames = {}
         self.pediu_logout = False
+        self._after_sinapi = None
 
         self.janela = tk.Tk()
         self.ctx.janela = self.janela
@@ -68,13 +69,30 @@ class OrcApp:
 
         # Continua / conclui a checagem iniciada no login (ou inicia no offline).
         self._schedule_update_check()
-        self.janela.after(500, self._aguardar_sinapi_e_verificar)
+        self._after_sinapi = self.janela.after(500, self._aguardar_sinapi_e_verificar)
 
     def _aguardar_sinapi_e_verificar(self):
+        self._after_sinapi = None
+        try:
+            if self.janela is None or not self.janela.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if self.ctx.janela is None:
+            return
         if self.ctx._sinapi_carregando:
-            self.janela.after(300, self._aguardar_sinapi_e_verificar)
+            self._after_sinapi = self.janela.after(300, self._aguardar_sinapi_e_verificar)
             return
         self.ctx.iniciar_verificacao_sinapi()
+
+    def _cancelar_afters_app(self):
+        job = getattr(self, "_after_sinapi", None)
+        if job is not None and self.janela is not None:
+            try:
+                self.janela.after_cancel(job)
+            except (tk.TclError, ValueError):
+                pass
+        self._after_sinapi = None
 
     def _schedule_update_check(self):
         try:
@@ -135,21 +153,37 @@ class OrcApp:
         from core.orcamento_storage import limpar_cache as limpar_cache_orcamentos
 
         print("[ORC] Logout — retornando à tela de login")
-        get_client().logout()
+        self.pediu_logout = True
+        self._cancelar_afters_app()
+        try:
+            get_client().logout()
+        except Exception:
+            pass
         limpar_cache_composicoes()
         limpar_cache_etapas()
         limpar_cache_orcamentos()
         reiniciar_coordenador_atualizacao()
         self.ctx.desligar_ui()
-        # Liberar Image/PhotoImage na thread principal antes do destroy
-        # para evitar Tcl_AsyncDelete no finalizador de outra thread.
+
+        # Liberar PhotoImage/Variable na thread principal ANTES do destroy.
+        for frame in list(self._frames.values()):
+            refs = getattr(frame, "_refs_icones", None)
+            if isinstance(refs, list):
+                refs.clear()
+            refs_botoes = getattr(frame, "_icones_botoes", None)
+            if isinstance(refs_botoes, list):
+                refs_botoes.clear()
         self._frames.clear()
-        self.pediu_logout = True
+        try:
+            for filho in list(self.area_conteudo.winfo_children()):
+                filho.destroy()
+        except tk.TclError:
+            pass
+        gc.collect()
         try:
             self.janela.destroy()
         except tk.TclError:
             pass
-        gc.collect()
 
     def _criar_modulo(self, nome):
         print(f"[ORC] Criando módulo: {nome}")
@@ -191,6 +225,13 @@ class OrcApp:
         self.mostrar_modulo(modulo)
 
     def mostrar_modulo(self, nome):
+        if self.pediu_logout:
+            return
+        try:
+            if self.janela is None or not self.janela.winfo_exists():
+                return
+        except tk.TclError:
+            return
         print(f"[ORC] Navegação → {TITULOS_JANELA.get(nome, nome)}")
         if (
             self._modulo_atual == "area_privativa"
@@ -289,7 +330,12 @@ if __name__ == "__main__":
     while True:
         print("[ORC] Abrindo tela de login")
         _root_login = tk.Tk()
-        if not garantir_login(_root_login):
+        try:
+            logou = garantir_login(_root_login)
+        except Exception as exc:
+            print(f"[ORC] Falha na tela de login: {exc}")
+            logou = False
+        if not logou:
             print("[ORC] Login cancelado — encerrando")
             try:
                 from atualizacao import reiniciar_coordenador_atualizacao
@@ -301,6 +347,7 @@ if __name__ == "__main__":
                 _root_login.destroy()
             except tk.TclError:
                 pass
+            gc.collect()
             raise SystemExit(0)
         try:
             from atualizacao import reiniciar_coordenador_atualizacao
@@ -313,11 +360,18 @@ if __name__ == "__main__":
             _root_login.destroy()
         except tk.TclError:
             pass
+        gc.collect()
         print("[ORC] Login ok — iniciando hub")
         iniciar_precarga_catalogos()
         app = OrcApp()
-        app.executar()
-        if not app.pediu_logout:
+        try:
+            app.executar()
+        except tk.TclError as exc:
+            print(f"[ORC] Janela encerrada com TclError: {exc}")
+        pediu_logout = bool(getattr(app, "pediu_logout", False))
+        del app
+        gc.collect()
+        if not pediu_logout:
             print("[ORC] Aplicação encerrada")
             break
         print("[ORC] Sessão encerrada — novo ciclo de login")

@@ -60,6 +60,41 @@ class AppContext:
         self.http_servidor_sinapi: tk.StringVar | None = None
         self._sinapi_verificando = False
         self._sinapi_carregando = False
+        self._after_jobs: list[tuple[tk.Misc, str]] = []
+
+    def _agendar_after(self, widget: tk.Misc, delay_ms: int, callback) -> str | None:
+        """Agenda after e guarda o id para cancelar no logout."""
+        registro: list = []
+
+        def executar_e_remover():
+            # Remove o próprio id antes de rodar: a lista não pode crescer
+            # indefinidamente em animações que se reagendam.
+            if registro:
+                try:
+                    self._after_jobs.remove(registro[0])
+                except ValueError:
+                    pass
+            callback()
+
+        try:
+            if not widget.winfo_exists():
+                return None
+            job = widget.after(delay_ms, executar_e_remover)
+        except (tk.TclError, RuntimeError):
+            return None
+        registro.append((widget, job))
+        self._after_jobs.append(registro[0])
+        return job
+
+    def _cancelar_afters(self) -> None:
+        jobs = list(self._after_jobs)
+        self._after_jobs.clear()
+        for widget, job in jobs:
+            try:
+                if widget.winfo_exists():
+                    widget.after_cancel(job)
+            except (tk.TclError, RuntimeError, ValueError):
+                pass
 
     def _agendar_na_janela(self, callback) -> None:
         janela = self.janela
@@ -68,12 +103,13 @@ class AppContext:
         try:
             if not janela.winfo_exists():
                 return
-            janela.after(0, callback)
+            self._agendar_after(janela, 0, callback)
         except (tk.TclError, RuntimeError):
             pass
 
     def desligar_ui(self) -> None:
         """Evita callbacks Tk após destroy da janela (logout / reinício)."""
+        self._cancelar_afters()
         self.janela = None
         self.frame_rodape = None
         self.label_rodape = None
@@ -156,6 +192,8 @@ class AppContext:
             return
 
         def executar():
+            if self.frame_rodape is None:
+                return
             if frame_rodape is None or not frame_rodape.winfo_exists():
                 return
             if not label_csv.winfo_exists():
@@ -166,6 +204,8 @@ class AppContext:
             label_csv.place(relx=1.0, rely=0.5, anchor="e", x=-6, in_=frame_rodape)
 
             def deslizar():
+                if self.frame_rodape is None:
+                    return
                 if frame_rodape is None or not frame_rodape.winfo_exists():
                     return
                 if not label_csv.winfo_exists():
@@ -186,17 +226,17 @@ class AppContext:
                         x=cur_x + RODAPE_CSV_DESLIZE_PASSO_PX,
                         in_=frame_rodape,
                     )
-                    frame_rodape.after(
-                        RODAPE_CSV_DESLIZE_INTERVALO_MS, deslizar
+                    self._agendar_after(
+                        frame_rodape, RODAPE_CSV_DESLIZE_INTERVALO_MS, deslizar
                     )
                 except tk.TclError:
                     return
 
-            frame_rodape.after(25, deslizar)
+            self._agendar_after(frame_rodape, 25, deslizar)
 
         try:
             if frame_rodape is not None and frame_rodape.winfo_exists():
-                frame_rodape.after(RODAPE_CSV_SUMIR_APOS_MS, executar)
+                self._agendar_after(frame_rodape, RODAPE_CSV_SUMIR_APOS_MS, executar)
         except tk.TclError:
             pass
 

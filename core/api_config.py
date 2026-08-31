@@ -44,7 +44,7 @@ def carregar_config() -> dict:
     with open(caminho, "r", encoding="utf-8") as arquivo:
         dados = json.load(arquivo)
     base_url = str(dados.get("base_url", URL_PADRAO)).strip().rstrip("/")
-    salvar_usuario = bool(dados.get("salvar_usuario", False))
+    salvar_usuario = bool(dados.get("salvar_usuario", True))
     salvar_senha = bool(dados.get("salvar_senha", False))
     usuario = str(dados.get("usuario", "")).strip() if salvar_usuario else ""
     senha = ""

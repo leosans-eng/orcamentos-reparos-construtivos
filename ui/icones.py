@@ -175,9 +175,24 @@ class IndicadorAmpulheta(tk.Label):
         self._cancelar()
         self._indice = 0
         if self._frames:
-            self.configure(image=self._frames[0])
-        if self.winfo_ismapped():
-            self.pack_forget()
+            try:
+                self.configure(image=self._frames[0])
+            except tk.TclError:
+                pass
+        try:
+            if self.winfo_ismapped():
+                self.pack_forget()
+        except tk.TclError:
+            pass
+
+    def liberar(self) -> None:
+        """Para animação e solta PhotoImages enquanto o Tk ainda existe."""
+        self.parar()
+        try:
+            self.configure(image="")
+        except tk.TclError:
+            pass
+        self._frames.clear()
 
     def _agendar(self) -> None:
         self._cancelar()
@@ -245,8 +260,12 @@ def _criar_ampulheta_com_areia(
 
 def altura_icone_botao(master: tk.Misc, estilo: str = "Compact.TButton") -> int:
     """Altura do ícone alinhada à fonte do botão."""
-    fonte = tkfont.Font(font=ttk.Style(master).lookup(estilo, "font"))
-    return max(12, fonte.metrics("ascent") + fonte.metrics("descent"))
+    try:
+        especificacao = ttk.Style(master).lookup(estilo, "font")
+        fonte = tkfont.Font(master=master, font=especificacao or "TkDefaultFont")
+        return max(12, fonte.metrics("ascent") + fonte.metrics("descent"))
+    except tk.TclError:
+        return 14
 
 
 def altura_icone_botao_compact(master: tk.Misc, estilo: str = "Compact.TButton") -> int:

@@ -284,10 +284,18 @@ def criar_area_privativa(parent, ctx, on_voltar):
         frame_tabela, text="Piso (m²)", font=("Arial", 9, "bold"), bg="#ececec"
     ).grid(row=0, column=1, padx=2, pady=(0, 4))
     tk.Label(
-        frame_tabela, text="Rev. Arg. (m²)", font=("Arial", 9, "bold"), bg="#ececec"
+        frame_tabela,
+        text="Rev. Arg.\n(m²)",
+        font=("Arial", 9, "bold"),
+        bg="#ececec",
+        justify="center",
     ).grid(row=0, column=2, padx=2, pady=(0, 4))
     tk.Label(
-        frame_tabela, text="Rev. Cer. (m²)", font=("Arial", 9, "bold"), bg="#ececec"
+        frame_tabela,
+        text="Rev. Cer.\n(m²)",
+        font=("Arial", 9, "bold"),
+        bg="#ececec",
+        justify="center",
     ).grid(row=0, column=3, padx=2, pady=(0, 4))
     frame_tabela.columnconfigure(0, weight=1)
 

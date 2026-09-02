@@ -81,14 +81,26 @@ def criar_label_icone(
     cor: str = "#555555",
     bg: str = "#ececec",
     refs: list | None = None,
-) -> tk.Label:
-    """Label com ícone SVG (ex.: funil ao lado de campos de filtro)."""
+    texto: str | None = None,
+    fonte: tuple = ("Arial", 9),
+    fg: str = "#555555",
+) -> tk.Misc:
+    """Ícone SVG; com `texto`, devolve o ícone e o rótulo lado a lado."""
     icone = criar_icone_svg(parent, nome, altura=altura, cor=cor)
     if refs is not None:
         refs.append(icone)
-    label = tk.Label(parent, image=icone, bg=bg)
-    label.image = icone  # type: ignore[attr-defined]
-    return label
+    if not texto:
+        label = tk.Label(parent, image=icone, bg=bg)
+        label.image = icone  # type: ignore[attr-defined]
+        return label
+    grupo = tk.Frame(parent, bg=bg)
+    lbl_icone = tk.Label(grupo, image=icone, bg=bg)
+    lbl_icone.image = icone  # type: ignore[attr-defined]
+    lbl_icone.pack(side="left")
+    tk.Label(grupo, text=texto, bg=bg, fg=fg, font=fonte).pack(
+        side="left", padx=(4, 0)
+    )
+    return grupo
 
 
 class IndicadorAmpulheta(tk.Label):

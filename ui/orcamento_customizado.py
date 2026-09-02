@@ -800,6 +800,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         criar_label_icone(
             linha_filtros,
             "funnel-outline",
+            texto="Filtrar:",
             refs=self._refs_icones,
         ).grid(row=1, column=0, padx=(0, 4), pady=3, sticky="w")
         self.var_busca = tk.StringVar()
@@ -1265,6 +1266,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         criar_label_icone(
             linha_filtros,
             "funnel-outline",
+            texto="Filtrar:",
             refs=self._refs_icones,
         ).grid(row=1, column=0, padx=(0, 4), pady=3, sticky="w")
         self.var_busca = tk.StringVar()
@@ -1722,6 +1724,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         criar_label_icone(
             self._barra_filtro_grade,
             "funnel-outline",
+            texto="Filtrar:",
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         self.var_filtro_grade = tk.StringVar()

@@ -366,11 +366,13 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     botoes_metragem = tk.Frame(frame_metragem, bg="#ececec")
     botoes_metragem.pack(fill="x", pady=(6, 0))
-    ttk.Button(
+    criar_botao_ttk_com_icone(
         botoes_metragem,
-        text="Limpar",
+        texto="Limpar",
+        nome_icone="sweeper-cleaning-icon",
         command=limpar_metragens,
-        style="Compact.TButton",
+        estilo="Compact.TButton",
+        refs=_refs_icones,
     ).pack(side="left")
 
     def preencher_metragens(medidas):

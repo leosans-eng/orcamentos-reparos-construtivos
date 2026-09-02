@@ -175,6 +175,7 @@ class EtapasPredefinidasFrame(tk.Frame):
         criar_label_icone(
             linha_busca,
             "funnel-outline",
+            texto="Filtrar:",
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Entry(linha_busca, textvariable=self.var_busca, width=28).pack(

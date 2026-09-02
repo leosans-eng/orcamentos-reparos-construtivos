@@ -14,7 +14,7 @@ from ui.widgets import (
 LARGURA_CARTAO = 240
 ALTURA_CARTAO = 148
 FONTE_TITULO_CARTAO = ("Arial", 12, "bold")
-FONTE_CATEGORIA = ("Arial", 11, "bold")
+FONTE_CATEGORIA = ("Segoe UI", 11, "bold")
 ALTURA_ICONE_CARTAO = 20
 
 
@@ -29,6 +29,10 @@ class HubFrame(tk.Frame):
         self._montar()
 
     def _montar(self):
+        faixa = tk.Frame(self, bg=COR_TITULO_PADRAO, height=6)
+        faixa.pack(fill="x")
+        faixa.pack_propagate(False)
+
         # Área expansível: em tela cheia o conteúdo permanece centralizado e com respiro.
         area = tk.Frame(self, bg="#ececec")
         area.pack(fill="both", expand=True, padx=24, pady=(16, 48))
@@ -39,7 +43,7 @@ class HubFrame(tk.Frame):
         tk.Label(
             container,
             text="ORC",
-            font=("Arial", 22, "bold"),
+            font=("Segoe UI", 22, "bold"),
             fg="#006699",
             bg="#ececec",
         ).pack(pady=(0, 4))
@@ -47,7 +51,7 @@ class HubFrame(tk.Frame):
         tk.Label(
             container,
             text="Orçamentos de Reparos Construtivos",
-            font=("Arial", 11),
+            font=("Segoe UI", 11),
             fg="#444444",
             bg="#ececec",
         ).pack(pady=(0, 20))
@@ -242,7 +246,7 @@ class HubFrame(tk.Frame):
             tk.Label(
                 rodape_usuario,
                 text=usuario,
-                font=("Arial", 9),
+                font=("Segoe UI", 9),
                 fg="#555555",
                 bg="#ececec",
             ).pack(side="left")

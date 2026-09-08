@@ -888,6 +888,7 @@ class CampoListaPesquisavel(tk.Frame):
         self._lista = None
         self._ignorando_foco = False
         self._id_clique_fora = None
+        self._id_configure_topo = None
         self.var = textvariable if textvariable is not None else tk.StringVar()
 
         self.entrada = ttk.Entry(self, textvariable=self.var)
@@ -914,6 +915,7 @@ class CampoListaPesquisavel(tk.Frame):
         self.var.set(valor or "")
 
     def fechar_lista(self):
+        self._desvincular_configure_topo()
         if self._popup_ativo():
             try:
                 self._popup.destroy()
@@ -955,13 +957,41 @@ class CampoListaPesquisavel(tk.Frame):
         topo = self.winfo_toplevel()
         try:
             topo.update_idletasks()
-            x = self.entrada.winfo_rootx() - topo.winfo_rootx()
-            y = self.entrada.winfo_rooty() + self.entrada.winfo_height() - topo.winfo_rooty()
+            margem = 6
+            topo_w = max(topo.winfo_width(), 1)
+            topo_h = max(topo.winfo_height(), 1)
+            x_campo = self.entrada.winfo_rootx() - topo.winfo_rootx()
+            y_campo = self.entrada.winfo_rooty() - topo.winfo_rooty()
+            h_campo = self.entrada.winfo_height()
+            largura_campo = self.entrada.winfo_width()
         except tk.TclError:
             return
-        largura = max(self.entrada.winfo_width(), self._largura_minima_lista)
-        altura = self._altura_popup_px()
-        self._popup.place(x=x, y=y, width=largura, height=altura)
+
+        largura_max = max(80, topo_w - 2 * margem)
+        largura = min(max(largura_campo, self._largura_minima_lista), largura_max)
+        x = x_campo
+        if x + largura > topo_w - margem:
+            x = topo_w - margem - largura
+        if x < margem:
+            x = margem
+
+        altura_desejada = self._altura_popup_px()
+        espaco_abaixo = topo_h - (y_campo + h_campo) - margem
+        espaco_acima = y_campo - margem
+        abrir_abaixo = espaco_abaixo >= min(altura_desejada, 140) or espaco_abaixo >= espaco_acima
+        if abrir_abaixo:
+            y = y_campo + h_campo
+            altura = min(altura_desejada, max(espaco_abaixo, 80))
+        else:
+            altura = min(altura_desejada, max(espaco_acima, 80))
+            y = y_campo - altura
+        if y < margem:
+            y = margem
+            altura = min(altura, topo_h - y - margem)
+        if y + altura > topo_h - margem:
+            altura = max(80, topo_h - margem - y)
+
+        self._popup.place(x=int(x), y=int(y), width=int(largura), height=int(altura))
         self._popup.lift()
 
     def _ponto_interno(self, x, y) -> bool:
@@ -1021,6 +1051,28 @@ class CampoListaPesquisavel(tk.Frame):
         lista.bind("<Escape>", lambda _e: self._fechar_e_focar())
         self._popup = popup
         self._lista = lista
+        self._desvincular_configure_topo()
+        self._id_configure_topo = topo.bind(
+            "<Configure>", self._ao_configurar_topo, add="+"
+        )
+
+    def _ao_configurar_topo(self, event):
+        try:
+            if event.widget is not self.winfo_toplevel():
+                return
+        except tk.TclError:
+            return
+        self._posicionar_popup()
+
+    def _desvincular_configure_topo(self):
+        funcid = self._id_configure_topo
+        self._id_configure_topo = None
+        if not funcid:
+            return
+        try:
+            self.winfo_toplevel().unbind("<Configure>", funcid)
+        except tk.TclError:
+            pass
 
     def _mostrar_lista(self, forcar_todas: bool = False):
         opcoes = self._opcoes_filtradas(forcar_todas=forcar_todas)

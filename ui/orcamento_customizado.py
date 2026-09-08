@@ -86,6 +86,9 @@ DEBOUNCE_BUSCA_MS = 250
 UNIDADE_TODAS = "Todas"
 HISTORICO_MAX = 40
 DESCRICAO_BDI = "BDI alterado"
+COR_ALERTA_VAZIO = "#ffe082"
+COR_ALERTA_VAZIO_APAGADO = "#ececec"
+INTERVALO_ALERTA_VAZIO_MS = 550
 
 
 def _formatar_moeda(valor):
@@ -1465,6 +1468,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._binds_historico = []
         self._icone_excel_export = None
         self._icones_botoes = []
+        self._alerta_vazio_job = None
+        self._alerta_vazio_aceso = False
+        self._alerta_precisa_etapa = False
+        self._alerta_precisa_estado = False
         self.orcamento = self._carregar_orcamento_por_id(orcamento_id)
         self._recarregador = RecarregadorCatalogo(
             self,
@@ -1479,8 +1486,120 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
     def destroy(self):
+        self._parar_alerta_orcamento_vazio()
         self._desvincular_atalhos_historico()
         super().destroy()
+
+    def _sincronizar_alertas_iniciais(self):
+        self._alerta_precisa_etapa = not bool(getattr(self.orcamento, "grupos", None))
+        self._alerta_precisa_estado = not bool(self._estado_selecionado())
+        if self._alerta_precisa_etapa or self._alerta_precisa_estado:
+            self._iniciar_alerta_orcamento_vazio()
+            self._aplicar_alerta_orcamento_vazio(self._alerta_vazio_aceso)
+            return
+        self._parar_alerta_orcamento_vazio()
+
+    def _iniciar_alerta_orcamento_vazio(self):
+        if self._alerta_vazio_job is not None:
+            return
+        self._garantir_estilo_alerta_vazio()
+        self._alerta_vazio_aceso = False
+        self._pulsar_alerta_orcamento_vazio()
+
+    def _parar_alerta_orcamento_vazio(self):
+        job = self._alerta_vazio_job
+        self._alerta_vazio_job = None
+        self._alerta_vazio_aceso = False
+        self._alerta_precisa_etapa = False
+        self._alerta_precisa_estado = False
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except (tk.TclError, ValueError):
+                pass
+        self._aplicar_alerta_orcamento_vazio(False)
+
+    def _pulsar_alerta_orcamento_vazio(self):
+        self._alerta_vazio_job = None
+        self._alerta_vazio_aceso = not self._alerta_vazio_aceso
+        self._aplicar_alerta_orcamento_vazio(self._alerta_vazio_aceso)
+        try:
+            self._alerta_vazio_job = self.after(
+                INTERVALO_ALERTA_VAZIO_MS, self._pulsar_alerta_orcamento_vazio
+            )
+        except tk.TclError:
+            self._alerta_vazio_job = None
+
+    def _garantir_estilo_alerta_vazio(self):
+        raiz = self.winfo_toplevel()
+        if getattr(raiz, "_orc_alerta_vazio_ok", False):
+            return
+        style = ttk.Style(self)
+        style.configure(
+            "AlertaVazio.TButton",
+            background=COR_ALERTA_VAZIO,
+            foreground="black",
+            borderwidth=1,
+            focuscolor="none",
+            padding=(4, 1),
+        )
+        style.map(
+            "AlertaVazio.TButton",
+            background=[
+                ("disabled", "#e0e0e0"),
+                ("active", "#ffd54f"),
+                ("pressed", "#f9a825"),
+            ],
+            foreground=[
+                ("disabled", "#9e9e9e"),
+                ("active", "black"),
+                ("pressed", "black"),
+            ],
+        )
+        style.configure(
+            "AlertaVazio.TCombobox",
+            fieldbackground=COR_ALERTA_VAZIO,
+            background=COR_ALERTA_VAZIO,
+        )
+        style.map(
+            "AlertaVazio.TCombobox",
+            fieldbackground=[
+                ("readonly", COR_ALERTA_VAZIO),
+                ("disabled", COR_ALERTA_VAZIO),
+            ],
+            background=[("readonly", COR_ALERTA_VAZIO)],
+        )
+        raiz._orc_alerta_vazio_ok = True
+
+    def _aplicar_alerta_orcamento_vazio(self, aceso: bool):
+        etapa_acesa = aceso and self._alerta_precisa_etapa
+        estado_aceso = aceso and self._alerta_precisa_estado
+        self._pintar_halo(getattr(self, "_halo_nova_etapa", None), etapa_acesa)
+        self._pintar_halo(getattr(self, "_halo_estado", None), estado_aceso)
+        botao = getattr(self, "btn_nova_etapa", None)
+        if botao is not None:
+            try:
+                botao.configure(
+                    style="AlertaVazio.TButton" if etapa_acesa else "Add.Compact.TButton"
+                )
+            except tk.TclError:
+                pass
+        combo = getattr(self, "combo_estado", None)
+        if combo is not None:
+            try:
+                combo.configure(
+                    style="AlertaVazio.TCombobox" if estado_aceso else "TCombobox"
+                )
+            except tk.TclError:
+                pass
+
+    def _pintar_halo(self, halo, aceso: bool):
+        if halo is None:
+            return
+        try:
+            halo.configure(bg=COR_ALERTA_VAZIO if aceso else COR_ALERTA_VAZIO_APAGADO)
+        except tk.TclError:
+            pass
 
     def _montar_botao_recarregar_cabecalho(self, parent):
         self._controle_atualizacao = ControleAtualizacaoPagina(
@@ -1583,14 +1702,17 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         linha_etapas_1 = tk.Frame(frame_etapas, bg="#ececec")
         linha_etapas_1.pack(fill="x", pady=(0, 4))
-        criar_botao_ttk_com_icone(
-            linha_etapas_1,
+        self._halo_nova_etapa = tk.Frame(linha_etapas_1, bg="#ececec", padx=3, pady=2)
+        self._halo_nova_etapa.pack(side="left", padx=(0, 4))
+        self.btn_nova_etapa = criar_botao_ttk_com_icone(
+            self._halo_nova_etapa,
             texto="Nova etapa",
             nome_icone="add-circle-outline",
             command=self._novo_grupo,
             estilo="Add.Compact.TButton",
             refs=self._icones_botoes,
-        ).pack(side="left", padx=(0, 4))
+        )
+        self.btn_nova_etapa.pack()
 
         linha_etapas_2 = tk.Frame(frame_etapas, bg="#ececec")
         linha_etapas_2.pack(fill="x")
@@ -1669,10 +1791,15 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         tk.Label(linha_dados, text="Estado:", bg="#ececec").pack(side="left")
         estados = self.ctx.obter_estados()
+        self._halo_estado = tk.Frame(linha_dados, bg="#ececec", padx=3, pady=2)
+        self._halo_estado.pack(side="left", padx=(4, 0))
         self.combo_estado = ttk.Combobox(
-            linha_dados, values=valores_combo_estado(estados), width=12, state="readonly"
+            self._halo_estado,
+            values=valores_combo_estado(estados),
+            width=12,
+            state="readonly",
         )
-        self.combo_estado.pack(side="left", padx=(4, 0))
+        self.combo_estado.pack()
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
 
         # Espaçador para igualar a altura dos painéis de duas linhas à esquerda.
@@ -2151,6 +2278,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         if self._trocando_orcamento or self._aplicando_historico:
             return
         self.orcamento.definir_estado_referencia(self._estado_selecionado())
+        self._sincronizar_alertas_iniciais()
         self._registrar_alteracao(descricao="Estado do orçamento alterado")
 
     def _abrir_calculadora(self):
@@ -3220,8 +3348,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.grade.finalizar_reconstrucao(fracao, selecoes)
         if not self.orcamento.grupos:
             self.grade.definir_vazio(
-                "Nenhuma etapa neste orçamento.\nClique em \"Nova etapa\" para começar."
+                "Nenhuma etapa neste orçamento.\n"
+                "Selecione um Estado e clique em \"Nova etapa\" para começar."
             )
+        self._sincronizar_alertas_iniciais()
         filtro = ""
         if hasattr(self, "var_filtro_grade"):
             filtro = self.var_filtro_grade.get()

@@ -103,7 +103,7 @@ class ConsultaSinapiFrame(tk.Frame):
         criar_label_icone(
             linha_filtros,
             "funnel-outline",
-            texto="Filtrar:",
+            texto="Pesquisar:",
             refs=self._refs_icones,
         ).grid(row=0, column=6, padx=(16, 6), pady=4, sticky="w")
 

@@ -3,6 +3,7 @@ from tkinter import ttk
 from typing import Literal
 
 from core.orcamento_customizado import TIPO_GRUPO
+from ui.icones import criar_icone_svg
 from ui.widgets import vincular_tooltip
 
 TkAnchor = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
@@ -11,7 +12,7 @@ Coluna = tuple[str, str, int, TkAnchor, int]
 COLUNAS: tuple[Coluna, ...] = (
     ("item", "Item", 68, "center", 0),
     ("codigo", "Código", 72, "center", 0),
-    ("tipo_ic", "I/C", 36, "center", 0),
+    ("tipo_ic", "I/C", 40, "center", 0),
     ("descricao", "Descrição", 180, "w", 1),
     ("quantidade", "Qtd.", 64, "w", 0),
     ("unidade", "Unid.", 48, "w", 0),
@@ -30,6 +31,7 @@ COR_BORDA = "#cccccc"
 COR_COMPOSICAO = "#7b5e00"
 COR_ALERTA_DEPRECIADO = "#fff8e1"
 COR_ESTADO_ALTERNATIVO = "#e8f4fc"
+COR_DISCRIMINAR = "#e4f0e6"
 COR_TEXTO = "#333333"
 COR_MARCADOR_DROP = "#006699"
 LIMIAR_ARRASTE_PX = 8
@@ -50,6 +52,7 @@ class GradeOrcamento(tk.Frame):
         on_reordenar_item=None,
         on_reordenar_etapa=None,
         on_menu_contexto=None,
+        on_previa_composicao=None,
     ):
         super().__init__(parent, bg="#ececec")
         self.on_duplo_clique_qtd = on_duplo_clique_qtd
@@ -61,6 +64,8 @@ class GradeOrcamento(tk.Frame):
         self.on_reordenar_item = on_reordenar_item
         self.on_reordenar_etapa = on_reordenar_etapa
         self.on_menu_contexto = on_menu_contexto
+        self.on_previa_composicao = on_previa_composicao
+        self._icone_previa = None
         self._linhas = []
         self._selecao_metas: list[dict] = []
         self._ancora_indice: int | None = None
@@ -74,6 +79,17 @@ class GradeOrcamento(tk.Frame):
         self._lbl_vazio = None
         self._filtro = ""
         self._montar()
+        self._carregar_icone_previa()
+
+    def _carregar_icone_previa(self):
+        if self.on_previa_composicao is None:
+            return
+        try:
+            self._icone_previa = criar_icone_svg(
+                self, "search-outline", altura=14, cor="#006699"
+            )
+        except (ImportError, FileNotFoundError, tk.TclError, OSError):
+            self._icone_previa = None
 
     def _montar(self):
         self.cabecalho = tk.Frame(self, bg=COR_CABECALHO, highlightbackground=COR_BORDA, highlightthickness=1)
@@ -255,6 +271,7 @@ class GradeOrcamento(tk.Frame):
         estilo="item",
         alerta_depreciado=False,
         alerta_estado_alternativo=False,
+        alerta_discriminar=False,
     ):
         idx = len(self._linhas)
         self._ocultar_vazio()
@@ -262,6 +279,8 @@ class GradeOrcamento(tk.Frame):
         if alerta_depreciado and estilo != "grupo":
             cor_fundo = COR_ALERTA_DEPRECIADO
             self._tem_itens_depreciados = True
+        elif alerta_discriminar and estilo != "grupo":
+            cor_fundo = COR_DISCRIMINAR
         elif alerta_estado_alternativo and estilo != "grupo":
             cor_fundo = COR_ESTADO_ALTERNATIVO
         elif estilo != "grupo" and idx % 2 == 1:
@@ -371,6 +390,34 @@ class GradeOrcamento(tk.Frame):
                 lbl.grid(row=0, column=col, sticky="nsew", padx=(0, 1))
                 lbl.bind("<Double-1>", lambda _e, m=meta: self._duplo_clique_qtd(m))
                 widgets["lbl_quantidade"] = lbl
+            elif (
+                chave == "tipo_ic"
+                and estilo == "composicao"
+                and self.on_previa_composicao is not None
+            ):
+                if self._icone_previa is not None:
+                    lbl = tk.Label(
+                        frame,
+                        image=self._icone_previa,
+                        bg=cor_fundo,
+                        cursor="hand2",
+                        padx=4,
+                        pady=5,
+                    )
+                    lbl.image = self._icone_previa
+                else:
+                    lbl = tk.Label(
+                        frame,
+                        text="🔎",
+                        font=fonte,
+                        fg="#006699",
+                        bg=cor_fundo,
+                        cursor="hand2",
+                        padx=4,
+                        pady=5,
+                    )
+                lbl.grid(row=0, column=col, sticky="nsew", padx=(0, 1))
+                widgets["lbl_previa"] = lbl
             else:
                 lbl = tk.Label(
                     frame,
@@ -406,6 +453,9 @@ class GradeOrcamento(tk.Frame):
             self._vincular_selecao(filho, idx)
             self._vincular_tecla_delete(filho)
             filho.bind("<MouseWheel>", self._on_mousewheel)
+        lupa = widgets.get("lbl_previa")
+        if lupa is not None:
+            self._vincular_previa_composicao(lupa, meta)
 
     def _vincular_selecao(self, widget, indice_linha):
         widget.bind(
@@ -418,6 +468,28 @@ class GradeOrcamento(tk.Frame):
             "<Button-3>",
             lambda event, i=indice_linha: self._ao_botao_direito(i, event),
         )
+
+    def _vincular_previa_composicao(self, widget, meta):
+        tooltip = "Ver itens da composição"
+        if meta.get("discriminar_componentes"):
+            tooltip += "\nMarcada para discriminar no Excel/Word"
+
+        def ao_pressionar(_event):
+            return "break"
+
+        def ao_soltar(_event):
+            try:
+                widget.event_generate("<Leave>")
+            except tk.TclError:
+                pass
+            if self.on_previa_composicao:
+                self.on_previa_composicao(dict(meta))
+            return "break"
+
+        widget.bind("<ButtonPress-1>", ao_pressionar)
+        widget.bind("<B1-Motion>", lambda _e: "break")
+        widget.bind("<ButtonRelease-1>", ao_soltar)
+        vincular_tooltip(widget, tooltip)
 
     def _ao_botao_direito(self, indice_linha, event):
         if indice_linha < 0 or indice_linha >= len(self._linhas):

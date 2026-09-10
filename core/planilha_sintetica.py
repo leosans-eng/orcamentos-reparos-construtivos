@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import openpyxl
 
-from core.composicoes_proprias import custo_composicao_propria_item
+from core.composicoes_proprias import (
+    custo_composicao_propria_item,
+    linhas_componentes_para_exportacao,
+)
 from core.formatador_sinapi.comum import (
     ROTULO_A_ORCAR,
     planilha_ativa,
@@ -20,6 +23,7 @@ from core.orcamento_customizado import (
     TIPO_SINAPI,
     custo_unitario_com_bdi,
 )
+from core.sinapi_busca import TIPO_COMPOSICAO, TIPO_INSUMO, nome_tipo_sinapi
 
 LINHA_CABECALHO = 13
 COLUNAS = (
@@ -68,6 +72,19 @@ def _preencher_cabecalho(ws, orcamento, estado: str, referencia_rotulo: str) -> 
         ws.cell(row=LINHA_CABECALHO, column=col, value=titulo)
 
 
+def _dados_valores(preco_s, quantidade, bdi: float):
+    preco_c = custo_unitario_com_bdi(preco_s, bdi)
+    total_s = round(preco_s * quantidade, 2)
+    total_c = round(preco_c * quantidade, 2)
+    return {
+        "quantidade": quantidade,
+        "preco_s": round(preco_s, 2),
+        "preco_c": round(preco_c, 2),
+        "total_s": total_s,
+        "total_c": total_c,
+    }
+
+
 def _dados_item(item, catalogo, sinapi, estado: str, bdi: float):
     if item["tipo"] == TIPO_SINAPI:
         preco_s = float(item["custo_unitario"])
@@ -92,21 +109,52 @@ def _dados_item(item, catalogo, sinapi, estado: str, bdi: float):
         unidade = str(item.get("unidade", "")).strip()
 
     quantidade = float(item["quantidade"])
-    preco_c = custo_unitario_com_bdi(preco_s, bdi)
-    total_s = round(preco_s * quantidade, 2)
-    total_c = round(preco_c * quantidade, 2)
-    return {
-        "tipo": tipo,
-        "banco": banco,
-        "codigo": codigo,
-        "descricao": descricao,
-        "unidade": unidade,
-        "quantidade": quantidade,
-        "preco_s": round(preco_s, 2),
-        "preco_c": round(preco_c, 2),
-        "total_s": total_s,
-        "total_c": total_c,
-    }
+    dados = _dados_valores(preco_s, quantidade, bdi)
+    dados.update(
+        {
+            "tipo": tipo,
+            "banco": banco,
+            "codigo": codigo,
+            "descricao": descricao,
+            "unidade": unidade,
+        }
+    )
+    return dados
+
+
+def _dados_componente(linha, bdi: float):
+    preco_s = float(linha.get("valor_unit") or 0)
+    quantidade = float(linha.get("quantidade") or 0)
+    if str(linha.get("tipo") or "") == "SINAPI":
+        banco = "SINAPI"
+        tipo = nome_tipo_sinapi(linha.get("tipo_sinapi")) or TIPO_COMPOSICAO
+        if tipo not in (TIPO_INSUMO, TIPO_COMPOSICAO):
+            tipo = TIPO_COMPOSICAO
+    else:
+        banco = "Mercado"
+        tipo = TIPO_INSUMO
+    codigo = str(linha.get("codigo") or "").strip() or "—"
+    dados = _dados_valores(preco_s, quantidade, bdi)
+    dados.update(
+        {
+            "tipo": tipo,
+            "banco": banco,
+            "codigo": codigo,
+            "descricao": str(linha.get("descricao") or "").strip(),
+            "unidade": str(linha.get("unidade") or "").strip(),
+        }
+    )
+    return dados
+
+
+def _linhas_dados_item(item, catalogo, sinapi, estado: str, bdi: float):
+    if item.get("tipo") == TIPO_COMPOSICAO_PROPRIA:
+        componentes = linhas_componentes_para_exportacao(
+            item, catalogo, sinapi, estado
+        )
+        if componentes:
+            return [_dados_componente(linha, bdi) for linha in componentes]
+    return [_dados_item(item, catalogo, sinapi, estado, bdi)]
 
 
 def gerar_planilha_sintetica(
@@ -133,9 +181,11 @@ def gerar_planilha_sintetica(
         subtotal_grupo_c = 0.0
         rotulo_grupo = f" {indice_grupo}"
 
-        itens_dados = [
-            _dados_item(item, catalogo, sinapi, estado, bdi) for item in itens
-        ]
+        itens_dados = []
+        for item in itens:
+            itens_dados.extend(
+                _linhas_dados_item(item, catalogo, sinapi, estado, bdi)
+            )
         for dados in itens_dados:
             subtotal_grupo_s += dados["total_s"]
             subtotal_grupo_c += dados["total_c"]

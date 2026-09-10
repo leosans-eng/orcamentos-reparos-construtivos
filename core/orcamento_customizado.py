@@ -134,6 +134,7 @@ def _criar_composicao_propria(
         "nome": str(nome).strip(),
         "unidade": str(unidade).strip(),
         "quantidade": float(quantidade),
+        "discriminar_componentes": False,
     }
     if custo_unitario_referencia is not None:
         item["custo_unitario_referencia"] = float(custo_unitario_referencia)
@@ -441,6 +442,15 @@ class OrcamentoCustomizado:
         if fixar is None:
             fixar = estado != str(self.estado_referencia or "").strip()
         item["estado_fixado"] = bool(fixar)
+
+    def definir_discriminar_componentes(self, item_id, discriminar: bool):
+        """Marca se a composição deve ser expandida na planilha (Excel/Word)."""
+        _grupo, item = self.obter_item(item_id)
+        if item is None:
+            raise ValueError("Item não encontrado.")
+        if item.get("tipo") != TIPO_COMPOSICAO_PROPRIA:
+            raise ValueError("Apenas composições próprias podem discriminar componentes.")
+        item["discriminar_componentes"] = bool(discriminar)
 
     def substituir_por_composicao_propria(
         self, item_id, composicao_catalogo_id, codigo, nome, unidade

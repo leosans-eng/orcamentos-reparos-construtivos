@@ -202,6 +202,15 @@ def verificar_componentes_depreciados(composicao, sinapi_df, estado):
     return depreciados
 
 
+def _estado_calculo_item(item, estado):
+    estado_calc = str(estado or "").strip()
+    if item.get("estado_fixado"):
+        estado_item = str(item.get("estado", "")).strip()
+        if estado_item:
+            return estado_item
+    return estado_calc
+
+
 def custo_composicao_propria_item(item, catalogo, sinapi, estado):
     """
     Custo unitário de um item de orçamento que referencia o catálogo.
@@ -216,9 +225,110 @@ def custo_composicao_propria_item(item, catalogo, sinapi, estado):
             except (TypeError, ValueError):
                 pass
         return 0.0, True
-    estado_calc = str(estado or "").strip()
-    if item.get("estado_fixado"):
-        estado_item = str(item.get("estado", "")).strip()
-        if estado_item:
-            estado_calc = estado_item
-    return calcular_custo_unitario(composicao, sinapi, estado_calc)
+    return calcular_custo_unitario(
+        composicao, sinapi, _estado_calculo_item(item, estado)
+    )
+
+
+def linhas_detalhe_composicao(composicao, sinapi_df, estado, quantidade=1.0):
+    """Componentes da composição para prévia e exportação discriminada.
+
+    A quantidade de cada linha é coeficiente × quantidade do item no orçamento.
+    O total da linha é valor unitário × essa quantidade (sem BDI).
+    """
+    linhas = []
+    if not composicao:
+        return linhas
+    estado = str(estado or "").strip()
+    try:
+        qtd_item = float(quantidade)
+    except (TypeError, ValueError):
+        qtd_item = 0.0
+
+    for componente in composicao.get("componentes", []):
+        tipo = componente.get("tipo")
+        try:
+            coeficiente = float(componente.get("coeficiente", 0))
+        except (TypeError, ValueError):
+            coeficiente = 0.0
+        quantidade_linha = coeficiente * qtd_item
+        codigo = str(componente.get("codigo", "")).strip()
+        descricao = str(componente.get("descricao", "")).strip()
+        unidade = str(componente.get("unidade", "")).strip()
+        encontrado = True
+        estado_comp = ""
+        tipo_rotulo = "Mercado"
+        tipo_sinapi = ""
+        unitario = 0.0
+
+        if tipo == TIPO_COMPONENTE_MERCADO:
+            try:
+                unitario = float(componente.get("custo_unitario", 0))
+            except (TypeError, ValueError):
+                unitario = 0.0
+        elif tipo == TIPO_COMPONENTE_SINAPI:
+            tipo_rotulo = "SINAPI"
+            estado_comp = estado_efetivo_componente(componente, estado, sinapi_df)
+            if not estado_comp:
+                encontrado = False
+            else:
+                linha = obter_item_sinapi(sinapi_df, codigo, estado_comp)
+                if linha is None:
+                    encontrado = False
+                else:
+                    try:
+                        unitario = float(linha.get("custo", 0))
+                    except (TypeError, ValueError):
+                        unitario = 0.0
+                    desc_sinapi = str(linha.get("descricao", "")).strip()
+                    if desc_sinapi:
+                        descricao = desc_sinapi
+                    unid_sinapi = str(linha.get("unidade", "")).strip()
+                    if unid_sinapi:
+                        unidade = unid_sinapi
+                    tipo_sinapi = str(linha.get("tipo", "")).strip().upper()[:1]
+            if (
+                componente_usa_estado_alternativo(componente, estado, sinapi_df)
+                and estado_comp
+            ):
+                descricao = f"{descricao}  [{estado_comp}]" if descricao else f"[{estado_comp}]"
+            if not encontrado and estado:
+                if descricao:
+                    descricao = f"{descricao} (não encontrado)"
+                else:
+                    descricao = "Não encontrado"
+        else:
+            encontrado = False
+            tipo_rotulo = str(tipo or "—")
+
+        linhas.append(
+            {
+                "codigo": codigo,
+                "tipo": tipo_rotulo,
+                "descricao": descricao,
+                "unidade": unidade,
+                "coeficiente": coeficiente,
+                "quantidade": quantidade_linha,
+                "valor_unit": unitario,
+                "total": unitario * quantidade_linha,
+                "encontrado": encontrado,
+                "estado": estado_comp,
+                "tipo_sinapi": tipo_sinapi,
+            }
+        )
+    return linhas
+
+
+def linhas_componentes_para_exportacao(item, catalogo, sinapi, estado):
+    """Componentes da composição para a planilha, ou [] para manter a linha agregada."""
+    if not item.get("discriminar_componentes"):
+        return []
+    composicao = obter_composicao_por_id(catalogo, item.get("composicao_catalogo_id"))
+    if composicao is None:
+        return []
+    return linhas_detalhe_composicao(
+        composicao,
+        sinapi,
+        _estado_calculo_item(item, estado),
+        item.get("quantidade", 0),
+    )

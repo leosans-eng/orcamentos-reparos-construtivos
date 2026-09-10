@@ -12,7 +12,10 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-from core.composicoes_proprias import custo_composicao_propria_item
+from core.composicoes_proprias import (
+    custo_composicao_propria_item,
+    linhas_componentes_para_exportacao,
+)
 from core.formatador_sinapi import Modelo, formatar_planilha
 from core.formatador_sinapi.comum import (
     FORMATO_MOEDA,
@@ -148,6 +151,48 @@ def _unidade_item(item) -> str:
     return str(item.get("unidade", "")).strip()
 
 
+def _linha_dataframe(codigo, descricao, unidade, quantidade, valor_unit) -> dict:
+    quantidade = float(quantidade or 0)
+    valor_unit = float(valor_unit or 0)
+    return {
+        "Código SINAPI": str(codigo or "").strip() or "—",
+        "Descrição do item": str(descricao or "").strip(),
+        "Unid.": str(unidade or "").strip(),
+        "Qtd.": round(quantidade, 4),
+        "Valor Unit.": round(valor_unit, 2),
+        "Total s/ BDI": round(valor_unit * quantidade, 2),
+    }
+
+
+def _linhas_dataframe_item(item, catalogo, sinapi, estado: str) -> list[dict]:
+    if item.get("tipo") == TIPO_COMPOSICAO_PROPRIA:
+        componentes = linhas_componentes_para_exportacao(
+            item, catalogo, sinapi, estado
+        )
+        if componentes:
+            return [
+                _linha_dataframe(
+                    componente.get("codigo"),
+                    componente.get("descricao"),
+                    componente.get("unidade"),
+                    componente.get("quantidade"),
+                    componente.get("valor_unit"),
+                )
+                for componente in componentes
+            ]
+    valor_unit = _custo_unitario_item(item, catalogo, sinapi, estado)
+    quantidade = float(item["quantidade"])
+    return [
+        _linha_dataframe(
+            _codigo_item(item),
+            _descricao_item(item, estado=estado, sinapi=sinapi, catalogo=catalogo),
+            _unidade_item(item),
+            quantidade,
+            valor_unit,
+        )
+    ]
+
+
 def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: str):
     linhas = []
     total_sem_bdi = 0.0
@@ -157,22 +202,11 @@ def montar_dataframe_orcamento_customizado(orcamento, catalogo, sinapi, estado: 
         itens_linhas = []
 
         for item in grupo.get("itens", []):
-            valor_unit = _custo_unitario_item(item, catalogo, sinapi, estado)
-            quantidade = float(item["quantidade"])
-            total_item = round(valor_unit * quantidade, 2)
-            subtotal_grupo += total_item
-            itens_linhas.append(
-                {
-                    "Código SINAPI": _codigo_item(item),
-                    "Descrição do item": _descricao_item(
-                        item, estado=estado, sinapi=sinapi, catalogo=catalogo
-                    ),
-                    "Unid.": _unidade_item(item),
-                    "Qtd.": round(quantidade, 2),
-                    "Valor Unit.": round(valor_unit, 2),
-                    "Total s/ BDI": total_item,
-                }
-            )
+            for linha_item in _linhas_dataframe_item(
+                item, catalogo, sinapi, estado
+            ):
+                subtotal_grupo += float(linha_item["Total s/ BDI"] or 0)
+                itens_linhas.append(linha_item)
 
         if not grupo.get("itens"):
             linhas.append(

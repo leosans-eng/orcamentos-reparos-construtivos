@@ -3,7 +3,12 @@ from copy import deepcopy
 from tkinter import messagebox, ttk
 
 from app_paths import asset_path
-from core.composicoes_proprias import custo_composicao_propria_item, filtrar_composicoes_catalogo
+from core.composicoes_proprias import (
+    custo_composicao_propria_item,
+    filtrar_composicoes_catalogo,
+    linhas_detalhe_composicao,
+    obter_composicao_por_id,
+)
 from core.exportacao_planilha_orcamento import (
     exportar_orcamento_customizado_modelo4,
     exportar_orcamento_customizado_modelo_formatado,
@@ -46,11 +51,13 @@ from core.sinapi_busca import (
     tipo_sinapi_para_filtro,
 )
 from ui.calculadora import abrir_calculadora
+from ui.dialogo_previa_composicao import DialogoPreviaComposicao
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from core.ui_prefs import definir_pref, obter_pref
 from ui.grade_orcamento import (
     COR_ALERTA_DEPRECIADO,
     COR_COMPOSICAO,
+    COR_DISCRIMINAR,
     COR_ESTADO_ALTERNATIVO,
     COR_GRUPO,
     GradeOrcamento,
@@ -1637,6 +1644,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             "Ctrl+F: filtrar por código ou descrição\n"
             "Arraste pelo nº (ou ⠿ na etapa) para reordenar\n"
             "Duplo clique: nome da etapa, código ou quantidade\n"
+            "Lupa na composição própria: ver itens cadastrados\n"
             "Botão direito: menu do item\n"
             "Ctrl/Shift+clique: seleção múltipla\n"
             "Delete: remover",
@@ -1723,6 +1731,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             on_reordenar_item=self._ao_reordenar_item_arraste,
             on_reordenar_etapa=self._ao_reordenar_etapa_arraste,
             on_menu_contexto=self._ao_menu_contexto_grade,
+            on_previa_composicao=self._abrir_previa_composicao,
         )
         self.grade.pack(fill="both", expand=True)
 
@@ -2134,6 +2143,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             (COR_ALERTA_DEPRECIADO, "Depreciado / indisponível"),
             (COR_ESTADO_ALTERNATIVO, "UF alternativa"),
             (COR_COMPOSICAO, "Composição própria"),
+            (COR_DISCRIMINAR, "Discriminar no Excel/Word"),
         ):
             amostra = tk.Frame(
                 self._conteudo_legenda,
@@ -2220,6 +2230,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 command=lambda: self._remover_selecionado(silencioso=False),
             )
         else:
+            if meta.get("tipo") == TIPO_COMPOSICAO_PROPRIA:
+                menu.add_command(
+                    label="Ver composição",
+                    command=lambda m=dict(meta): self._abrir_previa_composicao(m),
+                )
+                menu.add_separator()
             menu.add_command(
                 label="Substituir item",
                 command=lambda m=dict(meta): self._editar_item_sinapi(m),
@@ -2241,6 +2257,65 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
+
+    def _abrir_previa_composicao(self, meta=None):
+        meta = meta or self._meta_selecionada()
+        if not meta or meta.get("tipo") != TIPO_COMPOSICAO_PROPRIA:
+            return
+        item_id = meta.get("id")
+        grupo, item = self.orcamento.obter_item(item_id)
+        if item is None:
+            return
+        catalogo = listar_composicoes_catalogo()
+        composicao = obter_composicao_por_id(
+            catalogo, item.get("composicao_catalogo_id")
+        )
+        estado = self._estado_selecionado()
+        estado_calc = estado_efetivo_item(item, estado, self.ctx.sinapi)
+        linhas = linhas_detalhe_composicao(
+            composicao,
+            self.ctx.sinapi,
+            estado_calc,
+            item.get("quantidade", 0),
+        )
+        custo_unit, _ = custo_composicao_propria_item(
+            item, catalogo, self.ctx.sinapi, estado
+        )
+        try:
+            quantidade = float(item.get("quantidade") or 0)
+        except (TypeError, ValueError):
+            quantidade = 0.0
+        total = custo_unit * quantidade
+
+        def ao_alterar_discriminar(iid, valor):
+            try:
+                self.orcamento.definir_discriminar_componentes(iid, valor)
+            except ValueError as exc:
+                messagebox.showwarning(
+                    "Composição própria",
+                    str(exc),
+                    parent=self.winfo_toplevel(),
+                )
+                return
+            self._registrar_alteracao(
+                focar_meta={
+                    "tipo": TIPO_COMPOSICAO_PROPRIA,
+                    "id": iid,
+                    "grupo_id": grupo["id"] if grupo else meta.get("grupo_id"),
+                },
+                descricao="Discriminação da composição alterada",
+            )
+
+        DialogoPreviaComposicao(
+            self.winfo_toplevel(),
+            item=item,
+            composicao=composicao,
+            estado=estado_calc,
+            linhas=linhas,
+            custo_unitario=custo_unit,
+            total=total,
+            on_alterar_discriminar=ao_alterar_discriminar,
+        )
 
     def _atualizar_banner_depreciados(self):
         banner = getattr(self, "_banner_depreciados", None)
@@ -3120,11 +3195,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     descricao = item.get("nome", "")
                     if item.get("estado_fixado") and item.get("estado"):
                         descricao = f"{descricao}  [{item.get('estado', '')}]"
+                    discriminar = bool(item.get("discriminar_componentes"))
                     self.grade.adicionar_linha(
                         meta={
                             "tipo": TIPO_COMPOSICAO_PROPRIA,
                             "id": item["id"],
                             "grupo_id": grupo["id"],
+                            "discriminar_componentes": discriminar,
                         },
                         valores={
                             "item": num_item,
@@ -3139,7 +3216,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                         },
                         estilo="composicao",
                         alerta_depreciado=tem_depreciado,
-                        alerta_estado_alternativo=usa_uf_alt and not tem_depreciado,
+                        alerta_estado_alternativo=usa_uf_alt
+                        and not tem_depreciado
+                        and not discriminar,
+                        alerta_discriminar=discriminar and not tem_depreciado,
                     )
 
         bdi_txt = _formatar_bdi(bdi)

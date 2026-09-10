@@ -66,6 +66,7 @@ from ui.icones import (
 from ui.recarga_catalogo import RecarregadorCatalogo
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
+    CampoListaPesquisavel,
     ControleAtualizacaoPagina,
     aplicar_icone_janela,
     centralizar_janela,
@@ -418,27 +419,16 @@ class DialogoNovaEtapa(tk.Toplevel):
         ).pack(fill="x", pady=(0, 4))
 
         self.var_modelo = tk.StringVar(value=ETAPA_EM_BRANCO)
-        self._popup_modelo = None
-        self._lista_modelo = None
-        self._ignorando_foco_modelo = False
-
-        frame_modelo = tk.Frame(painel, bg="#ececec")
-        frame_modelo.pack(fill="x", pady=(0, 10))
-        self.entrada_modelo = ttk.Entry(frame_modelo, textvariable=self.var_modelo)
-        self.entrada_modelo.pack(side="left", fill="x", expand=True)
-        ttk.Button(
-            frame_modelo,
-            text="▼",
-            width=3,
-            command=self._ao_botao_lista_modelo,
-        ).pack(side="left", padx=(4, 0))
-
-        self.entrada_modelo.bind("<ButtonRelease-1>", self._ao_clicar_modelo)
-        self.entrada_modelo.bind("<KeyRelease>", self._ao_digitar_modelo)
-        self.entrada_modelo.bind("<Down>", self._ao_seta_baixo_modelo)
-        self.entrada_modelo.bind("<Return>", self._ao_return_modelo)
-        self.entrada_modelo.bind("<Escape>", self._ao_escape_modelo)
-        self.entrada_modelo.bind("<FocusOut>", self._ao_foco_sair_modelo)
+        self.campo_modelo = CampoListaPesquisavel(
+            painel,
+            textvariable=self.var_modelo,
+            on_escolher=self._ao_escolher_modelo,
+            altura_lista=8,
+            largura_minima_lista=280,
+            bg="#ececec",
+        )
+        self.campo_modelo.definir_opcoes(self._opcoes_modelo)
+        self.campo_modelo.pack(fill="x", pady=(0, 10))
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
@@ -449,205 +439,19 @@ class DialogoNovaEtapa(tk.Toplevel):
             side="right"
         )
 
-        self.bind("<Escape>", self._ao_escape_janela)
+        self.bind("<Escape>", lambda _e: self._fechar())
         self.bind("<Return>", lambda _e: self._confirmar())
         self.protocol("WM_DELETE_WINDOW", self._fechar)
         self.update_idletasks()
         centralizar_janela(self, parent)
         focar_entrada_apos_exibir(entrada_nome)
 
-    def _consulta_filtro_modelo(self) -> str:
-        texto = self.var_modelo.get().strip()
-        if not texto or texto == ETAPA_EM_BRANCO:
-            return ""
-        return texto.casefold()
-
-    def _opcoes_filtradas_modelo(self, forcar_todas: bool = False):
-        if forcar_todas:
-            return list(self._opcoes_modelo)
-        consulta = self._consulta_filtro_modelo()
-        if not consulta:
-            return list(self._opcoes_modelo)
-        return [
-            opcao
-            for opcao in self._opcoes_modelo
-            if consulta in opcao.casefold()
-        ]
-
-    def _popup_modelo_ativo(self) -> bool:
-        return (
-            self._popup_modelo is not None
-            and bool(self._popup_modelo.winfo_exists())
-        )
-
-    def _posicionar_popup_modelo(self):
-        if not self._popup_modelo_ativo():
-            return
-        self.update_idletasks()
-        x = self.entrada_modelo.winfo_rootx()
-        y = self.entrada_modelo.winfo_rooty() + self.entrada_modelo.winfo_height()
-        largura = max(self.entrada_modelo.winfo_width(), 280)
-        self._popup_modelo.geometry(f"{largura}x180+{x}+{y}")
-
-    def _criar_popup_modelo(self):
-        popup = tk.Toplevel(self)
-        popup.overrideredirect(True)
-        popup.transient(self)
-        popup.configure(bg="#ffffff")
-        lista = tk.Listbox(
-            popup,
-            height=8,
-            exportselection=False,
-            activestyle="dotbox",
-            font=("Segoe UI", 9),
-            bg="#ffffff",
-            relief="solid",
-            borderwidth=1,
-        )
-        scroll = ttk.Scrollbar(popup, orient="vertical", command=lista.yview)
-        lista.configure(yscrollcommand=scroll.set)
-        lista.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-        lista.bind("<ButtonRelease-1>", self._ao_escolher_modelo)
-        lista.bind("<Return>", self._ao_escolher_modelo)
-        lista.bind("<Escape>", lambda _e: self._esconder_lista_modelo())
-        self._popup_modelo = popup
-        self._lista_modelo = lista
-
-    def _mostrar_lista_modelo(self, forcar_todas: bool = False):
-        opcoes = self._opcoes_filtradas_modelo(forcar_todas=forcar_todas)
-        self._ignorando_foco_modelo = True
-        try:
-            if not self._popup_modelo_ativo():
-                self._criar_popup_modelo()
-            self._lista_modelo.delete(0, "end")
-            for opcao in opcoes:
-                self._lista_modelo.insert("end", opcao)
-            if opcoes:
-                self._lista_modelo.selection_clear(0, "end")
-                self._lista_modelo.selection_set(0)
-                self._lista_modelo.activate(0)
-                self._lista_modelo.see(0)
-            self._posicionar_popup_modelo()
-            self._popup_modelo.deiconify()
-            self._popup_modelo.lift()
-        finally:
-            # Mantém o cursor na caixa para digitar sem precisar clicar de novo.
-            try:
-                self.entrada_modelo.focus_set()
-            except tk.TclError:
-                pass
-            self.after(200, self._liberar_foco_modelo)
-
-    def _liberar_foco_modelo(self):
-        self._ignorando_foco_modelo = False
-
-    def _esconder_lista_modelo(self):
-        if self._popup_modelo_ativo():
-            try:
-                self._popup_modelo.destroy()
-            except tk.TclError:
-                pass
-        self._popup_modelo = None
-        self._lista_modelo = None
-
-    def _selecionar_texto_modelo(self):
-        try:
-            self.entrada_modelo.focus_set()
-            self.entrada_modelo.selection_range(0, "end")
-            self.entrada_modelo.icursor("end")
-        except tk.TclError:
-            pass
-
-    def _ao_clicar_modelo(self, _event=None):
-        self.after_idle(self._abrir_modelo_no_clique)
-
-    def _abrir_modelo_no_clique(self):
-        # Lista completa no clique; seleção do texto depois do foco estabilizar.
-        self._mostrar_lista_modelo(forcar_todas=True)
-        self.after_idle(self._selecionar_texto_modelo)
-
-    def _ao_botao_lista_modelo(self):
-        self._mostrar_lista_modelo(forcar_todas=True)
-        self.after_idle(self._selecionar_texto_modelo)
-
-    def _ao_seta_baixo_modelo(self, _event=None):
-        self._mostrar_lista_modelo()
-        if self._popup_modelo_ativo() and self._lista_modelo.size() > 0:
-            self._ignorando_foco_modelo = True
-            self._lista_modelo.focus_set()
-            self.after(50, lambda: setattr(self, "_ignorando_foco_modelo", False))
-        return "break"
-
-    def _ao_return_modelo(self, _event=None):
-        if self._popup_modelo_ativo() and self._lista_modelo is not None and self._lista_modelo.size() > 0:
-            if not self._lista_modelo.curselection():
-                self._lista_modelo.selection_set(0)
-            self._ao_escolher_modelo()
-            return "break"
-        return None
-
-    def _ao_escape_modelo(self, _event=None):
-        if self._popup_modelo_ativo():
-            self._esconder_lista_modelo()
-            return "break"
-        return None
-
-    def _ao_escape_janela(self, _event=None):
-        if self._popup_modelo_ativo():
-            self._esconder_lista_modelo()
-            return "break"
-        self._fechar()
-        return "break"
-
-    def _ao_foco_sair_modelo(self, _event=None):
-        if self._ignorando_foco_modelo:
-            return
-        self.after(120, self._esconder_lista_se_foco_fora)
-
-    def _esconder_lista_se_foco_fora(self):
-        if self._ignorando_foco_modelo:
-            return
-        foco = self.focus_get()
-        if foco is self.entrada_modelo or foco is self._lista_modelo:
-            return
-        self._esconder_lista_modelo()
-
-    def _ao_digitar_modelo(self, event=None):
-        if event is not None and event.keysym in (
-            "Up",
-            "Down",
-            "Left",
-            "Right",
-            "Return",
-            "Tab",
-            "Escape",
-            "Shift_L",
-            "Shift_R",
-            "Control_L",
-            "Control_R",
-            "Home",
-            "End",
-        ):
-            return
-        self._mostrar_lista_modelo(forcar_todas=False)
-
-    def _ao_escolher_modelo(self, _event=None):
-        if not self._popup_modelo_ativo():
-            return
-        selecao = self._lista_modelo.curselection()
-        if not selecao:
-            return
-        valor = self._lista_modelo.get(selecao[0])
-        self.var_modelo.set(valor)
-        self._esconder_lista_modelo()
+    def _ao_escolher_modelo(self, valor: str):
         if valor and valor != ETAPA_EM_BRANCO:
             self.var_nome.set(valor)
-        self.entrada_modelo.focus_set()
-        self.entrada_modelo.selection_range(0, "end")
 
     def _fechar(self):
-        self._esconder_lista_modelo()
+        self.campo_modelo.fechar_lista()
         self.destroy()
 
     def _resolver_modelo(self, texto: str):

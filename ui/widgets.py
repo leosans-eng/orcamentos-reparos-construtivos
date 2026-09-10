@@ -891,8 +891,17 @@ class CampoListaPesquisavel(tk.Frame):
         self._id_configure_topo = None
         self.var = textvariable if textvariable is not None else tk.StringVar()
 
+        self.btn_seta = ttk.Button(
+            self,
+            text="▼",
+            width=3,
+            style="Compact.TButton",
+            command=self._ao_botao_seta,
+        )
+        self.btn_seta.configure(takefocus=False)
+        self.btn_seta.pack(side="right", padx=(2, 0))
         self.entrada = ttk.Entry(self, textvariable=self.var)
-        self.entrada.pack(fill="x", expand=True)
+        self.entrada.pack(side="left", fill="x", expand=True)
 
         self.entrada.bind("<ButtonRelease-1>", self._ao_clicar)
         self.entrada.bind("<KeyRelease>", self._ao_digitar)
@@ -900,6 +909,7 @@ class CampoListaPesquisavel(tk.Frame):
         self.entrada.bind("<Return>", self._ao_return)
         self.entrada.bind("<Escape>", self._ao_escape)
         self.entrada.bind("<FocusOut>", self._ao_foco_sair)
+        self.btn_seta.bind("<ButtonPress-1>", self._ao_pressionar_interno, add="+")
         self.bind("<Destroy>", self._ao_destruir)
         self._id_clique_fora = self.bind_all(
             "<ButtonPress-1>", self._ao_clique_fora, add="+"
@@ -954,48 +964,34 @@ class CampoListaPesquisavel(tk.Frame):
         if not self._popup_ativo():
             return
         self.update_idletasks()
-        topo = self.winfo_toplevel()
         try:
-            topo.update_idletasks()
-            margem = 6
-            topo_w = max(topo.winfo_width(), 1)
-            topo_h = max(topo.winfo_height(), 1)
-            x_campo = self.entrada.winfo_rootx() - topo.winfo_rootx()
-            y_campo = self.entrada.winfo_rooty() - topo.winfo_rooty()
-            h_campo = self.entrada.winfo_height()
-            largura_campo = self.entrada.winfo_width()
+            x = self.winfo_rootx()
+            y_campo = self.winfo_rooty()
+            h_campo = self.winfo_height()
+            largura = max(self.winfo_width(), self._largura_minima_lista)
+            tela_h = self.winfo_screenheight()
         except tk.TclError:
             return
 
-        largura_max = max(80, topo_w - 2 * margem)
-        largura = min(max(largura_campo, self._largura_minima_lista), largura_max)
-        x = x_campo
-        if x + largura > topo_w - margem:
-            x = topo_w - margem - largura
-        if x < margem:
-            x = margem
-
-        altura_desejada = self._altura_popup_px()
-        espaco_abaixo = topo_h - (y_campo + h_campo) - margem
-        espaco_acima = y_campo - margem
-        abrir_abaixo = espaco_abaixo >= min(altura_desejada, 140) or espaco_abaixo >= espaco_acima
-        if abrir_abaixo:
-            y = y_campo + h_campo
-            altura = min(altura_desejada, max(espaco_abaixo, 80))
-        else:
-            altura = min(altura_desejada, max(espaco_acima, 80))
-            y = y_campo - altura
-        if y < margem:
-            y = margem
-            altura = min(altura, topo_h - y - margem)
-        if y + altura > topo_h - margem:
-            altura = max(80, topo_h - margem - y)
-
-        self._popup.place(x=int(x), y=int(y), width=int(largura), height=int(altura))
-        self._popup.lift()
+        altura = self._altura_popup_px()
+        y = y_campo + h_campo
+        # Prefere abrir para baixo, mesmo que ultrapasse a janela do diálogo.
+        # Só sobe se não couber na tela.
+        if y + altura > tela_h - 8:
+            y_acima = y_campo - altura
+            if y_acima >= 8:
+                y = y_acima
+            else:
+                altura = max(160, tela_h - y - 8)
+        self._popup.geometry(f"{int(largura)}x{int(altura)}+{int(x)}+{int(y)}")
+        try:
+            self._popup.deiconify()
+            self._popup.lift()
+        except tk.TclError:
+            pass
 
     def _ponto_interno(self, x, y) -> bool:
-        widgets = [self, self.entrada]
+        widgets = [self, self.entrada, self.btn_seta]
         if self._popup_ativo():
             widgets.extend([self._popup, self._lista])
         for widget in widgets:
@@ -1024,13 +1020,14 @@ class CampoListaPesquisavel(tk.Frame):
         self.fechar_lista()
 
     def _criar_popup(self):
-        topo = self.winfo_toplevel()
-        popup = tk.Frame(
-            topo,
-            bg="#ffffff",
-            highlightbackground="#888888",
-            highlightthickness=1,
-        )
+        popup = tk.Toplevel(self)
+        popup.withdraw()
+        popup.overrideredirect(True)
+        try:
+            popup.transient(self.winfo_toplevel())
+        except tk.TclError:
+            pass
+        popup.configure(bg="#ffffff")
         lista = tk.Listbox(
             popup,
             height=self._altura_lista,
@@ -1038,8 +1035,8 @@ class CampoListaPesquisavel(tk.Frame):
             activestyle="dotbox",
             font=("Segoe UI", 9),
             bg="#ffffff",
-            relief="flat",
-            borderwidth=0,
+            relief="solid",
+            borderwidth=1,
             takefocus=True,
         )
         scroll = ttk.Scrollbar(popup, orient="vertical", command=lista.yview)
@@ -1052,9 +1049,30 @@ class CampoListaPesquisavel(tk.Frame):
         self._popup = popup
         self._lista = lista
         self._desvincular_configure_topo()
-        self._id_configure_topo = topo.bind(
-            "<Configure>", self._ao_configurar_topo, add="+"
-        )
+        try:
+            topo = self.winfo_toplevel()
+            self._id_configure_topo = topo.bind(
+                "<Configure>", self._ao_configurar_topo, add="+"
+            )
+        except tk.TclError:
+            self._id_configure_topo = None
+
+    def _fechar_e_focar(self):
+        self.fechar_lista()
+        try:
+            self.entrada.focus_set()
+        except tk.TclError:
+            pass
+
+    def _ao_pressionar_interno(self, _event=None):
+        self._ignorando_foco = True
+        self.after(200, self._liberar_foco)
+
+    def _ao_botao_seta(self):
+        if self._popup_ativo():
+            self.fechar_lista()
+            return
+        self._abrir_no_clique()
 
     def _ao_configurar_topo(self, event):
         try:
@@ -1165,7 +1183,7 @@ class CampoListaPesquisavel(tk.Frame):
         except tk.TclError:
             self.fechar_lista()
             return
-        if foco is self.entrada or foco is self._lista:
+        if foco in (self.entrada, self._lista, self.btn_seta):
             return
         self.fechar_lista()
 

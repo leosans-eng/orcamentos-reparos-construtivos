@@ -2308,6 +2308,20 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                     label="Ver composição",
                     command=lambda m=dict(meta): self._abrir_previa_composicao(m),
                 )
+                discriminar = bool(meta.get("discriminar_componentes"))
+                _grupo, item = self.orcamento.obter_item(meta.get("id"))
+                if item is not None:
+                    discriminar = bool(item.get("discriminar_componentes"))
+                menu._var_discriminar = tk.BooleanVar(value=discriminar)
+                menu.add_checkbutton(
+                    label="Discriminar no Excel/Word",
+                    variable=menu._var_discriminar,
+                    command=lambda iid=meta.get("id"), var=menu._var_discriminar, gid=meta.get("grupo_id"): (
+                        self._definir_discriminar_composicao(
+                            iid, bool(var.get()), grupo_id=gid
+                        )
+                    ),
+                )
                 menu.add_separator()
             menu.add_command(
                 label="Substituir item",
@@ -2361,22 +2375,10 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         total = custo_unit * quantidade
 
         def ao_alterar_discriminar(iid, valor):
-            try:
-                self.orcamento.definir_discriminar_componentes(iid, valor)
-            except ValueError as exc:
-                messagebox.showwarning(
-                    "Composição própria",
-                    str(exc),
-                    parent=self.winfo_toplevel(),
-                )
-                return
-            self._registrar_alteracao(
-                focar_meta={
-                    "tipo": TIPO_COMPOSICAO_PROPRIA,
-                    "id": iid,
-                    "grupo_id": grupo["id"] if grupo else meta.get("grupo_id"),
-                },
-                descricao="Discriminação da composição alterada",
+            self._definir_discriminar_composicao(
+                iid,
+                valor,
+                grupo_id=grupo["id"] if grupo else meta.get("grupo_id"),
             )
 
         DialogoPreviaComposicao(
@@ -2388,6 +2390,30 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             custo_unitario=custo_unit,
             total=total,
             on_alterar_discriminar=ao_alterar_discriminar,
+        )
+
+    def _definir_discriminar_composicao(self, item_id, discriminar, *, grupo_id=None):
+        grupo, item = self.orcamento.obter_item(item_id)
+        if item is None:
+            return
+        if bool(item.get("discriminar_componentes")) == bool(discriminar):
+            return
+        try:
+            self.orcamento.definir_discriminar_componentes(item_id, discriminar)
+        except ValueError as exc:
+            messagebox.showwarning(
+                "Composição própria",
+                str(exc),
+                parent=self.winfo_toplevel(),
+            )
+            return
+        self._registrar_alteracao(
+            focar_meta={
+                "tipo": TIPO_COMPOSICAO_PROPRIA,
+                "id": item_id,
+                "grupo_id": grupo["id"] if grupo else grupo_id,
+            },
+            descricao="Discriminação da composição alterada",
         )
 
     def _atualizar_banner_depreciados(self):

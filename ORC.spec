@@ -9,12 +9,15 @@ datas = [
     ('icone.ico', '.'),
     ('assets/icons', 'assets/icons'),
     ('assets/modelos', 'assets/modelos'),
+    ('assets/temas/azure', 'assets/temas/azure'),
+    ('assets/temas/forest', 'assets/temas/forest'),
 ]
 if Path('dados/idebras.dat').is_file():
     datas.append(('dados/idebras.dat', 'dados'))
 datas += collect_data_files('certifi')
 datas += collect_data_files('docx')
 datas += collect_data_files('tksvg')
+datas += collect_data_files('sv_ttk')
 
 
 a = Analysis(
@@ -29,6 +32,7 @@ a = Analysis(
         'num2words',
         'docx',
         'tksvg',
+        'sv_ttk',
         'windnd',
         'core.formatador_sinapi',
         'core.formatador_sinapi.modelo1',
@@ -59,6 +63,7 @@ a = Analysis(
         'core.api_exceptions',
         'ui.dialogo_login',
         'ui.dialogo_admin_usuarios',
+        'ui.temas',
         'ui.recarga_catalogo',
         'ui.orcamento_customizado_modulo',
         'ui.selecao_orcamentos_customizado',
@@ -67,6 +72,7 @@ a = Analysis(
         'core.idebras_secrets',
         'core.municipios_br',
         'core.vicios_storage',
+        'core.ui_prefs',
     ],
     hookspath=[],
     hooksconfig={},

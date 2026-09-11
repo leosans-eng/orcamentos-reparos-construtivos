@@ -118,45 +118,93 @@ def _obter_area_util_tela(janela, parent=None):
     return 0, 0, janela.winfo_screenwidth(), janela.winfo_screenheight()
 
 
-def _medir_dimensoes_janela(janela):
-    """Obtém largura/altura reais após o layout, sem flash visível na tela."""
-    janela.update_idletasks()
-    alpha_oculto = False
+def _parse_wm_size(janela):
     try:
-        janela.attributes("-alpha", 0.0)
-        alpha_oculto = True
-    except tk.TclError:
-        janela.geometry("-20000-20000")
+        tamanho = str(janela.wm_geometry() or "").split("+", 1)[0].split("-", 1)[0]
+        if "x" in tamanho:
+            partes = tamanho.lower().split("x")
+            return int(float(partes[0])), int(float(partes[1]))
+    except (TypeError, ValueError, IndexError):
+        pass
+    return None, None
 
+
+def _dimensoes_janela(janela, largura=None, altura=None):
+    """Largura/altura alvo sem mapear a janela (evita o salto na tela)."""
+    janela.update_idletasks()
+    req_w = max(int(janela.winfo_reqwidth()), 1)
+    req_h = max(int(janela.winfo_reqheight()), 1)
+    geo_w, geo_h = _parse_wm_size(janela)
+    mapped = False
+    try:
+        mapped = bool(janela.winfo_ismapped())
+    except tk.TclError:
+        pass
+    atual_w = janela.winfo_width()
+    atual_h = janela.winfo_height()
+
+    # Toplevel oculto costuma ficar em 200x200 (padrão do Tk). Esse valor não
+    # pode ganhar do reqheight, senão o diálogo fica cortado — ou, se o
+    # conteúdo for menor, infla a janela e deixa um rodapé vazio.
+    def _escolher(explicito, req, geo, atual):
+        if explicito is not None:
+            return max(int(explicito), 1)
+        valor = req
+        if geo and geo > valor and geo > 200:
+            valor = geo
+        if mapped and atual > valor and atual > 200:
+            valor = atual
+        return max(int(valor), 1)
+
+    return (
+        _escolher(largura, req_w, geo_w, atual_w),
+        _escolher(altura, req_h, geo_h, atual_h),
+    )
+
+
+def _relayout_pack(janela):
+    """Refaz o pack dos filhos diretos após a janela ganhar o tamanho real.
+
+    Com a janela oculta o Tk costuma alocar 200x200. Os widgets extras ficam
+    com altura 1 e o packer não redistribui quando o tamanho muda — só depois
+    de um pack_forget/pack com a janela já mapeada.
+    """
+    filhos = []
+    for filho in janela.winfo_children():
+        try:
+            info = filho.pack_info()
+        except tk.TclError:
+            continue
+        if info:
+            filhos.append((filho, info))
+    if not filhos:
+        return
+    for filho, _info in filhos:
+        filho.pack_forget()
+    for filho, info in filhos:
+        filho.pack(**info)
+    janela.update_idletasks()
+
+
+def centralizar_janela(janela, parent=None, *, largura=None, altura=None):
+    """Posiciona e só então exibe a janela, já no tamanho certo."""
+    largura, altura = _dimensoes_janela(janela, largura, altura)
+    area_x, area_y, area_largura, area_altura = _obter_area_util_tela(janela, parent)
+    x = area_x + max(0, (area_largura - largura) // 2)
+    y = area_y + max(0, (area_altura - altura) // 2)
+    geometria = f"{largura}x{altura}+{x}+{y}"
+    janela.geometry(geometria)
+    janela.update_idletasks()
     try:
         janela.deiconify()
     except tk.TclError:
         pass
     janela.update_idletasks()
-
-    largura = janela.winfo_width()
-    altura = janela.winfo_height()
-    if largura <= 1:
-        largura = janela.winfo_reqwidth()
-    if altura <= 1:
-        altura = janela.winfo_reqheight()
-
-    return largura, altura, alpha_oculto
-
-
-def centralizar_janela(janela, parent=None):
-    largura, altura, alpha_oculto = _medir_dimensoes_janela(janela)
-
-    area_x, area_y, area_largura, area_altura = _obter_area_util_tela(janela, parent)
-    x = area_x + max(0, (area_largura - largura) // 2)
-    y = area_y + max(0, (area_altura - altura) // 2)
-    janela.geometry(f"+{x}+{y}")
-    janela.update_idletasks()
-    if alpha_oculto:
-        try:
-            janela.attributes("-alpha", 1.0)
-        except tk.TclError:
-            pass
+    # No Windows o tamanho definido com a janela oculta às vezes é ignorado.
+    if janela.winfo_width() < largura or janela.winfo_height() < altura:
+        janela.geometry(geometria)
+        janela.update_idletasks()
+    _relayout_pack(janela)
 
 
 def focar_entrada_apos_exibir(entrada, *, selecionar=False):
@@ -187,9 +235,12 @@ def perguntar_texto(
     padding=(16, 14),
 ):
     """Diálogo de entrada de texto com ícone do ORC (substitui simpledialog.askstring)."""
+    from ui.temas import aplicar_chrome_dialogo
+
     resultado: list[str | None] = [None]
     dialog = tk.Toplevel(parent)
     preparar_toplevel(dialog)
+    cores, estilos = aplicar_chrome_dialogo(dialog)
     dialog.title(titulo)
     aplicar_icone_janela(dialog)
     dialog.transient(parent)
@@ -197,15 +248,15 @@ def perguntar_texto(
     dialog.resizable(bool(minsize), False)
     if minsize:
         dialog.minsize(*minsize)
-    dialog.configure(bg="#ececec")
 
-    painel = tk.Frame(dialog, bg="#ececec", padx=padding[0], pady=padding[1])
-    painel.pack(fill="both", expand=True)
+    painel = tk.Frame(dialog, bg=cores.fundo, padx=padding[0], pady=padding[1])
+    painel.pack(fill="x")
 
     tk.Label(
         painel,
         text=mensagem,
-        bg="#ececec",
+        bg=cores.fundo,
+        fg=cores.texto,
         justify="left",
         anchor="w",
     ).pack(fill="x", pady=(0, 8))
@@ -214,8 +265,8 @@ def perguntar_texto(
     entrada = ttk.Entry(painel, textvariable=var_texto, width=largura_entrada)
     entrada.pack(fill="x", pady=(0, 12))
 
-    botoes = ttk.Frame(painel)
-    botoes.pack(fill="x")
+    linha_botoes = ttk.Frame(painel)
+    linha_botoes.pack(fill="x")
 
     def cancelar():
         dialog.destroy()
@@ -224,10 +275,8 @@ def perguntar_texto(
         resultado[0] = var_texto.get()
         dialog.destroy()
 
-    ttk.Button(botoes, text="Cancelar", command=cancelar, style="Delete.TButton").pack(
-        side="right", padx=(6, 0)
-    )
-    ttk.Button(botoes, text=texto_ok, command=confirmar, style="Add.TButton").pack(
+    criar_botao_cancelar(linha_botoes, cancelar).pack(side="right", padx=(6, 0))
+    ttk.Button(linha_botoes, text=texto_ok, command=confirmar, style=estilos.adicionar).pack(
         side="right"
     )
 
@@ -242,29 +291,33 @@ def perguntar_texto(
 
 def perguntar_escolha(parent, titulo, mensagem, opcoes):
     """Diálogo com um botão por opção. Retorna a opção escolhida ou None."""
+    from ui.temas import aplicar_chrome_dialogo
+
     escolhido = {"valor": None}
     dialog = tk.Toplevel(parent)
     preparar_toplevel(dialog)
+    cores, _estilos = aplicar_chrome_dialogo(dialog)
+    fundo = cores.fundo
     dialog.title(titulo)
     aplicar_icone_janela(dialog)
     dialog.transient(parent)
     dialog.grab_set()
     dialog.resizable(False, False)
-    dialog.configure(bg="#ececec")
 
-    painel = tk.Frame(dialog, bg="#ececec", padx=20, pady=16)
-    painel.pack(fill="both", expand=True)
+    painel = tk.Frame(dialog, bg=fundo, padx=20, pady=16)
+    painel.pack(fill="x")
 
     tk.Label(
         painel,
         text=mensagem,
-        bg="#ececec",
+        bg=fundo,
+        fg=cores.texto,
         justify="left",
         anchor="w",
         wraplength=420,
     ).pack(fill="x", pady=(0, 14))
 
-    botoes = tk.Frame(painel, bg="#ececec")
+    botoes = tk.Frame(painel, bg=fundo)
     botoes.pack()
 
     def escolher(valor):
@@ -280,7 +333,7 @@ def perguntar_escolha(parent, titulo, mensagem, opcoes):
             width=8,
         ).pack(side="left", padx=6)
 
-    linha_fechar = tk.Frame(painel, bg="#ececec")
+    linha_fechar = tk.Frame(painel, bg=fundo)
     linha_fechar.pack(fill="x", pady=(16, 0))
     criar_botao_fechar(linha_fechar, command=dialog.destroy).pack(side="right")
 
@@ -293,18 +346,21 @@ def perguntar_escolha(parent, titulo, mensagem, opcoes):
 
 
 def centralizar_janela_principal(janela, largura, altura):
+    """Define tamanho e posição da janela principal (pode estar oculta)."""
     janela.update_idletasks()
     area_x, area_y, area_largura, area_altura = _obter_area_util_tela(janela)
     x = area_x + max(0, (area_largura - largura) // 2)
     y = area_y + max(0, (area_altura - altura) // 2)
-    janela.geometry(f"{largura}x{altura}+{x}+{y}")
+    janela.geometry(f"{int(largura)}x{int(altura)}+{int(x)}+{int(y)}")
 
 
-def _configurar_botao_colorido(style, nome, *, background, active, pressed, padding):
+def _configurar_botao_colorido(
+    style, nome, *, background, active, pressed, padding, foreground="black"
+):
     style.configure(
         nome,
         background=background,
-        foreground="black",
+        foreground=foreground,
         borderwidth=1,
         focuscolor="none",
         padding=padding,
@@ -318,8 +374,8 @@ def _configurar_botao_colorido(style, nome, *, background, active, pressed, padd
         ],
         foreground=[
             ("disabled", "#9e9e9e"),
-            ("active", "black"),
-            ("pressed", "black"),
+            ("active", foreground),
+            ("pressed", foreground),
         ],
     )
 
@@ -427,17 +483,67 @@ def parse_quantidade_expressao(texto) -> float:
         raise ValueError("expressão inválida") from exc
 
 
-def configurar_estilos_ttk(root):
-    """Estilos achatados de botões (mesmo padrão do Gerador de Relatórios Fotográficos)."""
-    if getattr(root, "_orc_estilos_ttk", False):
-        return
-    style = ttk.Style(root)
+def _configurar_checkbutton_plano(
+    style, nome: str, fundo: str, texto: str, texto_desabilitado: str | None = None
+) -> None:
+    """Checkbox ttk do tema, sem o recorte cinza atrás do texto."""
     try:
-        style.theme_use("")
+        style.layout(
+            nome,
+            [
+                (
+                    "Checkbutton.padding",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            ("Checkbutton.indicator", {"side": "left", "sticky": ""}),
+                            ("Checkbutton.label", {"side": "left", "sticky": "w"}),
+                        ],
+                    },
+                )
+            ],
+        )
     except tk.TclError:
         pass
+    style.configure(
+        nome,
+        background=fundo,
+        foreground=texto,
+        focuscolor=fundo,
+    )
+    style.map(
+        nome,
+        background=[
+            ("active", fundo),
+            ("selected", fundo),
+            ("pressed", fundo),
+            ("!disabled", fundo),
+        ],
+        foreground=[
+            ("active", texto),
+            ("selected", texto),
+            ("disabled", texto_desabilitado or texto),
+        ],
+    )
 
-    for nome, bg, active, pressed, padding in (
+
+def configurar_estilos_ttk(root, *, forcar=False, tema_id: str | None = None):
+    """Estilos achatados de botões (mesmo padrão do Gerador de Relatórios Fotográficos)."""
+    if getattr(root, "_orc_estilos_ttk", False) and not forcar:
+        return
+    from ui.temas import cores_tema, tema_usa_imagens
+
+    style = ttk.Style(root)
+    tema = str(
+        tema_id
+        or getattr(root, "_orc_tema_atual", None)
+        or ""
+    ).strip()
+    pixmap = tema_usa_imagens(tema) if tema else False
+    cores = cores_tema(root, tema or None)
+    fg_botao = "#f5f5f5" if cores.escuro else "black"
+
+    botoes_orc = (
         ("Add.TButton", "#2e7d32", "#43a047", "#1b5e20", (8, 3)),
         ("Add.Compact.TButton", "#2e7d32", "#43a047", "#1b5e20", (4, 1)),
         ("Delete.TButton", "#c62828", "#e53935", "#b71c1c", (8, 3)),
@@ -447,83 +553,151 @@ def configurar_estilos_ttk(root):
         ("Accent.TButton", "#e65100", "#f57c00", "#bf360c", (8, 3)),
         ("Accent.Compact.TButton", "#e65100", "#f57c00", "#bf360c", (4, 1)),
         ("Save.TButton", "#2e7d32", "#43a047", "#1b5e20", (8, 3)),
-    ):
-        _configurar_botao_colorido(
-            style, nome, background=bg, active=active, pressed=pressed, padding=padding
-        )
+    )
+    if pixmap:
+        verde_txt = "#81c784" if cores.escuro else "#2e7d32"
+        vermelho_txt = cores.perigo
+        azul_txt = cores.titulo
+        cores_texto = {
+            "Add.TButton": verde_txt,
+            "Add.Compact.TButton": verde_txt,
+            "Save.TButton": verde_txt,
+            "Delete.TButton": vermelho_txt,
+            "Delete.Compact.TButton": vermelho_txt,
+            "Edit.TButton": azul_txt,
+            "Edit.Compact.TButton": azul_txt,
+            "Close.TButton": vermelho_txt,
+        }
+        for nome, _bg, _active, _pressed, padding in botoes_orc:
+            kwargs = {"padding": padding, "focuscolor": "none"}
+            cor_txt = cores_texto.get(nome)
+            if cor_txt:
+                kwargs["foreground"] = cor_txt
+            style.configure(nome, **kwargs)
+            if cor_txt:
+                style.map(
+                    nome,
+                    foreground=[("active", cor_txt), ("pressed", cor_txt)],
+                )
+        for nome, padding in (
+            ("Close.TButton", (8, 3)),
+            ("Secondary.TButton", (8, 3)),
+            ("Secondary.Compact.TButton", (4, 1)),
+            ("Muted.Compact.TButton", (4, 1)),
+        ):
+            kwargs = {"padding": padding, "focuscolor": "none"}
+            if nome == "Close.TButton":
+                kwargs["foreground"] = vermelho_txt
+            style.configure(nome, **kwargs)
+            if nome == "Close.TButton":
+                style.map(
+                    nome,
+                    foreground=[("active", vermelho_txt), ("pressed", vermelho_txt)],
+                )
+    else:
+        for nome, bg, active, pressed, padding in botoes_orc:
+            _configurar_botao_colorido(
+                style,
+                nome,
+                background=bg,
+                active=active,
+                pressed=pressed,
+                padding=padding,
+                foreground=fg_botao,
+            )
 
-    style.configure(
-        "Close.TButton",
-        background="#fffafa",
-        foreground="#b71c1c",
-        borderwidth=0,
-        focuscolor="none",
-        padding=(8, 3),
-    )
-    style.map(
-        "Close.TButton",
-        background=[("active", "#ffebee"), ("pressed", "#ffcdd2")],
-        foreground=[("active", "#b71c1c"), ("pressed", "#7f0000")],
-    )
-    style.configure(
-        "Secondary.TButton",
-        background="#eceff1",
-        foreground="#37474f",
-        borderwidth=1,
-        focuscolor="none",
-        padding=(8, 3),
-    )
-    style.map(
-        "Secondary.TButton",
-        background=[("active", "#cfd8dc"), ("pressed", "#b0bec5")],
-        foreground=[("active", "#263238"), ("pressed", "#263238")],
-    )
     style.configure("Compact.TButton", padding=(4, 1), focuscolor="none")
-    style.map(
-        "Compact.TButton",
-        background=[
-            ("disabled", "#e0e0e0"),
-            ("pressed", "#d5d5d5"),
-            ("active", "#e8e8e8"),
-        ],
-        foreground=[
-            ("disabled", "#9e9e9e"),
-        ],
+    if not pixmap:
+        style.configure(
+            "Close.TButton",
+            background="#fffafa",
+            foreground="#b71c1c",
+            borderwidth=0,
+            focuscolor="none",
+            padding=(8, 3),
+        )
+        style.map(
+            "Close.TButton",
+            background=[("active", "#ffebee"), ("pressed", "#ffcdd2")],
+            foreground=[("active", "#b71c1c"), ("pressed", "#7f0000")],
+        )
+        style.configure(
+            "Secondary.TButton",
+            background="#eceff1",
+            foreground="#37474f",
+            borderwidth=1,
+            focuscolor="none",
+            padding=(8, 3),
+        )
+        style.map(
+            "Secondary.TButton",
+            background=[("active", "#cfd8dc"), ("pressed", "#b0bec5")],
+            foreground=[("active", "#263238"), ("pressed", "#263238")],
+        )
+        style.map(
+            "Compact.TButton",
+            background=[
+                ("disabled", "#e0e0e0"),
+                ("pressed", "#d5d5d5"),
+                ("active", "#e8e8e8"),
+            ],
+            foreground=[
+                ("disabled", "#9e9e9e"),
+            ],
+        )
+        style.configure(
+            "Secondary.Compact.TButton",
+            background="#eceff1",
+            foreground="#37474f",
+            borderwidth=1,
+            focuscolor="none",
+            padding=(4, 1),
+        )
+        style.map(
+            "Secondary.Compact.TButton",
+            background=[
+                ("disabled", "#e0e0e0"),
+                ("active", "#cfd8dc"),
+                ("pressed", "#b0bec5"),
+            ],
+            foreground=[
+                ("disabled", "#9e9e9e"),
+                ("active", "#263238"),
+                ("pressed", "#263238"),
+            ],
+        )
+        style.configure(
+            "Muted.Compact.TButton",
+            background="#e8e8e8",
+            foreground="#9e9e9e",
+            borderwidth=1,
+            focuscolor="none",
+            padding=(4, 1),
+        )
+        style.map(
+            "Muted.Compact.TButton",
+            background=[("active", "#e8e8e8"), ("pressed", "#e8e8e8")],
+            foreground=[("active", "#9e9e9e"), ("pressed", "#9e9e9e")],
+        )
+    _configurar_checkbutton_plano(
+        style, "Cartao.TCheckbutton", cores.fundo_cartao, cores.texto_suave
     )
-    style.configure(
-        "Secondary.Compact.TButton",
-        background="#eceff1",
-        foreground="#37474f",
-        borderwidth=1,
-        focuscolor="none",
-        padding=(4, 1),
+    _configurar_checkbutton_plano(
+        style,
+        "Fundo.TCheckbutton",
+        cores.fundo,
+        cores.texto,
+        cores.texto_suave,
     )
-    style.map(
-        "Secondary.Compact.TButton",
-        background=[
-            ("disabled", "#e0e0e0"),
-            ("active", "#cfd8dc"),
-            ("pressed", "#b0bec5"),
-        ],
-        foreground=[
-            ("disabled", "#9e9e9e"),
-            ("active", "#263238"),
-            ("pressed", "#263238"),
-        ],
-    )
-    style.configure(
-        "Muted.Compact.TButton",
-        background="#e8e8e8",
-        foreground="#9e9e9e",
-        borderwidth=1,
-        focuscolor="none",
-        padding=(4, 1),
-    )
-    style.map(
-        "Muted.Compact.TButton",
-        background=[("active", "#e8e8e8"), ("pressed", "#e8e8e8")],
-        foreground=[("active", "#9e9e9e"), ("pressed", "#9e9e9e")],
-    )
+    try:
+        style.configure("TLabelframe", background=cores.fundo)
+        style.configure(
+            "TLabelframe.Label",
+            background=cores.fundo,
+            foreground=cores.texto,
+        )
+    except tk.TclError:
+        pass
     root._orc_estilos_ttk = True
 
 
@@ -536,8 +710,11 @@ def confirmar_exclusao_com_espera(
     estilo_confirmar="Delete.TButton",
 ):
     """Diálogo de exclusão com contagem regressiva antes de habilitar a confirmação."""
+    from ui.temas import aplicar_chrome_dialogo
+
     dialog = tk.Toplevel(parent)
     preparar_toplevel(dialog)
+    cores, _estilos = aplicar_chrome_dialogo(dialog)
     dialog.title(titulo)
     aplicar_icone_janela(dialog)
     dialog.transient(parent)
@@ -554,7 +731,7 @@ def confirmar_exclusao_com_espera(
     ttk.Label(frame, text=mensagem, wraplength=380, justify="center").pack(pady=(0, 12))
 
     countdown_var = tk.StringVar(value=f"Aguarde {restante}s para confirmar...")
-    ttk.Label(frame, textvariable=countdown_var, foreground="#c62828").pack(pady=(0, 12))
+    ttk.Label(frame, textvariable=countdown_var, foreground=cores.perigo).pack(pady=(0, 12))
 
     botoes = ttk.Frame(frame)
     botoes.pack(fill="x")
@@ -575,9 +752,7 @@ def confirmar_exclusao_com_espera(
         state="disabled",
         style=estilo_confirmar,
     )
-    ttk.Button(botoes, text="Cancelar", command=cancelar, style="Secondary.TButton").pack(
-        side="right", padx=(6, 0)
-    )
+    criar_botao_cancelar(botoes, cancelar).pack(side="right", padx=(6, 0))
     btn_confirmar.pack(side="right")
 
     def tick():
@@ -614,6 +789,8 @@ def aplicar_hover_cartao(
     cor_borda_hover=COR_BORDA_HOVER,
     cor_fundo_normal=COR_FUNDO_CARTAO,
     cor_fundo_hover=COR_FUNDO_HOVER,
+    cor_titulo_normal=COR_TITULO_PADRAO,
+    cor_titulo_hover=COR_TITULO_HOVER,
 ):
     """Hover estável: funciona ao mover o mouse entre o cartão e os labels internos."""
     estado = {"hover": False, "job": None}
@@ -631,8 +808,16 @@ def aplicar_hover_cartao(
                             cor_fg = w.cget("fg")
                         except tk.TclError:
                             cor_fg = ""
-                        if cor_fg in (COR_TITULO_PADRAO, COR_TITULO_HOVER, cor_borda_normal):
-                            opts["fg"] = COR_TITULO_HOVER if estilo_hover else COR_TITULO_PADRAO
+                        if cor_fg in (
+                            COR_TITULO_PADRAO,
+                            COR_TITULO_HOVER,
+                            cor_borda_normal,
+                            cor_titulo_normal,
+                            cor_titulo_hover,
+                        ):
+                            opts["fg"] = (
+                                cor_titulo_hover if estilo_hover else cor_titulo_normal
+                            )
                     w.configure(**opts)
             except tk.TclError:
                 pass
@@ -667,12 +852,15 @@ def aplicar_hover_cartao(
         w.bind("<Leave>", agendar_verificacao)
 
 
-def criar_botao_voltar(parent, command, bg_parent="#ececec"):
+def criar_botao_voltar(parent, command, bg_parent=None):
     """Botão 'Voltar ao início' no mesmo padrão visual dos cartões do Hub."""
+    from ui.temas import cores_tema
+
+    cores = cores_tema(parent)
     btn = tk.Frame(
         parent,
-        bg=COR_FUNDO_CARTAO,
-        highlightbackground=COR_BORDA_PADRAO,
+        bg=cores.fundo_cartao,
+        highlightbackground=cores.borda,
         highlightthickness=2,
         cursor="hand2",
     )
@@ -680,8 +868,8 @@ def criar_botao_voltar(parent, command, bg_parent="#ececec"):
         btn,
         text="← Voltar",
         font=("Arial", 10, "bold"),
-        fg=COR_TITULO_PADRAO,
-        bg=COR_FUNDO_CARTAO,
+        fg=cores.titulo,
+        bg=cores.fundo_cartao,
         padx=16,
         pady=6,
     )
@@ -692,7 +880,16 @@ def criar_botao_voltar(parent, command, bg_parent="#ececec"):
 
     btn.bind("<Button-1>", ao_clicar)
     lbl.bind("<Button-1>", ao_clicar)
-    aplicar_hover_cartao(btn, [lbl])
+    aplicar_hover_cartao(
+        btn,
+        [lbl],
+        cor_borda_normal=cores.borda,
+        cor_borda_hover=cores.borda_hover,
+        cor_fundo_normal=cores.fundo_cartao,
+        cor_fundo_hover=cores.fundo_hover,
+        cor_titulo_normal=cores.titulo,
+        cor_titulo_hover=cores.titulo_hover,
+    )
 
     return btn
 
@@ -714,6 +911,7 @@ def vincular_tooltip(widget, texto: str):
             janela,
             text=texto,
             background="#ffffe0",
+            foreground="#000000",
             relief="solid",
             borderwidth=1,
             font=("Arial", 9),
@@ -756,9 +954,14 @@ def criar_barra_modulo(
     montar_acoes_antes_referencia=None,
     montar_acoes_apos_titulo=None,
     montar_acoes_antes_titulo=None,
-    bg="#ececec",
+    bg=None,
 ):
     """Barra superior: Voltar ao início, título da página e referência opcional na mesma linha."""
+    from ui.temas import cores_tema
+
+    cores = cores_tema(parent)
+    if bg is None:
+        bg = cores.fundo
     barra = tk.Frame(parent, bg=bg)
     barra.pack(fill="x", padx=10, pady=(8, 8))
 
@@ -771,7 +974,7 @@ def criar_barra_modulo(
         barra,
         text=titulo,
         font=("Arial", 14, "bold"),
-        fg=COR_TITULO_PADRAO,
+        fg=cores.titulo,
         bg=bg,
     ).pack(side="left", padx=(12, 4))
 
@@ -788,7 +991,7 @@ def criar_barra_modulo(
                 lado_direito,
                 text=texto_referencia,
                 font=("Arial", 9),
-                fg="#666666",
+                fg=cores.texto_suave,
                 bg=bg,
             )
             label_referencia.pack(side="right")
@@ -802,15 +1005,20 @@ def criar_barra_modulo(
 class ControleAtualizacaoPagina:
     """Botão 'Atualizar página' com barrinha de progresso ao lado."""
 
-    def __init__(self, parent, *, command, refs, bg="#ececec"):
-        from ui.icones import criar_botao_ttk_so_icone
+    def __init__(self, parent, *, command, refs, bg=None):
+        from ui.icones import criar_botao_ttk_so_icone, definir_estado_botao_icone
+        from ui.temas import cores_tema
 
+        cores = cores_tema(parent)
+        if bg is None:
+            bg = cores.fundo
+        self._definir_estado = definir_estado_botao_icone
         self.botao = criar_botao_ttk_so_icone(
             parent,
             nome_icone="sync-outline",
             command=command,
             estilo="Compact.TButton",
-            cor_icone="#006699",
+            cor_icone=cores.titulo,
             refs=refs,
         )
         self.botao.pack(side="left", padx=(0, 6))
@@ -825,13 +1033,13 @@ class ControleAtualizacaoPagina:
             parent,
             text="",
             bg=bg,
-            fg="#666666",
+            fg=cores.texto_suave,
             font=("Arial", 8),
         )
 
     def definir_ativo(self, ativo: bool):
         if ativo:
-            self.botao.state(["disabled"])
+            self._definir_estado(self.botao, "disabled")
             if not self.barra.winfo_ismapped():
                 self.barra.pack(side="left", padx=(0, 6))
             if not self.label.winfo_ismapped():
@@ -849,19 +1057,40 @@ class ControleAtualizacaoPagina:
         if self.label.winfo_ismapped():
             self.label.pack_forget()
         self.label.config(text="")
-        self.botao.state(["!disabled"])
+        self._definir_estado(self.botao, "normal")
 
 
 def criar_botao_fechar(parent, command, texto="Fechar"):
-    """Botão Fechar com borda vermelha e texto vermelho (não parece desabilitado)."""
-    borda = tk.Frame(parent, bg="#c62828", padx=1, pady=1)
-    ttk.Button(
-        borda,
-        text=texto,
+    """Botão Fechar/Cancelar com ícone close.svg vermelho."""
+    return _botao_fechar_cancelar(parent, command, texto, variante="fechar")
+
+
+def criar_botao_cancelar(parent, command, texto="Cancelar"):
+    """Botão Cancelar com ícone close.svg (vermelho no pixmap; contraste no ORC)."""
+    return _botao_fechar_cancelar(parent, command, texto, variante="cancelar")
+
+
+def _botao_fechar_cancelar(parent, command, texto, *, variante):
+    from ui.icones import criar_botao_ttk_com_icone
+    from ui.temas import cores_tema, estilos_botao, tema_usa_imagens
+
+    cores = cores_tema(parent)
+    estilos = estilos_botao(parent)
+    pixmap = tema_usa_imagens()
+    if variante == "fechar" and not pixmap:
+        estilo = "Close.TButton"
+        cor_icone = cores.perigo
+    else:
+        estilo = estilos.excluir
+        cor_icone = cores.perigo if pixmap else "#000000"
+    return criar_botao_ttk_com_icone(
+        parent,
+        texto=texto,
+        nome_icone="close",
         command=command,
-        style="Close.TButton",
-    ).pack()
-    return borda
+        estilo=estilo,
+        cor_icone=cor_icone,
+    )
 
 
 class CampoListaPesquisavel(tk.Frame):
@@ -878,6 +1107,10 @@ class CampoListaPesquisavel(tk.Frame):
         largura_minima_lista=280,
         bg=None,
     ):
+        from ui.temas import cores_tema
+
+        if bg is None:
+            bg = cores_tema(parent).fundo
         super().__init__(parent, bg=bg)
         self.on_escolher = on_escolher
         self._normalizar = normalizar
@@ -1020,6 +1253,9 @@ class CampoListaPesquisavel(tk.Frame):
         self.fechar_lista()
 
     def _criar_popup(self):
+        from ui.temas import cores_tema, texto_contraste
+
+        cores = cores_tema(self)
         popup = tk.Toplevel(self)
         popup.withdraw()
         popup.overrideredirect(True)
@@ -1027,16 +1263,22 @@ class CampoListaPesquisavel(tk.Frame):
             popup.transient(self.winfo_toplevel())
         except tk.TclError:
             pass
-        popup.configure(bg="#ffffff")
+        popup.configure(bg=cores.borda_suave)
         lista = tk.Listbox(
             popup,
             height=self._altura_lista,
             exportselection=False,
             activestyle="dotbox",
             font=("Segoe UI", 9),
-            bg="#ffffff",
-            relief="solid",
-            borderwidth=1,
+            bg=cores.fundo_cartao,
+            fg=cores.texto,
+            selectbackground=cores.titulo,
+            selectforeground=texto_contraste(cores.titulo),
+            highlightbackground=cores.borda_suave,
+            highlightcolor=cores.titulo,
+            highlightthickness=1,
+            relief="flat",
+            borderwidth=0,
             takefocus=True,
         )
         scroll = ttk.Scrollbar(popup, orient="vertical", command=lista.yview)

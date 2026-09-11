@@ -23,7 +23,7 @@ from core.sinapi_loader import (
 )
 from core.sinapi_base import SinapiBase
 
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.5.2"
 
 LARGURA_JANELA_PADRAO = 1080
 ALTURA_JANELA_PADRAO = 720

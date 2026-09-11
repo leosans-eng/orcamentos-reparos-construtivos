@@ -6,6 +6,8 @@ import tkinter as tk
 from tkinter import ttk
 
 from core.idebras_client import AmbienteIdebras, PlantaIdebras, medidas_para_orcamento
+from ui.icones import criar_botao_ttk_com_icone
+from ui.temas import aplicar_chrome_dialogo
 from ui.widgets import aplicar_icone_janela, centralizar_janela, criar_botao_fechar, preparar_toplevel
 
 
@@ -21,17 +23,19 @@ class DialogoAmbientesPlanta(tk.Toplevel):
     ):
         super().__init__(parent)
         preparar_toplevel(self)
+        cores, estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
         self.on_aplicar = on_aplicar
         self.ambientes = list(ambientes)
+        self._refs_icones: list = []
         self.title("Ambientes da planta")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.geometry("980x460")
         self.minsize(760, 360)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
         painel.pack(fill="both", expand=True)
         painel.rowconfigure(2, weight=1)
         painel.columnconfigure(0, weight=1)
@@ -40,8 +44,8 @@ class DialogoAmbientesPlanta(tk.Toplevel):
             painel,
             text="Ambientes da planta",
             font=("Arial", 12, "bold"),
-            fg="#006699",
-            bg="#ececec",
+            fg=cores.titulo,
+            bg=fundo,
             anchor="w",
         ).grid(row=0, column=0, sticky="w")
 
@@ -55,8 +59,8 @@ class DialogoAmbientesPlanta(tk.Toplevel):
             painel,
             text=resumo,
             font=("Arial", 9),
-            fg="#555555",
-            bg="#ececec",
+            fg=cores.texto_suave,
+            bg=fundo,
             anchor="w",
             wraplength=900,
             justify="left",
@@ -123,19 +127,22 @@ class DialogoAmbientesPlanta(tk.Toplevel):
             painel,
             text=nota,
             font=("Arial", 9),
-            fg="#333333",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=fundo,
             anchor="w",
         ).grid(row=3, column=0, sticky="w", pady=(8, 0))
 
-        botoes = tk.Frame(painel, bg="#ececec")
+        botoes = tk.Frame(painel, bg=fundo)
         botoes.grid(row=4, column=0, columnspan=2, sticky="e", pady=(12, 0))
         criar_botao_fechar(botoes, command=self.destroy).pack(side="right", padx=(6, 0))
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             botoes,
-            text="Preencher",
+            texto="Preencher",
+            nome_icone="color-wand-outline",
             command=self._aplicar,
-            style="Add.TButton",
+            estilo=estilos.adicionar,
+            cor_icone=estilos.icone_adicionar,
+            refs=self._refs_icones,
         ).pack(side="right")
 
         self.bind("<Escape>", lambda _e: self.destroy())

@@ -4,12 +4,8 @@ from tkinter import ttk
 from core.api_client import get_client
 from ui.dialogo_configuracoes import abrir_dialogo_configuracoes
 from ui.icones import criar_icone_svg
-from ui.widgets import (
-    COR_BORDA_PADRAO,
-    COR_FUNDO_CARTAO,
-    COR_TITULO_PADRAO,
-    aplicar_hover_cartao,
-)
+from ui.temas import cores_tema, tema_usa_imagens
+from ui.widgets import aplicar_hover_cartao
 
 LARGURA_CARTAO = 240
 ALTURA_CARTAO = 148
@@ -20,7 +16,7 @@ ALTURA_ICONE_CARTAO = 20
 
 class HubFrame(tk.Frame):
     def __init__(self, parent, ctx, on_selecionar_modulo, on_logout=None):
-        super().__init__(parent, bg="#ececec")
+        super().__init__(parent)
         self.ctx = ctx
         self.on_selecionar_modulo = on_selecionar_modulo
         self.on_logout = on_logout
@@ -28,42 +24,55 @@ class HubFrame(tk.Frame):
         self._refs_icones = []
         self._montar()
 
+    def atualizar_tema(self):
+        self._cache_icones.clear()
+        self._refs_icones.clear()
+        for filho in list(self.winfo_children()):
+            try:
+                filho.destroy()
+            except tk.TclError:
+                pass
+        self._montar()
+
     def _montar(self):
-        faixa = tk.Frame(self, bg=COR_TITULO_PADRAO, height=6)
+        cores = cores_tema(self)
+        self.configure(bg=cores.fundo)
+
+        faixa = tk.Frame(self, bg=cores.faixa, height=6)
         faixa.pack(fill="x")
         faixa.pack_propagate(False)
 
         # Área expansível: em tela cheia o conteúdo permanece centralizado e com respiro.
-        area = tk.Frame(self, bg="#ececec")
+        area = tk.Frame(self, bg=cores.fundo)
         area.pack(fill="both", expand=True, padx=24, pady=(16, 48))
 
-        container = tk.Frame(area, bg="#ececec")
+        container = tk.Frame(area, bg=cores.fundo)
         container.place(relx=0.5, rely=0.45, anchor="center")
 
         tk.Label(
             container,
             text="ORC",
             font=("Segoe UI", 22, "bold"),
-            fg="#006699",
-            bg="#ececec",
+            fg=cores.titulo,
+            bg=cores.fundo,
         ).pack(pady=(0, 4))
 
         tk.Label(
             container,
             text="Orçamentos de Reparos Construtivos",
             font=("Segoe UI", 11),
-            fg="#444444",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=cores.fundo,
         ).pack(pady=(0, 20))
 
         destaque = tk.Frame(
             container,
-            bg="#e2eef3",
-            highlightbackground="#b7cdd8",
+            bg=cores.fundo_destaque,
+            highlightbackground=cores.borda_suave,
             highlightthickness=1,
         )
         destaque.pack(fill="x", pady=(0, 22), padx=0)
-        interno = tk.Frame(destaque, bg="#e2eef3")
+        interno = tk.Frame(destaque, bg=cores.fundo_destaque)
         interno.pack(fill="x", padx=14, pady=(10, 12))
         self._montar_secao(
             interno,
@@ -95,16 +104,17 @@ class HubFrame(tk.Frame):
                     "icone_titulo": "construct-outline",
                 },
             ],
+            cores,
             pady_abaixo=0,
-            cor_fundo="#e2eef3",
+            cor_fundo=cores.fundo_destaque,
         )
 
-        inferior = tk.Frame(container, bg="#ececec")
+        inferior = tk.Frame(container, bg=cores.fundo)
         inferior.pack(fill="x")
         inferior.columnconfigure(0, weight=1)
         inferior.columnconfigure(1, weight=0)
 
-        cadastros = tk.Frame(inferior, bg="#ececec")
+        cadastros = tk.Frame(inferior, bg=cores.fundo)
         cadastros.grid(row=0, column=0, sticky="nw", padx=(0, 28))
         self._montar_secao(
             cadastros,
@@ -131,10 +141,11 @@ class HubFrame(tk.Frame):
                     "icone_titulo": "cog-outline",
                 },
             ],
+            cores,
             pady_abaixo=0,
         )
 
-        consulta = tk.Frame(inferior, bg="#ececec")
+        consulta = tk.Frame(inferior, bg=cores.fundo)
         consulta.grid(row=0, column=1, sticky="nw")
         self._montar_secao(
             consulta,
@@ -148,14 +159,17 @@ class HubFrame(tk.Frame):
                     "icone_titulo": "search-outline",
                 },
             ],
+            cores,
             pady_abaixo=0,
         )
 
-        self._montar_botoes_rodape()
+        self._montar_botoes_rodape(cores)
 
     def _montar_secao(
-        self, parent, titulo, cartoes, *, pady_abaixo=16, cor_fundo="#ececec"
+        self, parent, titulo, cartoes, cores, *, pady_abaixo=16, cor_fundo=None
     ):
+        if cor_fundo is None:
+            cor_fundo = cores.fundo
         secao = tk.Frame(parent, bg=cor_fundo)
         secao.pack(fill="x", pady=(0, pady_abaixo))
 
@@ -165,11 +179,11 @@ class HubFrame(tk.Frame):
             cabecalho,
             text=titulo,
             font=FONTE_CATEGORIA,
-            fg="#006699",
+            fg=cores.titulo,
             bg=cor_fundo,
             anchor="w",
         ).pack(side="left")
-        tk.Frame(cabecalho, bg="#c5d6de", height=1).pack(
+        tk.Frame(cabecalho, bg=cores.borda_suave, height=1).pack(
             side="left", fill="x", expand=True, padx=(10, 0), pady=6
         )
 
@@ -189,15 +203,16 @@ class HubFrame(tk.Frame):
                 linha=0,
                 aviso=cartao.get("aviso"),
                 icone_titulo=cartao.get("icone_titulo"),
+                cores=cores,
             )
         return secao
 
-    def _montar_botoes_rodape(self):
+    def _montar_botoes_rodape(self, cores):
         icone_cfg = criar_icone_svg(
             self,
             "settings-outline",
             altura=16,
-            cor="#006699",
+            cor=cores.titulo,
         )
         self._refs_icones.append(icone_cfg)
 
@@ -212,23 +227,26 @@ class HubFrame(tk.Frame):
         btn_cfg.place(relx=1.0, rely=1.0, anchor="se", x=-14, y=-10)
 
         if self.on_logout is not None:
-            rodape_usuario = tk.Frame(self, bg="#ececec")
+            rodape_usuario = tk.Frame(self, bg=cores.fundo)
             rodape_usuario.place(relx=0.0, rely=1.0, anchor="sw", x=14, y=-10)
 
             icone_logout = criar_icone_svg(
                 self,
                 "log-out-outline",
                 altura=16,
-                cor="#c62828",
+                cor=cores.perigo,
             )
             self._refs_icones.append(icone_logout)
+            pixmap = tema_usa_imagens(
+                getattr(self.winfo_toplevel(), "_orc_tema_atual", None)
+            )
             btn_logout = ttk.Button(
                 rodape_usuario,
                 text="Logout",
                 image=icone_logout,
                 compound="left",
                 command=self._logout,
-                style="Delete.Compact.TButton",
+                style="Compact.TButton" if pixmap else "Delete.Compact.TButton",
             )
             btn_logout.pack(side="left")
 
@@ -236,10 +254,10 @@ class HubFrame(tk.Frame):
                 self,
                 "person",
                 altura=16,
-                cor="#555555",
+                cor=cores.texto_suave,
             )
             self._refs_icones.append(icone_person)
-            tk.Label(rodape_usuario, image=icone_person, bg="#ececec").pack(
+            tk.Label(rodape_usuario, image=icone_person, bg=cores.fundo).pack(
                 side="left", padx=(10, 4)
             )
             usuario = get_client().username or "—"
@@ -247,8 +265,8 @@ class HubFrame(tk.Frame):
                 rodape_usuario,
                 text=usuario,
                 font=("Segoe UI", 9),
-                fg="#555555",
-                bg="#ececec",
+                fg=cores.texto_suave,
+                bg=cores.fundo,
             ).pack(side="left")
 
     def _abrir_configuracoes(self):
@@ -267,16 +285,17 @@ class HubFrame(tk.Frame):
         modulo,
         habilitado,
         coluna,
+        cores,
         linha=0,
         aviso=None,
         icone_titulo=None,
     ):
         largura = LARGURA_CARTAO
         altura = ALTURA_CARTAO
-        cor_fundo = COR_FUNDO_CARTAO if habilitado else "#f0f0f0"
-        cor_borda = COR_BORDA_PADRAO if habilitado else "#cccccc"
-        cor_titulo = COR_TITULO_PADRAO if habilitado else "#999999"
-        cor_texto = "#555555" if habilitado else "#aaaaaa"
+        cor_fundo = cores.fundo_cartao if habilitado else cores.fundo_cartao_off
+        cor_borda = cores.borda if habilitado else cores.borda_suave
+        cor_titulo = cores.titulo if habilitado else cores.texto_suave
+        cor_texto = cores.texto_suave if habilitado else cores.texto_suave
 
         cartao = tk.Frame(
             parent,
@@ -327,7 +346,7 @@ class HubFrame(tk.Frame):
             rodape,
             text=texto_aviso,
             font=("Arial", 8, "italic"),
-            fg="#999999" if aviso else cor_fundo,
+            fg=cores.texto_suave if aviso else cor_fundo,
             bg=cor_fundo,
             height=1,
         )
@@ -348,7 +367,16 @@ class HubFrame(tk.Frame):
             for filho in filhos:
                 filho.bind("<Button-1>", ao_clicar)
 
-            aplicar_hover_cartao(cartao, filhos)
+            aplicar_hover_cartao(
+                cartao,
+                filhos,
+                cor_borda_normal=cores.borda,
+                cor_borda_hover=cores.borda_hover,
+                cor_fundo_normal=cores.fundo_cartao,
+                cor_fundo_hover=cores.fundo_hover,
+                cor_titulo_normal=cores.titulo,
+                cor_titulo_hover=cores.titulo_hover,
+            )
 
     def _icone_cartao(self, nome: str, cor: str) -> tk.PhotoImage:
         chave = (nome, ALTURA_ICONE_CARTAO, cor)

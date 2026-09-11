@@ -29,6 +29,7 @@ from ui.icones import (
     definir_estado_botao_icone,
 )
 from ui.recarga_catalogo import RecarregadorLista
+from ui.temas import cores_tema, estilos_botao
 from ui.widgets import (
     confirmar_exclusao_com_espera,
     ControleAtualizacaoPagina,
@@ -40,7 +41,10 @@ from ui.widgets import (
 
 class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
     def __init__(self, parent, ctx, *, on_abrir, on_voltar):
-        super().__init__(parent, bg="#ececec")
+        cores = cores_tema(parent)
+        super().__init__(parent, bg=cores.fundo)
+        self._cores = cores
+        self._estilos = estilos_botao(self)
         self.ctx = ctx
         self.on_abrir = on_abrir
         self.on_voltar = on_voltar
@@ -109,27 +113,31 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
         )
 
-        conteudo = tk.Frame(self, bg="#ececec")
+        cores = self._cores
+        estilos = self._estilos
+        fundo = cores.fundo
+        conteudo = tk.Frame(self, bg=fundo)
         conteudo.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
         tk.Label(
             conteudo,
             text="Selecione um orçamento para editar ou crie um novo.",
-            bg="#ececec",
-            fg="#333333",
+            bg=fundo,
+            fg=cores.texto,
             font=("Arial", 10),
         ).pack(anchor="w", padx=4, pady=(0, 8))
 
         painel_lista = tk.LabelFrame(
             conteudo,
             text="Orçamentos salvos",
-            bg="#ececec",
+            bg=fundo,
+            fg=cores.texto_suave,
             padx=8,
             pady=8,
         )
         painel_lista.pack(fill="both", expand=True, padx=4)
 
-        linha_botoes = tk.Frame(painel_lista, bg="#ececec")
+        linha_botoes = tk.Frame(painel_lista, bg=fundo)
         linha_botoes.pack(fill="x", pady=(0, 8))
 
         criar_botao_ttk_com_icone(
@@ -137,7 +145,8 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             texto="Novo orçamento",
             nome_icone="add-circle-outline",
             command=self._novo_orcamento,
-            estilo="Add.Compact.TButton",
+            estilo=estilos.compacto_adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
 
@@ -146,7 +155,8 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             texto="Abrir orçamento",
             nome_icone="folder-open-outline",
             command=self._abrir_selecionado,
-            estilo="Compact.TButton",
+            estilo=estilos.compacto,
+            cor_icone=estilos.icone,
             refs=self._icones_botoes,
         )
         definir_estado_botao_icone(self.btn_abrir, "disabled")
@@ -157,7 +167,8 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             texto="Copiar orçamento",
             nome_icone="copy-outline",
             command=self._copiar_selecionado,
-            estilo="Compact.TButton",
+            estilo=estilos.compacto,
+            cor_icone=estilos.icone,
             refs=self._icones_botoes,
         )
         definir_estado_botao_icone(self.btn_copiar, "disabled")
@@ -168,7 +179,8 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             texto="Editar nome",
             nome_icone="pencil",
             command=self._renomear_selecionado,
-            estilo="Edit.Compact.TButton",
+            estilo=estilos.compacto_editar,
+            cor_icone=estilos.icone_editar,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
 
@@ -177,7 +189,8 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             texto="Excluir",
             nome_icone="trash-outline",
             command=self._excluir_selecionado,
-            estilo="Delete.Compact.TButton",
+            estilo=estilos.compacto_excluir,
+            cor_icone=estilos.icone_excluir,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
 
@@ -186,7 +199,8 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             texto="Importar i9",
             nome_icone="attach-outline",
             command=self._importar_i9,
-            estilo="Compact.TButton",
+            estilo=estilos.compacto,
+            cor_icone=estilos.icone,
             refs=self._icones_botoes,
         ).pack(side="left")
 
@@ -196,12 +210,15 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         if self._ordenacao not in ORDENACOES_LISTA_ORCAMENTOS:
             self._ordenacao = ORDENACAO_CRIADO
 
-        linha_busca = tk.Frame(painel_lista, bg="#ececec")
+        linha_busca = tk.Frame(painel_lista, bg=fundo)
         linha_busca.pack(fill="x", pady=(0, 6))
         criar_label_icone(
             linha_busca,
             "funnel-outline",
             texto="Filtrar:",
+            bg=fundo,
+            fg=cores.texto_suave,
+            cor=cores.titulo,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Entry(linha_busca, textvariable=self.var_busca, width=36).pack(
@@ -211,14 +228,14 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
         self._lbl_status_lista = tk.Label(
             painel_lista,
             text="",
-            bg="#ececec",
-            fg="#666666",
+            bg=fundo,
+            fg=cores.texto_suave,
             font=("Arial", 9),
             anchor="w",
         )
         self._lbl_status_lista.pack(fill="x", pady=(0, 4))
 
-        container_tree = tk.Frame(painel_lista, bg="#ececec")
+        container_tree = tk.Frame(painel_lista, bg=fundo)
         container_tree.pack(fill="both", expand=True)
 
         colunas = ("nome", "criado_em", "atualizado_em", "etapas", "itens")

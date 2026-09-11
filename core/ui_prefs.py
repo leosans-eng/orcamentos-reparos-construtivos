@@ -31,6 +31,7 @@ def _prefs_padrao() -> dict:
         "legenda_grade_orcamento": True,
         "ordenacao_lista_orcamentos": ORDENACAO_CRIADO,
         "area_privativa_colunas": list(COLUNAS_AREA_PRIVATIVA_PADRAO),
+        "tema_ui": "orc",
     }
 
 
@@ -59,6 +60,9 @@ def carregar_ui_prefs() -> dict:
         dados["area_privativa_colunas"] = _normalizar_colunas_area_privativa(
             bruto["area_privativa_colunas"]
         )
+    if "tema_ui" in bruto:
+        tema = str(bruto.get("tema_ui") or "orc").strip()
+        dados["tema_ui"] = tema or "orc"
     return dados
 
 
@@ -74,6 +78,9 @@ def salvar_ui_prefs(prefs: dict) -> None:
         atual["area_privativa_colunas"] = _normalizar_colunas_area_privativa(
             prefs["area_privativa_colunas"]
         )
+    if "tema_ui" in prefs:
+        tema = str(prefs.get("tema_ui") or "orc").strip()
+        atual["tema_ui"] = tema or "orc"
     caminho = ui_prefs_path()
     caminho.parent.mkdir(parents=True, exist_ok=True)
     with open(caminho, "w", encoding="utf-8") as arquivo:

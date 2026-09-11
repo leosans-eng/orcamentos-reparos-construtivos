@@ -4,6 +4,7 @@ from typing import Literal
 
 from core.orcamento_customizado import TIPO_GRUPO
 from ui.icones import criar_icone_svg
+from ui.temas import cores_grade, cores_tema
 from ui.widgets import vincular_tooltip
 
 TkAnchor = Literal["nw", "n", "ne", "w", "center", "e", "sw", "s", "se"]
@@ -21,19 +22,6 @@ COLUNAS: tuple[Coluna, ...] = (
     ("total", "Total", 96, "center", 0),
 )
 
-COR_FUNDO = "#ffffff"
-COR_CABECALHO = "#e0e8ec"
-COR_GRUPO = "#8eccef"
-COR_GRUPO_SELECAO = "#3d8ec4"
-COR_TEXTO_GRUPO_SELECAO = "#ffffff"
-COR_ITEM_SELECAO = "#d2d6da"
-COR_BORDA = "#cccccc"
-COR_COMPOSICAO = "#7b5e00"
-COR_ALERTA_DEPRECIADO = "#fff8e1"
-COR_ESTADO_ALTERNATIVO = "#e8f4fc"
-COR_DISCRIMINAR = "#e4f0e6"
-COR_TEXTO = "#333333"
-COR_MARCADOR_DROP = "#006699"
 LIMIAR_ARRASTE_PX = 8
 
 
@@ -54,7 +42,9 @@ class GradeOrcamento(tk.Frame):
         on_menu_contexto=None,
         on_previa_composicao=None,
     ):
-        super().__init__(parent, bg="#ececec")
+        cores = cores_tema(parent)
+        super().__init__(parent, bg=cores.fundo)
+        self._cg = cores_grade(self)
         self.on_duplo_clique_qtd = on_duplo_clique_qtd
         self.on_duplo_clique_codigo = on_duplo_clique_codigo
         self.on_duplo_clique_descricao_grupo = on_duplo_clique_descricao_grupo
@@ -86,13 +76,14 @@ class GradeOrcamento(tk.Frame):
             return
         try:
             self._icone_previa = criar_icone_svg(
-                self, "search-outline", altura=14, cor="#006699"
+                self, "search-outline", altura=14, cor=self._cg.marcador
             )
         except (ImportError, FileNotFoundError, tk.TclError, OSError):
             self._icone_previa = None
 
     def _montar(self):
-        self.cabecalho = tk.Frame(self, bg=COR_CABECALHO, highlightbackground=COR_BORDA, highlightthickness=1)
+        cg = self._cg
+        self.cabecalho = tk.Frame(self, bg=cg.cabecalho, highlightbackground=cg.borda, highlightthickness=1)
         self.cabecalho.pack(fill="x")
 
         for col, (_chave, titulo, largura_min, anchor, peso) in enumerate(COLUNAS):
@@ -100,22 +91,22 @@ class GradeOrcamento(tk.Frame):
                 self.cabecalho,
                 text=titulo,
                 font=("Arial", 9, "bold"),
-                bg=COR_CABECALHO,
-                fg="#444444",
+                bg=cg.cabecalho,
+                fg=cg.texto_cabecalho,
                 anchor=anchor,
                 padx=4,
                 pady=6,
             ).grid(row=0, column=col, sticky="nsew", padx=(0, 1))
             self.cabecalho.columnconfigure(col, minsize=largura_min, weight=peso)
 
-        container = tk.Frame(self, bg="#ececec")
+        container = tk.Frame(self, bg=cores_tema(self).fundo)
         container.pack(fill="both", expand=True, pady=(2, 0))
 
         self.canvas = tk.Canvas(
-            container, highlightthickness=0, bg=COR_FUNDO, takefocus=1
+            container, highlightthickness=0, bg=cg.fundo, takefocus=1
         )
         self.scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
-        self.frame_linhas = tk.Frame(self.canvas, bg=COR_FUNDO)
+        self.frame_linhas = tk.Frame(self.canvas, bg=cg.fundo)
 
         self.frame_linhas.bind("<Configure>", self._atualizar_scrollregion)
         self._janela_canvas = self.canvas.create_window((0, 0), window=self.frame_linhas, anchor="nw")
@@ -128,8 +119,8 @@ class GradeOrcamento(tk.Frame):
             self.frame_linhas,
             text="",
             font=("Arial", 10),
-            fg="#777777",
-            bg=COR_FUNDO,
+            fg=self._cg.vazio,
+            bg=self._cg.fundo,
             justify="center",
             pady=28,
         )
@@ -275,28 +266,29 @@ class GradeOrcamento(tk.Frame):
     ):
         idx = len(self._linhas)
         self._ocultar_vazio()
-        cor_fundo = COR_GRUPO if estilo == "grupo" else COR_FUNDO
+        cg = self._cg
+        cor_fundo = cg.grupo if estilo == "grupo" else cg.fundo
         if alerta_depreciado and estilo != "grupo":
-            cor_fundo = COR_ALERTA_DEPRECIADO
+            cor_fundo = cg.alerta_depreciado
             self._tem_itens_depreciados = True
         elif alerta_discriminar and estilo != "grupo":
-            cor_fundo = COR_DISCRIMINAR
+            cor_fundo = cg.discriminar
         elif alerta_estado_alternativo and estilo != "grupo":
-            cor_fundo = COR_ESTADO_ALTERNATIVO
+            cor_fundo = cg.estado_alternativo
         elif estilo != "grupo" and idx % 2 == 1:
-            cor_fundo = "#f7f9fa"
+            cor_fundo = cg.zebra
 
         frame = tk.Frame(
             self.frame_linhas,
             bg=cor_fundo,
-            highlightbackground=COR_BORDA,
+            highlightbackground=cg.borda,
             highlightthickness=0,
         )
         frame.pack(fill="x", pady=(0, 1))
         frame.bind("<MouseWheel>", self._on_mousewheel)
 
         fonte = ("Arial", 9, "bold") if estilo == "grupo" else ("Arial", 9)
-        cor_texto = COR_COMPOSICAO if estilo == "composicao" else COR_TEXTO
+        cor_texto = cg.composicao if estilo == "composicao" else cg.texto
 
         widgets = {}
         for col, (chave, _titulo, largura_min, anchor, peso) in enumerate(COLUNAS):
@@ -410,7 +402,7 @@ class GradeOrcamento(tk.Frame):
                         frame,
                         text="🔎",
                         font=fonte,
-                        fg="#006699",
+                        fg=cg.marcador,
                         bg=cor_fundo,
                         cursor="hand2",
                         padx=4,
@@ -582,13 +574,13 @@ class GradeOrcamento(tk.Frame):
         entrada = tk.Entry(
             parent,
             font=("Arial", 9),
-            bg="#ffffff",
-            fg="#222222",
+            bg=self._cg.fundo,
+            fg=self._cg.texto,
             relief="solid",
             bd=1,
             highlightthickness=1,
-            highlightbackground="#006699",
-            highlightcolor="#006699",
+            highlightbackground=self._cg.marcador,
+            highlightcolor=self._cg.marcador,
         )
         entrada.insert(0, valor_inicial)
         entrada.selection_range(0, tk.END)
@@ -994,7 +986,7 @@ class GradeOrcamento(tk.Frame):
         self._remover_marcador_drop()
         if not destino or destino.get("ancora") is None:
             return
-        marcador = tk.Frame(self.frame_linhas, bg=COR_MARCADOR_DROP, height=3)
+        marcador = tk.Frame(self.frame_linhas, bg=self._cg.marcador, height=3)
         try:
             if destino.get("antes"):
                 marcador.pack(fill="x", before=destino["ancora"])
@@ -1097,10 +1089,10 @@ class GradeOrcamento(tk.Frame):
 
     def _aplicar_destaque(self, linha):
         if linha["estilo"] == "grupo":
-            cor = COR_GRUPO_SELECAO
-            fg = COR_TEXTO_GRUPO_SELECAO
+            cor = self._cg.grupo_selecao
+            fg = self._cg.texto_grupo_selecao
         else:
-            cor = COR_ITEM_SELECAO
+            cor = self._cg.item_selecao
             fg = linha["cor_texto"]
         try:
             linha["frame"].configure(bg=cor)

@@ -8,10 +8,13 @@ from tkinter import messagebox, ttk
 from core.api_client import get_client
 from core.api_exceptions import ApiError
 from ui.icones import criar_botao_ttk_com_icone
+from ui.temas import aplicar_chrome_dialogo
 from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
     confirmar_exclusao_com_espera,
+    criar_botao_cancelar,
+    criar_botao_fechar,
     focar_entrada_apos_exibir,
     preparar_toplevel,
 )
@@ -36,34 +39,39 @@ class DialogoNovoUsuario(tk.Toplevel):
     def __init__(self, parent, on_criado):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
+        cores = self._cores
+        estilos = self._estilos
+        fundo = cores.fundo
+        cartao = cores.fundo_cartao
         self.on_criado = on_criado
         self._refs_icones: list = []
         self.title("Novo usuário")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=fundo, padx=20, pady=16)
+        painel.pack(fill="x")
 
         tk.Label(
             painel,
             text="Novo usuário",
             font=("Arial", 12, "bold"),
-            fg="#333333",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=fundo,
         ).pack(anchor="w", pady=(0, 12))
 
         form = tk.Frame(
             painel,
-            bg="#ffffff",
-            highlightbackground="#cccccc",
+            bg=cartao,
+            highlightbackground=cores.borda_suave,
             highlightthickness=1,
         )
         form.pack(fill="x")
-        inner = tk.Frame(form, bg="#ffffff", padx=14, pady=12)
+        inner = tk.Frame(form, bg=cartao, padx=14, pady=12)
         inner.pack(fill="x")
         inner.columnconfigure(0, weight=1)
 
@@ -79,25 +87,19 @@ class DialogoNovoUsuario(tk.Toplevel):
         )
         entrada_confirmar.bind("<Return>", lambda _e: self._confirmar())
 
-        tk.Checkbutton(
+        ttk.Checkbutton(
             inner,
             text="Administrador",
             variable=self.var_admin,
-            bg="#ffffff",
-            activebackground="#ffffff",
-            fg="#555555",
-            activeforeground="#555555",
-            selectcolor="#ffffff",
-            font=("Arial", 9),
-            anchor="w",
+            style="Cartao.TCheckbutton",
         ).grid(row=6, column=0, sticky="w", pady=(10, 0))
 
         self._lbl_erro = tk.Label(
             painel,
             text="",
             font=("Arial", 9),
-            fg="#c62828",
-            bg="#ececec",
+            fg=cores.perigo,
+            bg=fundo,
             wraplength=340,
             justify="left",
         )
@@ -105,15 +107,14 @@ class DialogoNovoUsuario(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right"
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right")
         criar_botao_ttk_com_icone(
             botoes,
             texto="Criar",
             nome_icone="add-circle-outline",
             command=self._confirmar,
-            estilo="Add.TButton",
+            estilo=estilos.adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._refs_icones,
         ).pack(side="right", padx=(0, 8))
 
@@ -124,11 +125,12 @@ class DialogoNovoUsuario(tk.Toplevel):
         focar_entrada_apos_exibir(self._entrada_usuario)
 
     def _campo(self, parent, rotulo, variavel, linha, *, mostrar):
+        cores = self._cores
         tk.Label(
             parent,
             text=rotulo,
-            bg="#ffffff",
-            fg="#555555",
+            bg=cores.fundo_cartao,
+            fg=cores.texto_suave,
             font=("Arial", 9),
         ).grid(row=linha, column=0, sticky="w", pady=(0 if linha == 0 else 8, 4))
         kwargs = {"textvariable": variavel, "width": 34}
@@ -168,37 +170,42 @@ class DialogoRedefinirSenha(tk.Toplevel):
     def __init__(self, parent, user_id: str, username: str, on_ok):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
+        cores = self._cores
+        estilos = self._estilos
+        fundo = cores.fundo
+        cartao = cores.fundo_cartao
         self.user_id = user_id
         self.on_ok = on_ok
         self._refs_icones: list = []
         self.title("Redefinir senha")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=fundo, padx=20, pady=16)
+        painel.pack(fill="x")
 
         tk.Label(
             painel,
             text=f'Redefinir senha de "{username}"',
             font=("Arial", 12, "bold"),
-            fg="#333333",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=fundo,
             wraplength=340,
             justify="left",
         ).pack(anchor="w", pady=(0, 12))
 
         form = tk.Frame(
             painel,
-            bg="#ffffff",
-            highlightbackground="#cccccc",
+            bg=cartao,
+            highlightbackground=cores.borda_suave,
             highlightthickness=1,
         )
         form.pack(fill="x")
-        inner = tk.Frame(form, bg="#ffffff", padx=14, pady=12)
+        inner = tk.Frame(form, bg=cartao, padx=14, pady=12)
         inner.pack(fill="x")
 
         self.var_nova = tk.StringVar()
@@ -211,8 +218,8 @@ class DialogoRedefinirSenha(tk.Toplevel):
             painel,
             text="",
             font=("Arial", 9),
-            fg="#c62828",
-            bg="#ececec",
+            fg=cores.perigo,
+            bg=fundo,
             wraplength=340,
             justify="left",
         )
@@ -220,15 +227,14 @@ class DialogoRedefinirSenha(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right"
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right")
         criar_botao_ttk_com_icone(
             botoes,
             texto="Salvar",
             nome_icone="save-outline",
             command=self._confirmar,
-            estilo="Add.TButton",
+            estilo=estilos.salvar,
+            cor_icone=estilos.icone_salvar,
             refs=self._refs_icones,
         ).pack(side="right", padx=(0, 8))
 
@@ -239,11 +245,12 @@ class DialogoRedefinirSenha(tk.Toplevel):
         focar_entrada_apos_exibir(self._entrada_nova)
 
     def _campo(self, parent, rotulo, variavel, linha):
+        cores = self._cores
         tk.Label(
             parent,
             text=rotulo,
-            bg="#ffffff",
-            fg="#555555",
+            bg=cores.fundo_cartao,
+            fg=cores.texto_suave,
             font=("Arial", 9),
         ).grid(row=linha, column=0, sticky="w", pady=(0 if linha == 0 else 8, 4))
         entrada = ttk.Entry(parent, textvariable=variavel, width=34, show="•")
@@ -272,37 +279,41 @@ class DialogoAdminUsuarios(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
+        cores = self._cores
+        estilos = self._estilos
+        fundo = cores.fundo
         self._refs_icones: list = []
         self._usuarios: list[dict] = []
         self._me: dict | None = None
 
         self.title("Administrar usuários")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(True, True)
         self.minsize(720, 440)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
+        painel = tk.Frame(self, bg=fundo, padx=20, pady=16)
         painel.pack(fill="both", expand=True)
 
         tk.Label(
             painel,
             text="Administrar usuários",
             font=("Arial", 12, "bold"),
-            fg="#333333",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=fundo,
         ).pack(anchor="w", pady=(0, 4))
         tk.Label(
             painel,
             text="Crie, ative, promova ou remova usuários da API compartilhada.",
             font=("Arial", 9),
-            fg="#555555",
-            bg="#ececec",
+            fg=cores.texto_suave,
+            bg=fundo,
         ).pack(anchor="w", pady=(0, 12))
 
-        linha_botoes = tk.Frame(painel, bg="#ececec")
+        linha_botoes = tk.Frame(painel, bg=fundo)
         linha_botoes.pack(fill="x", pady=(0, 8))
 
         criar_botao_ttk_com_icone(
@@ -310,7 +321,8 @@ class DialogoAdminUsuarios(tk.Toplevel):
             texto="Novo usuário",
             nome_icone="add-circle-outline",
             command=self._novo_usuario,
-            estilo="Add.Compact.TButton",
+            estilo=estilos.compacto_adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._refs_icones,
         ).pack(side="left", padx=(0, 4))
 
@@ -318,7 +330,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
             linha_botoes,
             text="Redefinir senha",
             command=self._redefinir_senha,
-            style="Compact.TButton",
+            style=estilos.compacto,
             state="disabled",
             width=15,
         )
@@ -329,7 +341,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
             linha_botoes,
             text="Desativar",
             command=self._alternar_ativo,
-            style="Compact.TButton",
+            style=estilos.compacto,
             state="disabled",
             width=10,
         )
@@ -340,7 +352,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
             linha_botoes,
             text="Tornar admin",
             command=self._alternar_admin,
-            style="Edit.Compact.TButton",
+            style=estilos.compacto_editar,
             state="disabled",
             width=14,
         )
@@ -351,7 +363,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
             linha_botoes,
             text="Excluir",
             command=self._excluir,
-            style="Delete.Compact.TButton",
+            style=estilos.compacto_excluir,
             state="disabled",
             width=8,
         )
@@ -362,12 +374,12 @@ class DialogoAdminUsuarios(tk.Toplevel):
             texto="Atualizar",
             nome_icone="sync-outline",
             command=self._recarregar,
-            estilo="Compact.TButton",
-            cor_icone="#006699",
+            estilo=estilos.compacto,
+            cor_icone=cores.titulo,
             refs=self._refs_icones,
         ).pack(side="right")
 
-        container = tk.Frame(painel, bg="#ececec")
+        container = tk.Frame(painel, bg=fundo)
         container.pack(fill="both", expand=True)
 
         colunas = ("usuario", "perfil", "status")
@@ -390,11 +402,9 @@ class DialogoAdminUsuarios(tk.Toplevel):
         scroll.pack(side="right", fill="y")
         self.tree.bind("<<TreeviewSelect>>", self._ao_selecionar)
 
-        rodape = ttk.Frame(painel)
+        rodape = tk.Frame(painel, bg=fundo)
         rodape.pack(fill="x", pady=(12, 0))
-        ttk.Button(rodape, text="Fechar", command=self.destroy, style="Delete.TButton").pack(
-            side="right"
-        )
+        criar_botao_fechar(rodape, self.destroy).pack(side="right")
 
         self.bind("<Escape>", lambda _e: self.destroy())
         self.protocol("WM_DELETE_WINDOW", self.destroy)

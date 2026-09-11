@@ -50,6 +50,25 @@ def criar_icone_svg(
     return _photo_rotacionado(master, base, angulo, altura)
 
 
+def carregar_png_icone(
+    master: tk.Misc,
+    nome_arquivo: str,
+    *,
+    inverter: bool = False,
+) -> tk.PhotoImage:
+    """Carrega um PNG de assets/icons. Em tema escuro, inverter=True deixa o ícone claro."""
+    caminho = asset_path("icons", nome_arquivo)
+    if caminho is None:
+        raise FileNotFoundError(f"Ícone PNG não encontrado: assets/icons/{nome_arquivo}")
+    if inverter and Image is not None and ImageOps is not None and ImageTk is not None:
+        pil = Image.open(caminho).convert("RGBA")
+        vermelho, verde, azul, alfa = pil.split()
+        rgb = ImageOps.invert(Image.merge("RGB", (vermelho, verde, azul)))
+        pil = Image.merge("RGBA", (*rgb.split(), alfa))
+        return ImageTk.PhotoImage(pil, master=master)
+    return tk.PhotoImage(file=str(caminho), master=master)
+
+
 def _photo_rotacionado(
     master: tk.Misc, base: tk.PhotoImage, angulo: float, tamanho: int
 ) -> tk.PhotoImage:
@@ -120,7 +139,15 @@ class IndicadorAmpulheta(tk.Label):
         bg: str = "#ececec",
         refs: list | None = None,
     ):
-        super().__init__(parent, bg=bg)
+        super().__init__(
+            parent,
+            bg=bg,
+            bd=0,
+            highlightthickness=0,
+            highlightbackground=bg,
+            highlightcolor=bg,
+            relief="flat",
+        )
         self._frames: list = []
         self._indice = 0
         self._job = None
@@ -129,36 +156,34 @@ class IndicadorAmpulheta(tk.Label):
         if Image is None or ImageTk is None or ImageOps is None:
             raise ImportError("Pacote 'Pillow' não instalado.")
 
-        base_photo = _criar_ampulheta_com_areia(
-            parent, altura=altura, cor_vidro=cor, cor_areia=self._COR_AREIA
+        atual = _ampulheta_pil(
+            parent, altura=altura, cor_vidro=cor, cor_areia=self._COR_AREIA, bg=bg
         )
-        atual = ImageTk.getimage(base_photo).convert("RGBA")
-        if refs is not None:
-            refs.append(base_photo)
+        fundo_rgba = _hex_para_rgba(bg)
+
+        def reduzir(pil_img):
+            if pil_img.size == (altura, altura):
+                return pil_img
+            return pil_img.resize((altura, altura), Image.Resampling.LANCZOS)
 
         def para_photo(pil_img):
-            foto = ImageTk.PhotoImage(pil_img, master=parent)
+            foto = ImageTk.PhotoImage(reduzir(pil_img), master=parent)
             if refs is not None:
                 refs.append(foto)
             return foto
 
         def rotacionar(pil_img, angulo: float):
+            # Gira na resolução alta e só reduz no PhotoImage, para a borda
+            # não ficar com halo de interpolação em 22 px.
             ang = angulo % 360.0
             if abs(ang) < 0.01:
-                return pil_img.copy()
-            girado = pil_img.rotate(
+                return pil_img
+            return pil_img.rotate(
                 -ang,
                 resample=Image.Resampling.BICUBIC,
-                expand=True,
-                fillcolor=(0, 0, 0, 0),
+                expand=False,
+                fillcolor=fundo_rgba,
             )
-            canvas = Image.new("RGBA", (altura, altura), (0, 0, 0, 0))
-            canvas.paste(
-                girado,
-                ((altura - girado.width) // 2, (altura - girado.height) // 2),
-                girado,
-            )
-            return canvas
 
         # Duas vezes: (rodar 180° → flip vertical da imagem resultante)
         for _ciclo in range(2):
@@ -238,28 +263,36 @@ class IndicadorAmpulheta(tk.Label):
         self._cancelar()
 
 
-def _criar_ampulheta_com_areia(
+def _hex_para_rgba(cor: str) -> tuple[int, int, int, int]:
+    texto = str(cor or "").strip().lstrip("#")
+    if len(texto) == 3:
+        texto = "".join(ch * 2 for ch in texto)
+    if len(texto) != 6:
+        return (236, 236, 236, 255)
+    return int(texto[0:2], 16), int(texto[2:4], 16), int(texto[4:6], 16), 255
+
+
+def _ampulheta_pil(
     master: tk.Misc,
     *,
     altura: int,
     cor_vidro: str,
     cor_areia: str,
-) -> tk.PhotoImage:
-    """Ampulheta com areia preenchida (visível ao inverter 180°)."""
-    if SvgImage is None:
-        raise ImportError("Pacote 'tksvg' não instalado.")
+    bg: str,
+):
+    """Raster nítido da ampulheta, já composto no fundo para evitar halo."""
+    if SvgImage is None or Image is None or ImageTk is None:
+        raise ImportError("tksvg/Pillow não instalado.")
     caminho = asset_path("icons", "hourglass-outline.svg")
     if caminho is None:
         raise FileNotFoundError("Ícone SVG não encontrado: assets/icons/hourglass-outline.svg")
 
     svg_texto = caminho.read_text(encoding="utf-8")
-    # 1º path = vidro (contorno); 2º path = areia (preenchimento).
     svg_texto = svg_texto.replace('stroke="currentColor"', f'stroke="{cor_vidro}"')
     svg_texto = svg_texto.replace(
         'fill="currentColor"',
         f'fill="{cor_areia}"',
     )
-    # O path da areia no asset não traz fill/stroke — força preenchimento visível.
     partes = svg_texto.split("<path ", 2)
     if len(partes) == 3:
         vidro, areia_e_fim = partes[1], partes[2]
@@ -267,14 +300,26 @@ def _criar_ampulheta_com_areia(
             areia_e_fim = f'fill="{cor_areia}" stroke="none" ' + areia_e_fim
         svg_texto = "<path ".join([partes[0], vidro, areia_e_fim])
 
-    return SvgImage(master=master, data=svg_texto, scaletoheight=altura)
+    fator = 3
+    lado_hi = max(int(altura) * fator, 48)
+    foto = SvgImage(master=master, data=svg_texto, scaletoheight=lado_hi)
+    pil = ImageTk.getimage(foto).convert("RGBA")
+    fundo_rgba = _hex_para_rgba(bg)
+    lado = max(pil.size[0], pil.size[1], lado_hi)
+    fundo = Image.new("RGBA", (lado, lado), fundo_rgba)
+    fundo.paste(
+        pil,
+        ((lado - pil.width) // 2, (lado - pil.height) // 2),
+        pil,
+    )
+    return fundo
 
 
 def altura_icone_botao(master: tk.Misc, estilo: str = "Compact.TButton") -> int:
     """Altura do ícone alinhada à fonte do botão."""
     try:
         especificacao = ttk.Style(master).lookup(estilo, "font")
-        fonte = tkfont.Font(master=master, font=especificacao or "TkDefaultFont")
+        fonte = tkfont.Font(root=master, font=especificacao or "TkDefaultFont")
         return max(12, fonte.metrics("ascent") + fonte.metrics("descent"))
     except tk.TclError:
         return 14
@@ -377,7 +422,6 @@ def definir_estado_botao_icone(botao: ttk.Button, estado: str) -> None:
         kwargs = {
             "state": "normal",
             "command": _comando_inert,
-            "style": "Muted.Compact.TButton",
         }
         if icone_off is not None:
             kwargs["image"] = icone_off
@@ -405,11 +449,19 @@ def criar_botao_inserir_prominente(
     command,
     refs: list | None = None,
 ) -> tk.Button:
-    """Botão 'Inserir' proeminente: fundo claro, borda verde e ícone preenchido."""
-    fonte = tkfont.Font(family="Arial", size=9)
-    altura_icone = max(12, fonte.metrics("ascent") + fonte.metrics("descent"))
+    """Botão 'Inserir' proeminente: borda verde e ícone preenchido."""
+    from ui.temas import cores_tema
+
+    cores = cores_tema(parent)
+    verde = "#81c784" if cores.escuro else _COR_VERDE_INSERIR
+    try:
+        fonte = tkfont.Font(root=parent, family="Arial", size=9)
+        altura_icone = max(12, fonte.metrics("ascent") + fonte.metrics("descent"))
+    except tk.TclError:
+        fonte = ("Arial", 9)
+        altura_icone = 14
     icone = criar_icone_svg(
-        parent, "add-circle", altura=altura_icone, cor=_COR_VERDE_INSERIR
+        parent, "add-circle", altura=altura_icone, cor=verde
     )
     if refs is not None:
         refs.append(icone)
@@ -420,15 +472,15 @@ def criar_botao_inserir_prominente(
         compound="left",
         command=command,
         font=fonte,
-        bg="#fafafa",
-        fg=_COR_VERDE_INSERIR,
-        activebackground="#f8f3f3",
-        activeforeground="#1b5e20",
+        bg=cores.fundo_cartao,
+        fg=verde,
+        activebackground=cores.fundo_hover,
+        activeforeground=verde,
         relief="solid",
         bd=1,
         highlightthickness=1,
-        highlightbackground=_COR_VERDE_INSERIR,
-        highlightcolor=_COR_VERDE_INSERIR,
+        highlightbackground=verde,
+        highlightcolor=verde,
         padx=9,
         pady=3,
         cursor="hand2",

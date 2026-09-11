@@ -4,27 +4,11 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from ui.temas import _misturar, cores_tema, texto_contraste
 from ui.widgets import (
     formatar_quantidade_edicao,
     parse_quantidade_expressao,
 )
-
-# Paleta alinhada ao ORC
-_COR_FUNDO = "#e8f2f7"
-_COR_PAINEL = "#f5fafc"
-_COR_BARRA = "#006699"
-_COR_BARRA_TEXTO = "#ffffff"
-_COR_DISPLAY = "#ffffff"
-_COR_DISPLAY_TEXTO = "#006699"
-_COR_BORDA = "#8eb8cc"
-_COR_BOTAO = "#d6ebf5"
-_COR_BOTAO_ATIVO = "#b8d9ea"
-_COR_BOTAO_TEXTO = "#004d73"
-_COR_BOTAO_OP = "#c5e0ef"
-_COR_BOTAO_IGUAL = "#006699"
-_COR_BOTAO_IGUAL_TEXTO = "#ffffff"
-_COR_BOTAO_LIMPAR = "#e8a0a0"
-_COR_BOTAO_LIMPAR_ATIVO = "#d98080"
 
 _instancia: CalculadoraFlutuante | None = None
 
@@ -40,7 +24,8 @@ class CalculadoraFlutuante(tk.Toplevel):
             self.attributes("-topmost", True)
         except tk.TclError:
             pass
-        self.configure(bg=_COR_BORDA)
+        self._cores = cores_tema(parent)
+        self.configure(bg=self._cores.borda_suave)
         self.resizable(False, False)
 
         self._expressao = ""
@@ -61,19 +46,21 @@ class CalculadoraFlutuante(tk.Toplevel):
             pass
 
     def _montar(self):
-        borda = tk.Frame(self, bg=_COR_BORDA, padx=1, pady=1)
+        cores = self._cores
+        borda = tk.Frame(self, bg=cores.borda_suave, padx=1, pady=1)
         borda.pack(fill="both", expand=True)
 
-        painel = tk.Frame(borda, bg=_COR_FUNDO, padx=8, pady=8)
+        painel = tk.Frame(borda, bg=cores.fundo, padx=8, pady=8)
         painel.pack(fill="both", expand=True)
 
-        barra = tk.Frame(painel, bg=_COR_BARRA, cursor="fleur")
+        texto_faixa = texto_contraste(cores.faixa)
+        barra = tk.Frame(painel, bg=cores.faixa, cursor="fleur")
         barra.pack(fill="x", pady=(0, 8))
         tk.Label(
             barra,
             text="Calculadora",
-            bg=_COR_BARRA,
-            fg=_COR_BARRA_TEXTO,
+            bg=cores.faixa,
+            fg=texto_faixa,
             font=("Arial", 9, "bold"),
             padx=8,
             pady=5,
@@ -83,10 +70,10 @@ class CalculadoraFlutuante(tk.Toplevel):
             barra,
             text="×",
             command=self._fechar,
-            bg=_COR_BARRA,
-            fg=_COR_BARRA_TEXTO,
-            activebackground="#005580",
-            activeforeground=_COR_BARRA_TEXTO,
+            bg=cores.faixa,
+            fg=texto_faixa,
+            activebackground=cores.titulo_hover,
+            activeforeground=texto_faixa,
             relief="flat",
             bd=0,
             padx=8,
@@ -105,19 +92,19 @@ class CalculadoraFlutuante(tk.Toplevel):
         self.label_display = tk.Label(
             painel,
             textvariable=self.var_display,
-            bg=_COR_DISPLAY,
-            fg=_COR_DISPLAY_TEXTO,
+            bg=cores.fundo_cartao,
+            fg=cores.titulo,
             font=("Consolas", 15, "bold"),
             anchor="e",
             padx=10,
             pady=10,
             relief="solid",
             bd=1,
-            highlightbackground=_COR_BORDA,
+            highlightbackground=cores.borda_suave,
         )
         self.label_display.pack(fill="x", pady=(0, 8))
 
-        teclado = tk.Frame(painel, bg=_COR_FUNDO)
+        teclado = tk.Frame(painel, bg=cores.fundo)
         teclado.pack()
 
         linhas = (
@@ -137,15 +124,7 @@ class CalculadoraFlutuante(tk.Toplevel):
         self.bind("<Key>", self._ao_tecla)
 
     def _criar_tecla(self, parent, tecla: str, row: int, col: int):
-        if tecla == "=":
-            bg, fg, active = _COR_BOTAO_IGUAL, _COR_BOTAO_IGUAL_TEXTO, "#005580"
-        elif tecla == "C":
-            bg, fg, active = _COR_BOTAO_LIMPAR, "#5c2020", _COR_BOTAO_LIMPAR_ATIVO
-        elif tecla in "+-*/()⌫":
-            bg, fg, active = _COR_BOTAO_OP, _COR_BOTAO_TEXTO, _COR_BOTAO_ATIVO
-        else:
-            bg, fg, active = _COR_BOTAO, _COR_BOTAO_TEXTO, _COR_BOTAO_ATIVO
-
+        bg, fg, active = self._cores_tecla(tecla)
         btn = tk.Button(
             parent,
             text=tecla,
@@ -164,6 +143,25 @@ class CalculadoraFlutuante(tk.Toplevel):
             highlightthickness=0,
         )
         btn.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
+
+    def _cores_tecla(self, tecla: str) -> tuple[str, str, str]:
+        cores = self._cores
+        if tecla == "=":
+            return cores.titulo, texto_contraste(cores.titulo), cores.titulo_hover
+        if cores.escuro:
+            if tecla == "C":
+                return cores.fundo_cartao, cores.perigo, cores.fundo_hover
+            if tecla in "+-*/()⌫":
+                return cores.fundo_destaque, cores.titulo, cores.fundo_hover
+            return cores.fundo_cartao, cores.texto, cores.fundo_hover
+        if tecla == "C":
+            bg = _misturar(cores.fundo, cores.perigo, 0.18)
+            return bg, cores.perigo, _misturar(bg, cores.perigo, 0.22)
+        if tecla in "+-*/()⌫":
+            bg = _misturar(cores.fundo, cores.titulo, 0.32)
+            return bg, cores.titulo, _misturar(bg, cores.titulo, 0.18)
+        bg = _misturar(cores.fundo, cores.titulo, 0.18)
+        return bg, cores.texto, _misturar(bg, cores.titulo, 0.12)
 
     def _posicionar_junto_ao_pai(self, parent):
         try:
@@ -294,3 +292,17 @@ def abrir_calculadora(parent) -> CalculadoraFlutuante:
             _instancia = None
     _instancia = CalculadoraFlutuante(parent)
     return _instancia
+
+
+def fechar_calculadora() -> None:
+    """Fecha a calculadora flutuante, se estiver aberta."""
+    global _instancia
+    janela = _instancia
+    _instancia = None
+    if janela is None:
+        return
+    try:
+        if janela.winfo_exists():
+            janela.destroy()
+    except tk.TclError:
+        pass

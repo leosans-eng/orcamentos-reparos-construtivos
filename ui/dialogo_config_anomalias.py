@@ -17,9 +17,11 @@ from core.vicios_storage import (
     salvar_vicios,
 )
 from ui.icones import criar_botao_ttk_com_icone
+from ui.temas import aplicar_chrome_dialogo, texto_contraste
 from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
+    criar_botao_cancelar,
     criar_botao_fechar,
     focar_entrada_apos_exibir,
     perguntar_texto,
@@ -35,30 +37,36 @@ class DialogoEtapaAnomalia(tk.Toplevel):
     def __init__(self, parent, etapa=None, on_confirmar=None, ctx=None):
         super().__init__(parent)
         preparar_toplevel(self)
+        cores, estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
         self.on_confirmar = on_confirmar
         self.ctx = ctx
         self._refs_icones: list = []
         self.title("Etapa da anomalia" if etapa else "Nova etapa")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
         etapa = etapa or {}
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
+        painel.pack(fill="x")
 
         self.var_codigo = tk.StringVar(value=str(etapa.get("codigo_sinapi", "")))
         self.var_unidade = tk.StringVar(value=str(etapa.get("unidade", "m²")))
         self.var_coef = tk.StringVar(value=str(etapa.get("coeficiente", 1)).replace(".", ","))
         self.var_grupo = tk.StringVar(value=str(etapa.get("grupo_planilha", "")))
 
-        linha_codigo = tk.Frame(painel, bg="#ececec")
+        linha_codigo = tk.Frame(painel, bg=fundo)
         linha_codigo.pack(fill="x", pady=3)
-        tk.Label(linha_codigo, text="Código SINAPI:", width=22, anchor="w", bg="#ececec").pack(
-            side="left"
-        )
+        tk.Label(
+            linha_codigo,
+            text="Código SINAPI:",
+            width=22,
+            anchor="w",
+            bg=fundo,
+            fg=cores.texto,
+        ).pack(side="left")
         entrada_codigo = ttk.Entry(linha_codigo, textvariable=self.var_codigo, width=18)
         entrada_codigo.pack(side="left")
         if ctx is not None:
@@ -67,6 +75,8 @@ class DialogoEtapaAnomalia(tk.Toplevel):
                 texto="Buscar",
                 nome_icone="search-outline",
                 command=self._buscar_sinapi,
+                estilo=estilos.compacto,
+                cor_icone=estilos.icone,
                 refs=self._refs_icones,
             ).pack(side="left", padx=(8, 0))
 
@@ -88,12 +98,16 @@ class DialogoEtapaAnomalia(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(12, 0))
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right", padx=(6, 0)
-        )
-        ttk.Button(botoes, text="Salvar etapa", command=self._confirmar, style="Add.TButton").pack(
-            side="right"
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right")
+        criar_botao_ttk_com_icone(
+            botoes,
+            texto="Salvar etapa",
+            nome_icone="save-outline",
+            command=self._confirmar,
+            estilo=estilos.salvar,
+            cor_icone=estilos.icone_salvar,
+            refs=self._refs_icones,
+        ).pack(side="right", padx=(0, 8))
 
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
@@ -101,9 +115,13 @@ class DialogoEtapaAnomalia(tk.Toplevel):
         focar_entrada_apos_exibir(entrada_codigo)
 
     def _campo(self, parent, rotulo, var, valores=None):
-        linha = tk.Frame(parent, bg="#ececec")
+        cores = self._cores
+        fundo = cores.fundo
+        linha = tk.Frame(parent, bg=fundo)
         linha.pack(fill="x", pady=3)
-        tk.Label(linha, text=rotulo, width=22, anchor="w", bg="#ececec").pack(side="left")
+        tk.Label(
+            linha, text=rotulo, width=22, anchor="w", bg=fundo, fg=cores.texto
+        ).pack(side="left")
         if valores is None:
             ttk.Entry(linha, textvariable=var, width=36).pack(side="left", fill="x", expand=True)
             return
@@ -165,6 +183,8 @@ class DialogoConfigAnomalias(tk.Toplevel):
     def __init__(self, parent, ctx, on_salvo=None):
         super().__init__(parent)
         preparar_toplevel(self)
+        cores, estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
         self.ctx = ctx
         self.on_salvo = on_salvo
         self._refs_icones: list = []
@@ -175,13 +195,12 @@ class DialogoConfigAnomalias(tk.Toplevel):
 
         self.title("Configurar anomalias")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.geometry("980x640")
         self.minsize(820, 540)
 
-        painel = tk.Frame(self, bg="#ececec", padx=14, pady=12)
+        painel = tk.Frame(self, bg=fundo, padx=14, pady=12)
         painel.pack(fill="both", expand=True)
         painel.columnconfigure(1, weight=1)
         painel.rowconfigure(1, weight=1)
@@ -190,30 +209,43 @@ class DialogoConfigAnomalias(tk.Toplevel):
             painel,
             text="Anomalias cadastradas",
             font=("Arial", 12, "bold"),
-            fg="#006699",
-            bg="#ececec",
+            fg=cores.titulo,
+            bg=fundo,
             anchor="w",
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        esquerda = tk.Frame(painel, bg="#ececec")
+        esquerda = tk.Frame(painel, bg=fundo)
         esquerda.grid(row=1, column=0, sticky="ns", padx=(0, 10))
         esquerda.rowconfigure(0, weight=1)
 
-        self.lista = tk.Listbox(esquerda, width=42, height=22, exportselection=False)
+        self.lista = tk.Listbox(
+            esquerda,
+            width=42,
+            height=22,
+            exportselection=False,
+            bg=cores.fundo_cartao,
+            fg=cores.texto,
+            selectbackground=cores.titulo,
+            selectforeground=texto_contraste(cores.titulo),
+            highlightbackground=cores.borda_suave,
+            highlightthickness=1,
+            relief="flat",
+        )
         self.lista.grid(row=0, column=0, sticky="ns")
         scroll_lista = ttk.Scrollbar(esquerda, orient="vertical", command=self.lista.yview)
         scroll_lista.grid(row=0, column=1, sticky="ns")
         self.lista.configure(yscrollcommand=scroll_lista.set)
         self.lista.bind("<<ListboxSelect>>", self._ao_selecionar)
 
-        botoes_lista = tk.Frame(esquerda, bg="#ececec")
+        botoes_lista = tk.Frame(esquerda, bg=fundo)
         botoes_lista.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         criar_botao_ttk_com_icone(
             botoes_lista,
             texto="Nova",
             nome_icone="add-circle-outline",
             command=self._nova,
-            estilo="Add.Compact.TButton",
+            estilo=estilos.compacto_adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._refs_icones,
         ).pack(side="left")
         criar_botao_ttk_com_icone(
@@ -221,6 +253,8 @@ class DialogoConfigAnomalias(tk.Toplevel):
             texto="Renomear",
             nome_icone="pencil",
             command=self._renomear,
+            estilo=estilos.compacto,
+            cor_icone=estilos.icone_editar,
             refs=self._refs_icones,
         ).pack(side="left", padx=4)
         criar_botao_ttk_com_icone(
@@ -228,22 +262,27 @@ class DialogoConfigAnomalias(tk.Toplevel):
             texto="Excluir",
             nome_icone="trash-outline",
             command=self._excluir,
-            estilo="Delete.Compact.TButton",
+            estilo=estilos.compacto_excluir,
+            cor_icone=estilos.icone_excluir,
             refs=self._refs_icones,
         ).pack(side="left")
 
-        direita = tk.LabelFrame(painel, text="Detalhes", bg="#ececec", padx=10, pady=8)
+        direita = tk.LabelFrame(
+            painel, text="Detalhes", bg=fundo, fg=cores.texto, padx=10, pady=8
+        )
         direita.grid(row=1, column=1, sticky="nsew")
         direita.columnconfigure(1, weight=1)
         direita.rowconfigure(4, weight=1)
 
-        tk.Label(direita, text="Nome:", bg="#ececec").grid(row=0, column=0, sticky="w", pady=3)
+        tk.Label(direita, text="Nome:", bg=fundo, fg=cores.texto).grid(
+            row=0, column=0, sticky="w", pady=3
+        )
         self.var_nome = tk.StringVar()
         ttk.Entry(direita, textvariable=self.var_nome, state="readonly").grid(
             row=0, column=1, sticky="ew", pady=3
         )
 
-        tk.Label(direita, text="Grupo de reparo:", bg="#ececec").grid(
+        tk.Label(direita, text="Grupo de reparo:", bg=fundo, fg=cores.texto).grid(
             row=1, column=0, sticky="nw", pady=3
         )
         grupos = sorted(set(NOMES_GRUPOS_REPARO.keys()) | {"repintura"})
@@ -256,7 +295,8 @@ class DialogoConfigAnomalias(tk.Toplevel):
         frame_comodos = tk.LabelFrame(
             direita,
             text="Cômodos em que a anomalia pode ser aplicada",
-            bg="#ececec",
+            bg=fundo,
+            fg=cores.texto,
             padx=6,
             pady=4,
         )
@@ -266,21 +306,23 @@ class DialogoConfigAnomalias(tk.Toplevel):
         self._vars_comodos = {}
         for indice, comodo in enumerate(COMODOS_AREA_PRIVATIVA):
             var = tk.BooleanVar(value=True)
-            chk = tk.Checkbutton(
+            chk = ttk.Checkbutton(
                 frame_comodos,
                 text=comodo,
                 variable=var,
-                bg="#ececec",
-                activebackground="#ececec",
-                anchor="w",
+                style="Fundo.TCheckbutton",
                 command=self._aplicar_formulario,
             )
             chk.grid(row=indice // 2, column=indice % 2, sticky="w", padx=(0, 8), pady=0)
             self._vars_comodos[comodo] = var
 
-        tk.Label(direita, text="Etapas SINAPI", bg="#ececec", font=("Arial", 10, "bold")).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(10, 4)
-        )
+        tk.Label(
+            direita,
+            text="Etapas SINAPI",
+            bg=fundo,
+            fg=cores.texto,
+            font=("Arial", 10, "bold"),
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 4))
 
         colunas = ("codigo", "unidade", "tipo", "coef", "grupo")
         self.tree = ttk.Treeview(direita, columns=colunas, show="headings", height=8)
@@ -297,14 +339,15 @@ class DialogoConfigAnomalias(tk.Toplevel):
         self.tree.grid(row=4, column=0, columnspan=2, sticky="nsew")
         self.tree.bind("<Double-1>", lambda _e: self._editar_etapa())
 
-        botoes_etapas = tk.Frame(direita, bg="#ececec")
+        botoes_etapas = tk.Frame(direita, bg=fundo)
         botoes_etapas.grid(row=5, column=0, columnspan=2, sticky="e", pady=(8, 0))
         criar_botao_ttk_com_icone(
             botoes_etapas,
             texto="Adicionar etapa",
             nome_icone="add-circle-outline",
             command=self._adicionar_etapa,
-            estilo="Add.Compact.TButton",
+            estilo=estilos.compacto_adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._refs_icones,
         ).pack(side="left")
         criar_botao_ttk_com_icone(
@@ -312,6 +355,8 @@ class DialogoConfigAnomalias(tk.Toplevel):
             texto="Editar",
             nome_icone="pencil",
             command=self._editar_etapa,
+            estilo=estilos.compacto_editar,
+            cor_icone=estilos.icone_editar,
             refs=self._refs_icones,
         ).pack(side="left", padx=4)
         criar_botao_ttk_com_icone(
@@ -319,11 +364,12 @@ class DialogoConfigAnomalias(tk.Toplevel):
             texto="Remover etapa",
             nome_icone="remove-circle-outline",
             command=self._remover_etapa,
-            estilo="Delete.Compact.TButton",
+            estilo=estilos.compacto_excluir,
+            cor_icone=estilos.icone_excluir,
             refs=self._refs_icones,
         ).pack(side="left")
 
-        rodape = tk.Frame(painel, bg="#ececec")
+        rodape = tk.Frame(painel, bg=fundo)
         rodape.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         criar_botao_fechar(
             rodape, command=self.destroy, texto="Fechar sem salvar"
@@ -333,7 +379,8 @@ class DialogoConfigAnomalias(tk.Toplevel):
             texto="Salvar no JSON",
             nome_icone="save-outline",
             command=self._salvar,
-            estilo="Save.TButton",
+            estilo=estilos.salvar,
+            cor_icone=estilos.icone_salvar,
             refs=self._refs_icones,
         ).pack(side="right")
 

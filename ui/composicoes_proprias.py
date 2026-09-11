@@ -31,6 +31,7 @@ from ui.icones import (
 )
 from ui.orcamento_customizado import DialogoBuscaSinapi, DialogoEstadoItemSinapi
 from ui.recarga_catalogo import RecarregadorCatalogo
+from ui.temas import aplicar_chrome_dialogo, cores_grade, cores_tema, estilos_botao
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
     ControleAtualizacaoPagina,
@@ -38,6 +39,7 @@ from ui.widgets import (
     centralizar_janela,
     confirmar_exclusao_com_espera,
     criar_barra_modulo,
+    criar_botao_cancelar,
     estado_do_combo,
     formatar_decimal_br,
     formatar_moeda_br,
@@ -46,9 +48,6 @@ from ui.widgets import (
     valores_combo_estado,
     focar_entrada_apos_exibir,
 )
-
-COR_DEPRECIADO = "#fff8e1"
-COR_ESTADO_ALTERNATIVO = "#e8f4fc"
 
 
 def _formatar_moeda(valor):
@@ -63,16 +62,18 @@ class DialogoComponenteMercado(tk.Toplevel):
     def __init__(self, parent, on_confirmar):
         super().__init__(parent)
         preparar_toplevel(self)
+        cores, estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
         self.on_confirmar = on_confirmar
+        self._refs_icones: list = []
         self.title("Componente de mercado")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
+        painel.pack(fill="x")
 
         campos = [
             ("Código:", "codigo"),
@@ -84,9 +85,11 @@ class DialogoComponenteMercado(tk.Toplevel):
         self.vars = {}
         self._entrada_inicial = None
         for rotulo, chave in campos:
-            linha = tk.Frame(painel, bg="#ececec")
+            linha = tk.Frame(painel, bg=fundo)
             linha.pack(fill="x", pady=3)
-            tk.Label(linha, text=rotulo, width=22, anchor="w", bg="#ececec").pack(side="left")
+            tk.Label(
+                linha, text=rotulo, width=22, anchor="w", bg=fundo, fg=cores.texto
+            ).pack(side="left")
             var = tk.StringVar(value="1" if chave == "coeficiente" else "")
             self.vars[chave] = var
             entrada = ttk.Entry(linha, textvariable=var, width=36)
@@ -96,12 +99,16 @@ class DialogoComponenteMercado(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(12, 0))
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right", padx=(6, 0)
-        )
-        ttk.Button(botoes, text="Adicionar", command=self._confirmar, style="Add.TButton").pack(
-            side="right"
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right")
+        criar_botao_ttk_com_icone(
+            botoes,
+            texto="Adicionar",
+            nome_icone="add-circle-outline",
+            command=self._confirmar,
+            estilo=estilos.adicionar,
+            cor_icone=estilos.icone_adicionar,
+            refs=self._refs_icones,
+        ).pack(side="right", padx=(0, 8))
 
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
@@ -146,16 +153,18 @@ class DialogoNovaComposicao(tk.Toplevel):
     def __init__(self, parent, on_confirmar):
         super().__init__(parent)
         preparar_toplevel(self)
+        cores, estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
         self.on_confirmar = on_confirmar
+        self._refs_icones: list = []
         self.title("Nova composição")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
+        painel.pack(fill="x")
 
         campos = [
             ("Código da composição:", "codigo", ""),
@@ -165,9 +174,11 @@ class DialogoNovaComposicao(tk.Toplevel):
         self.vars = {}
         self._entradas = {}
         for indice, (rotulo, chave, valor_inicial) in enumerate(campos):
-            linha = tk.Frame(painel, bg="#ececec")
+            linha = tk.Frame(painel, bg=fundo)
             linha.pack(fill="x", pady=3)
-            tk.Label(linha, text=rotulo, width=22, anchor="w", bg="#ececec").pack(side="left")
+            tk.Label(
+                linha, text=rotulo, width=22, anchor="w", bg=fundo, fg=cores.texto
+            ).pack(side="left")
             var = tk.StringVar(value=valor_inicial)
             self.vars[chave] = var
             entrada = ttk.Entry(linha, textvariable=var, width=36)
@@ -178,12 +189,16 @@ class DialogoNovaComposicao(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(12, 0))
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right", padx=(6, 0)
-        )
-        ttk.Button(botoes, text="Criar", command=self._confirmar, style="Add.TButton").pack(
-            side="right"
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right")
+        criar_botao_ttk_com_icone(
+            botoes,
+            texto="Criar",
+            nome_icone="add-circle-outline",
+            command=self._confirmar,
+            estilo=estilos.adicionar,
+            cor_icone=estilos.icone_adicionar,
+            refs=self._refs_icones,
+        ).pack(side="right", padx=(0, 8))
 
         self.bind("<Escape>", lambda _e: self.destroy())
         self.bind("<Return>", lambda _e: self._confirmar())
@@ -225,7 +240,11 @@ class DialogoNovaComposicao(tk.Toplevel):
 
 class ComposicoesPropriasFrame(tk.Frame):
     def __init__(self, parent, ctx, on_voltar):
-        super().__init__(parent, bg="#ececec")
+        cores = cores_tema(parent)
+        super().__init__(parent, bg=cores.fundo)
+        self._cores = cores
+        self._estilos = estilos_botao(self)
+        self._cg = cores_grade(self)
         self.ctx = ctx
         self.on_voltar = on_voltar
         self._dados = {
@@ -289,6 +308,9 @@ class ComposicoesPropriasFrame(tk.Frame):
         self._suprimir_selecao = False
 
     def _montar(self):
+        cores = self._cores
+        estilos = self._estilos
+        fundo = cores.fundo
         self.label_referencia = criar_barra_modulo(
             self,
             "Configurar Composições Próprias",
@@ -297,13 +319,15 @@ class ComposicoesPropriasFrame(tk.Frame):
             montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
         )
 
-        conteudo = tk.Frame(self, bg="#ececec")
+        conteudo = tk.Frame(self, bg=fundo)
         conteudo.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
-        linha_topo = tk.Frame(conteudo, bg="#ececec")
+        linha_topo = tk.Frame(conteudo, bg=fundo)
         linha_topo.pack(fill="x", pady=(0, 8))
 
-        tk.Label(linha_topo, text="Estado (prévia de custos):", bg="#ececec").pack(side="left")
+        tk.Label(
+            linha_topo, text="Estado (prévia de custos):", bg=fundo, fg=cores.texto
+        ).pack(side="left")
         estados = self.ctx.obter_estados()
         self.combo_estado = ttk.Combobox(
             linha_topo, values=valores_combo_estado(estados), width=14, state="readonly"
@@ -312,29 +336,39 @@ class ComposicoesPropriasFrame(tk.Frame):
         self._aplicar_estado_previa_inicial(estados)
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado_previa)
 
-        painel = tk.PanedWindow(conteudo, orient=tk.HORIZONTAL, sashwidth=6, bg="#cccccc")
+        painel = tk.PanedWindow(
+            conteudo, orient=tk.HORIZONTAL, sashwidth=6, bg=cores.borda_suave
+        )
         painel.pack(fill="both", expand=True)
 
         esquerda = tk.LabelFrame(
-            painel, text="Composições cadastradas", bg="#ececec", padx=6, pady=6
+            painel,
+            text="Composições cadastradas",
+            bg=fundo,
+            fg=cores.texto,
+            padx=6,
+            pady=6,
         )
         painel.add(esquerda, minsize=320)
 
         self.var_busca = tk.StringVar()
         self.var_busca.trace_add("write", lambda *_a: self._atualizar_lista_composicoes())
-        linha_busca = tk.Frame(esquerda, bg="#ececec")
+        linha_busca = tk.Frame(esquerda, bg=fundo)
         linha_busca.pack(fill="x", pady=(0, 6))
         criar_label_icone(
             linha_busca,
             "funnel-outline",
             texto="Filtrar:",
+            bg=fundo,
+            fg=cores.texto_suave,
+            cor=cores.titulo,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Entry(linha_busca, textvariable=self.var_busca, width=28).pack(
             side="left", padx=(0, 0), fill="x", expand=True
         )
 
-        container_tree = tk.Frame(esquerda, bg="#ececec")
+        container_tree = tk.Frame(esquerda, bg=fundo)
         container_tree.pack(fill="both", expand=True)
 
         colunas_comp = ("codigo", "nome", "unidade", "custo")
@@ -357,14 +391,15 @@ class ComposicoesPropriasFrame(tk.Frame):
         scroll_comp.pack(side="right", fill="y")
         self.tree_composicoes.bind("<<TreeviewSelect>>", self._ao_selecionar_composicao)
 
-        linha_bt_comp = tk.Frame(esquerda, bg="#ececec")
+        linha_bt_comp = tk.Frame(esquerda, bg=fundo)
         linha_bt_comp.pack(fill="x", pady=(6, 0))
         criar_botao_ttk_com_icone(
             linha_bt_comp,
             texto="Nova composição",
             nome_icone="add-circle-outline",
             command=self._nova_composicao,
-            estilo="Add.Compact.TButton",
+            estilo=estilos.compacto_adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         criar_botao_ttk_com_icone(
@@ -372,14 +407,17 @@ class ComposicoesPropriasFrame(tk.Frame):
             texto="Excluir",
             nome_icone="trash-outline",
             command=self._excluir_composicao,
-            estilo="Delete.Compact.TButton",
+            estilo=estilos.compacto_excluir,
+            cor_icone=estilos.icone_excluir,
             refs=self._icones_botoes,
         ).pack(side="left")
 
-        direita = tk.LabelFrame(painel, text="Edição da composição", bg="#ececec", padx=8, pady=8)
+        direita = tk.LabelFrame(
+            painel, text="Edição da composição", bg=fundo, fg=cores.texto, padx=8, pady=8
+        )
         painel.add(direita, minsize=420)
 
-        form = tk.Frame(direita, bg="#ececec")
+        form = tk.Frame(direita, bg=fundo)
         form.pack(fill="x", pady=(0, 8))
 
         self.var_codigo = tk.StringVar()
@@ -391,9 +429,11 @@ class ComposicoesPropriasFrame(tk.Frame):
             ("Nome:", self.var_nome),
             ("Unidade:", self.var_unidade),
         ):
-            linha = tk.Frame(form, bg="#ececec")
+            linha = tk.Frame(form, bg=fundo)
             linha.pack(fill="x", pady=2)
-            tk.Label(linha, text=rotulo, width=10, anchor="w", bg="#ececec").pack(side="left")
+            tk.Label(
+                linha, text=rotulo, width=10, anchor="w", bg=fundo, fg=cores.texto
+            ).pack(side="left")
             ttk.Entry(linha, textvariable=var, width=48).pack(side="left", fill="x", expand=True)
 
         criar_botao_ttk_com_icone(
@@ -401,12 +441,13 @@ class ComposicoesPropriasFrame(tk.Frame):
             texto="Salvar alterações",
             nome_icone="save-outline",
             command=self._salvar_composicao,
-            estilo="Save.TButton",
+            estilo=estilos.salvar,
+            cor_icone=estilos.icone_salvar,
             refs=self._icones_botoes,
         ).pack(anchor="e", pady=(6, 0))
 
         painel_comp = tk.LabelFrame(
-            direita, text="Componentes", bg="#ececec", padx=6, pady=6
+            direita, text="Componentes", bg=fundo, fg=cores.texto, padx=6, pady=6
         )
         painel_comp.pack(fill="both", expand=True)
 
@@ -424,16 +465,16 @@ class ComposicoesPropriasFrame(tk.Frame):
         self.tree_componentes.column("unidade", width=48, anchor="center", stretch=False)
         self.tree_componentes.column("coeficiente", width=64, anchor="e", stretch=False)
         self.tree_componentes.column("tipo", width=72, anchor="center", stretch=False)
-        self.tree_componentes.tag_configure("depreciado", background=COR_DEPRECIADO)
+        self.tree_componentes.tag_configure("depreciado", background=self._cg.alerta_depreciado)
         self.tree_componentes.tag_configure(
-            "estado_alternativo", background=COR_ESTADO_ALTERNATIVO
+            "estado_alternativo", background=self._cg.estado_alternativo
         )
         scroll_cmp = ttk.Scrollbar(painel_comp, orient="vertical", command=self.tree_componentes.yview)
         self.tree_componentes.configure(yscrollcommand=scroll_cmp.set)
         self.tree_componentes.pack(side="left", fill="both", expand=True)
         scroll_cmp.pack(side="right", fill="y")
 
-        linha_bt_cmp = tk.Frame(direita, bg="#ececec")
+        linha_bt_cmp = tk.Frame(direita, bg=fundo)
         linha_bt_cmp.pack(fill="x", pady=(8, 0))
         criar_botao_inserir_prominente(
             linha_bt_cmp,
@@ -452,26 +493,27 @@ class ComposicoesPropriasFrame(tk.Frame):
             texto="Remover componente",
             nome_icone="remove-circle-outline",
             command=self._remover_componente,
-            estilo="Delete.Compact.TButton",
+            estilo=estilos.compacto_excluir,
+            cor_icone=estilos.icone_excluir,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_bt_cmp,
             text="Item ↑",
             command=lambda: self._mover_componente(-1),
-            style="Compact.TButton",
+            style=estilos.compacto,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_bt_cmp,
             text="Item ↓",
             command=lambda: self._mover_componente(1),
-            style="Compact.TButton",
+            style=estilos.compacto,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_bt_cmp,
             text="Estado do componente (UF)",
             command=self._alterar_estado_componente,
-            style="Compact.TButton",
+            style=estilos.compacto,
         ).pack(side="left")
 
     def _atualizar_lista_composicoes(self, *, calcular_custos=True):

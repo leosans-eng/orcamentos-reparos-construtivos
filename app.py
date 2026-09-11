@@ -17,7 +17,8 @@ from ui.etapas_predefinidas import EtapasPredefinidasFrame
 from ui.hub import HubFrame
 from ui.orcamento_customizado_modulo import OrcamentoCustomizadoModulo
 from ui.dialogo_login import garantir_login
-from ui.widgets import centralizar_janela_principal, configurar_estilos_ttk
+from ui.widgets import centralizar_janela_principal
+from ui.temas import aplicar_tema, cores_tema, limpar_listeners_tema, registrar_listener_tema
 from tkinter import messagebox
 
 TITULOS_JANELA = {
@@ -40,9 +41,10 @@ class OrcApp:
         self._after_sinapi = None
 
         self.janela = tk.Tk()
+        self.janela.withdraw()
         self.ctx.janela = self.janela
         self.ctx.iniciar_carregamento_sinapi()
-        configurar_estilos_ttk(self.janela)
+        aplicar_tema(self.janela)
 
         self.janela.title(TITULOS_JANELA["hub"])
         self.janela.minsize(940, 620)
@@ -65,7 +67,15 @@ class OrcApp:
         self.area_conteudo.pack(fill="both", expand=True)
 
         self._criar_hub()
+        self._aplicar_chrome()
+        limpar_listeners_tema()
+        registrar_listener_tema(self._ao_mudar_tema)
         self.mostrar_modulo("hub")
+        try:
+            self.janela.deiconify()
+            self.janela.lift()
+        except tk.TclError:
+            pass
 
         # Continua / conclui a checagem iniciada no login (ou inicia no offline).
         self._schedule_update_check()
@@ -137,6 +147,57 @@ class OrcApp:
             self.ctx.label_nome_csv_rodape
         )
 
+    def _ao_mudar_tema(self, _tema_id):
+        from ui.calculadora import fechar_calculadora
+
+        fechar_calculadora()
+        self._aplicar_chrome()
+        hub = self._frames.get("hub")
+        if hub is not None:
+            hub.atualizar_tema()
+        atual = self._modulo_atual
+        for nome in list(self._frames):
+            if nome == "hub":
+                continue
+            frame = self._frames.pop(nome)
+            try:
+                frame.destroy()
+            except tk.TclError:
+                pass
+        if atual and atual != "hub":
+            self.mostrar_modulo(atual)
+
+    def _aplicar_chrome(self):
+        cores = cores_tema(self.janela)
+        try:
+            self.janela.configure(bg=cores.fundo)
+        except tk.TclError:
+            pass
+        area = getattr(self, "area_conteudo", None)
+        if area is not None:
+            try:
+                area.configure(bg=cores.fundo)
+            except tk.TclError:
+                pass
+        rodape = getattr(self.ctx, "frame_rodape", None)
+        if rodape is not None:
+            try:
+                rodape.configure(bg=cores.fundo)
+            except tk.TclError:
+                pass
+        label_rodape = getattr(self.ctx, "label_rodape", None)
+        if label_rodape is not None:
+            try:
+                label_rodape.configure(bg=cores.fundo, fg=cores.texto_suave)
+            except tk.TclError:
+                pass
+        label_csv = getattr(self.ctx, "label_nome_csv_rodape", None)
+        if label_csv is not None:
+            try:
+                label_csv.configure(bg=cores.fundo, fg=cores.perigo)
+            except tk.TclError:
+                pass
+
     def _criar_hub(self):
         self._frames["hub"] = HubFrame(
             self.area_conteudo,
@@ -154,6 +215,7 @@ class OrcApp:
 
         print("[ORC] Logout — retornando à tela de login")
         self.pediu_logout = True
+        limpar_listeners_tema()
         self._cancelar_afters_app()
         try:
             get_client().logout()
@@ -330,6 +392,7 @@ if __name__ == "__main__":
     while True:
         print("[ORC] Abrindo tela de login")
         _root_login = tk.Tk()
+        _root_login.withdraw()
         try:
             logou = garantir_login(_root_login)
         except Exception as exc:

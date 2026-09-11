@@ -8,21 +8,13 @@ from tkinter import ttk
 from core.api_client import reiniciar_cliente
 from core.api_config import URL_PADRAO, carregar_config, salvar_config
 from core.api_exceptions import ApiError
-from ui.icones import IndicadorAmpulheta, criar_botao_ttk_com_icone
+from ui.icones import IndicadorAmpulheta, criar_botao_ttk_com_icone, definir_estado_botao_icone
+from ui.temas import aplicar_tema, cores_tema, estilos_botao
 from ui.widgets import (
-    COR_BORDA_PADRAO,
-    COR_FUNDO_CARTAO,
-    COR_TITULO_PADRAO,
     aplicar_icone_janela,
     centralizar_janela,
-    configurar_estilos_ttk,
 )
 
-COR_FUNDO = "#e8eef1"
-COR_FAIXA = "#006699"
-COR_ROTULO = "#555555"
-COR_ERRO = "#c62828"
-COR_STATUS = "#006699"
 LARGURA_JANELA = 420
 WRAP_ERRO = LARGURA_JANELA - 64
 
@@ -44,12 +36,19 @@ class DialogoLogin:
         self._fila_login: queue.Queue = queue.Queue()
         self._after_login = None
 
-        configurar_estilos_ttk(root)
+        try:
+            root.withdraw()
+        except tk.TclError:
+            pass
+
+        aplicar_tema(root)
+        cores = cores_tema(root)
+        self._cores = cores
 
         config = carregar_config()
         root.title("ORC — Login")
         aplicar_icone_janela(root)
-        root.configure(bg=COR_FUNDO)
+        root.configure(bg=cores.fundo)
         root.resizable(False, False)
         root.protocol("WM_DELETE_WINDOW", self._cancelar)
 
@@ -59,43 +58,43 @@ class DialogoLogin:
             except tk.TclError:
                 pass
 
-        raiz = tk.Frame(root, bg=COR_FUNDO)
+        raiz = tk.Frame(root, bg=cores.fundo)
         raiz.pack(fill="both", expand=True)
 
-        faixa = tk.Frame(raiz, bg=COR_FAIXA, height=6)
+        faixa = tk.Frame(raiz, bg=cores.faixa, height=6)
         faixa.pack(fill="x")
         faixa.pack_propagate(False)
 
-        painel = tk.Frame(raiz, bg=COR_FUNDO, padx=28, pady=20)
+        painel = tk.Frame(raiz, bg=cores.fundo, padx=28, pady=20)
         painel.pack(fill="both", expand=True)
         painel.columnconfigure(0, weight=1)
 
-        cabecalho = tk.Frame(painel, bg=COR_FUNDO)
+        cabecalho = tk.Frame(painel, bg=cores.fundo)
         cabecalho.pack(fill="x", pady=(4, 18))
 
         tk.Label(
             cabecalho,
             text="ORC",
             font=("Segoe UI", 26, "bold"),
-            fg=COR_TITULO_PADRAO,
-            bg=COR_FUNDO,
+            fg=cores.titulo,
+            bg=cores.fundo,
         ).pack(anchor="center")
         tk.Label(
             cabecalho,
             text="Orçamentos de Reparos Construtivos",
             font=("Segoe UI", 10),
-            fg="#5a6a72",
-            bg=COR_FUNDO,
+            fg=cores.texto_suave,
+            bg=cores.fundo,
         ).pack(anchor="center", pady=(2, 0))
 
         cartao = tk.Frame(
             painel,
-            bg=COR_FUNDO_CARTAO,
-            highlightbackground=COR_BORDA_PADRAO,
+            bg=cores.fundo_cartao,
+            highlightbackground=cores.borda,
             highlightthickness=2,
         )
         cartao.pack(fill="x")
-        inner = tk.Frame(cartao, bg=COR_FUNDO_CARTAO, padx=20, pady=18)
+        inner = tk.Frame(cartao, bg=cores.fundo_cartao, padx=20, pady=18)
         inner.pack(fill="x")
         inner.columnconfigure(0, weight=1)
 
@@ -119,44 +118,29 @@ class DialogoLogin:
         )
         entrada_senha.bind("<Return>", lambda _e: self._entrar())
 
-        opcoes = tk.Frame(inner, bg=COR_FUNDO_CARTAO)
+        opcoes = tk.Frame(inner, bg=cores.fundo_cartao)
         opcoes.grid(row=4, column=0, sticky="w", pady=(12, 0))
 
-        chk_usuario = tk.Checkbutton(
+        ttk.Checkbutton(
             opcoes,
             text="Salvar usuário",
             variable=self.var_salvar_usuario,
             command=self._ao_alterar_salvar_usuario,
-            bg=COR_FUNDO_CARTAO,
-            activebackground=COR_FUNDO_CARTAO,
-            fg=COR_ROTULO,
-            activeforeground=COR_ROTULO,
-            selectcolor="#ffffff",
-            font=("Segoe UI", 9),
-            anchor="w",
-        )
-        chk_usuario.pack(anchor="w")
-
-        chk_senha = tk.Checkbutton(
+            style="Cartao.TCheckbutton",
+        ).pack(anchor="w")
+        ttk.Checkbutton(
             opcoes,
             text="Salvar senha",
             variable=self.var_salvar_senha,
             command=self._ao_alterar_salvar_senha,
-            bg=COR_FUNDO_CARTAO,
-            activebackground=COR_FUNDO_CARTAO,
-            fg=COR_ROTULO,
-            activeforeground=COR_ROTULO,
-            selectcolor="#ffffff",
-            font=("Segoe UI", 9),
-            anchor="w",
-        )
-        chk_senha.pack(anchor="w", pady=(2, 0))
+            style="Cartao.TCheckbutton",
+        ).pack(anchor="w", pady=(2, 0))
 
-        status = tk.Frame(painel, bg=COR_FUNDO, height=56)
+        status = tk.Frame(painel, bg=cores.fundo, height=56)
         status.pack(fill="x", pady=(14, 10))
         status.pack_propagate(False)
 
-        self._slot_amp = tk.Frame(status, bg=COR_FUNDO, width=30, height=28)
+        self._slot_amp = tk.Frame(status, bg=cores.fundo, width=30, height=28)
         self._slot_amp.pack(side="left", padx=(0, 8))
         self._slot_amp.pack_propagate(False)
 
@@ -164,22 +148,24 @@ class DialogoLogin:
             status,
             text="",
             font=("Segoe UI", 9),
-            fg=COR_ERRO,
-            bg=COR_FUNDO,
+            fg=cores.perigo,
+            bg=cores.fundo,
             wraplength=WRAP_ERRO - 38,
             justify="left",
             anchor="w",
         )
         self._lbl_erro.pack(side="left", fill="both", expand=True)
 
-        botoes = ttk.Frame(painel)
+        botoes = tk.Frame(painel, bg=cores.fundo)
         botoes.pack(fill="x", pady=(4, 0))
+        estilos = estilos_botao(root)
         self._btn_sair = criar_botao_ttk_com_icone(
             botoes,
             texto="Sair",
             nome_icone="log-out-outline",
             command=self._cancelar,
-            estilo="Delete.TButton",
+            estilo=estilos.excluir,
+            cor_icone=estilos.icone_excluir,
             refs=self._refs_icones,
         )
         self._btn_sair.pack(side="right")
@@ -188,7 +174,8 @@ class DialogoLogin:
             texto="Entrar",
             nome_icone="log-in-outline",
             command=self._entrar,
-            estilo="Add.TButton",
+            estilo=estilos.adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._refs_icones,
         )
         self._btn_entrar.pack(side="right", padx=(0, 8))
@@ -198,8 +185,7 @@ class DialogoLogin:
         altura = max(root.winfo_reqheight(), 400)
         root.minsize(LARGURA_JANELA, altura)
         root.maxsize(LARGURA_JANELA, 900)
-        root.geometry(f"{LARGURA_JANELA}x{altura}")
-        centralizar_janela(root)
+        centralizar_janela(root, largura=LARGURA_JANELA, altura=altura)
         self._trazer_para_frente()
 
         if self.var_usuario.get().strip() and not self.var_senha.get():
@@ -259,11 +245,12 @@ class DialogoLogin:
             setattr(self, atributo, None)
 
     def _campo(self, parent, rotulo, variavel, *, linha, mostrar=None):
+        cores = self._cores
         tk.Label(
             parent,
             text=rotulo,
-            bg=COR_FUNDO_CARTAO,
-            fg=COR_ROTULO,
+            bg=cores.fundo_cartao,
+            fg=cores.texto_suave,
             font=("Segoe UI", 9),
         ).grid(row=linha, column=0, sticky="w", pady=(0 if linha == 0 else 10, 4))
         kwargs = {"textvariable": variavel}
@@ -286,7 +273,16 @@ class DialogoLogin:
         if self._btn_entrar is None:
             return
         try:
-            self._btn_entrar.configure(state="normal" if habilitado else "disabled")
+            if habilitado:
+                definir_estado_botao_icone(self._btn_entrar, "normal")
+                return
+            # Não usar state=disabled nem o ícone cinza: o ttk clareia o SVG
+            # e o deixa embaçado enquanto "Conectando…".
+            icone = getattr(self._btn_entrar, "_orc_img_normal", None)
+            kwargs = {"state": "normal", "command": lambda: None}
+            if icone is not None:
+                kwargs["image"] = icone
+            self._btn_entrar.configure(**kwargs)
         except tk.TclError:
             pass
 
@@ -296,15 +292,15 @@ class DialogoLogin:
         self._ampulheta = IndicadorAmpulheta(
             self._slot_amp,
             altura=22,
-            cor=COR_STATUS,
-            bg=COR_FUNDO,
+            cor=self._cores.titulo,
+            bg=self._cores.fundo,
             refs=self._refs_icones,
         )
 
     def _mostrar_status(self, texto: str, *, erro: bool = False, carregando: bool = False):
         self._lbl_erro.config(
             text=texto,
-            fg=COR_ERRO if erro else COR_STATUS,
+            fg=self._cores.perigo if erro else self._cores.titulo,
         )
         if carregando:
             self._garantir_ampulheta()

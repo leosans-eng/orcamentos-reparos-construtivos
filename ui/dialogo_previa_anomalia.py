@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from ui.temas import aplicar_chrome_dialogo
 from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
@@ -60,15 +61,16 @@ class DialogoPreviaAnomalia(tk.Toplevel):
     ):
         super().__init__(parent)
         preparar_toplevel(self)
+        cores, _estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
         self.title("Prévia da anomalia")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.geometry("920x500")
         self.minsize(720, 380)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
         painel.pack(fill="both", expand=True)
         painel.columnconfigure(0, weight=1)
         painel.rowconfigure(3, weight=1)
@@ -77,8 +79,8 @@ class DialogoPreviaAnomalia(tk.Toplevel):
             painel,
             text="Prévia da planilha",
             font=("Arial", 12, "bold"),
-            fg="#006699",
-            bg="#ececec",
+            fg=cores.titulo,
+            bg=fundo,
             anchor="w",
         ).grid(row=0, column=0, sticky="w")
 
@@ -86,8 +88,8 @@ class DialogoPreviaAnomalia(tk.Toplevel):
             painel,
             text=nome_anomalia,
             font=("Arial", 11),
-            fg="#222222",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=fundo,
             anchor="w",
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
 
@@ -101,8 +103,8 @@ class DialogoPreviaAnomalia(tk.Toplevel):
             painel,
             text=resumo,
             font=("Arial", 9),
-            fg="#555555",
-            bg="#ececec",
+            fg=cores.texto_suave,
+            bg=fundo,
             anchor="w",
             wraplength=920,
             justify="left",
@@ -124,7 +126,7 @@ class DialogoPreviaAnomalia(tk.Toplevel):
         tree.column("valor", width=78, anchor="e")
         tree.column("total", width=88, anchor="e")
         tree.column("grupo", width=110, anchor="w")
-        tree.tag_configure("nao_encontrado", foreground="#c62828")
+        tree.tag_configure("nao_encontrado", foreground=cores.perigo)
         tree.tag_configure("total", font=("Arial", 9, "bold"))
 
         scroll = ttk.Scrollbar(painel, orient="vertical", command=tree.yview)
@@ -165,12 +167,12 @@ class DialogoPreviaAnomalia(tk.Toplevel):
                 painel,
                 text="Selecione um Estado para carregar os valores unitários da SINAPI.",
                 font=("Arial", 9),
-                fg="#a67c00",
-                bg="#ececec",
+                fg="#ffe082" if cores.escuro else "#a67c00",
+                bg=fundo,
                 anchor="w",
             ).grid(row=4, column=0, sticky="w", pady=(8, 0))
 
-        botoes = tk.Frame(painel, bg="#ececec")
+        botoes = tk.Frame(painel, bg=fundo)
         botoes.grid(row=5, column=0, columnspan=2, sticky="e", pady=(12, 0))
         criar_botao_fechar(botoes, command=self.destroy).pack(side="right")
 

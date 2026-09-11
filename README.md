@@ -4,7 +4,7 @@ Aplicativo desktop para elaboração de orçamentos de reparos de vícios constr
 
 Desenvolvido em **Python** com interface **Tkinter**, voltado ao uso em perícias e laudos de vícios construtivos.
 
-**Versão atual: 1.5.0**
+**Versão atual: 1.5.2**
 
 ## Destaques da 1.5.0
 
@@ -93,7 +93,7 @@ O app consulta o arquivo [`version.json`](version.json) no repositório GitHub e
 
 ### Configurações
 
-No hub, o botão **Configurações** abre um diálogo para **reverificar a base SINAPI** manualmente e acompanhar o status do servidor (HTTP e situação da última consulta).
+No hub, o botão **Configurações** abre um diálogo para **reverificar a base SINAPI** manualmente, acompanhar o status do servidor, gerenciar a conta e **escolher o tema visual** (Padrão ORC, Sun Valley, Azure ou Forest).
 
 ### API e banco compartilhados
 
@@ -110,7 +110,7 @@ Assim, qualquer computador com o ORC instalado e autenticado na mesma URL de API
 ## Instalação (usuário final)
 
 1. Baixe o instalador mais recente na [página de releases](https://github.com/leosans-eng/orcamento-reparos-construtivos/releases) ou pelo link em `version.json`.
-2. Execute `ORC_Instalador_1.5.0.exe` (ou o instalador indicado em `version.json`) e siga o assistente. O app será instalado em `C:\ORC` por padrão.
+2. Execute `ORC_Instalador_1.5.2.exe` (ou o instalador indicado em `version.json`) e siga o assistente. O app será instalado em `C:\ORC` por padrão.
 3. Abra o ORC e faça **login** com seu usuário.
 
 ## Desenvolvimento
@@ -194,7 +194,8 @@ orcamento-reparos-construtivos/
 │   ├── composicoes_proprias.py     # Cadastro de composições próprias
 │   ├── etapas_predefinidas.py      # Cadastro de etapas pré-definidas
 │   ├── consulta_sinapi.py          # Módulo de consulta SINAPI
-│   ├── dialogo_configuracoes.py    # Diálogo de configurações (SINAPI)
+│   ├── dialogo_configuracoes.py    # SINAPI, conta, tema e usuários
+│   ├── temas.py                    # Temas visuais (ORC, Sun Valley, Azure, Forest)
 │   ├── dialogo_config_anomalias.py # Cadastro de anomalias (admin)
 │   ├── dialogo_importar_autor_idebras.py
 │   ├── dialogo_ambientes_planta.py # Ambientes da planta Idebras
@@ -230,7 +231,7 @@ setup\orc_installer.bat
 Saídas:
 
 - `dist\ORC\ORC.exe` — executável portátil
-- `setup\output\ORC_Instalador_1.5.0.exe` — instalador Windows
+- `setup\output\ORC_Instalador_1.5.2.exe` — instalador Windows
 
 Após publicar uma nova versão, atualize `version.json` no GitHub com a versão e o link do instalador correspondente.
 
@@ -246,6 +247,11 @@ Após publicar uma nova versão, atualize `version.json` no GitHub com a versão
 A referência SINAPI em uso aparece no rodapé da interface (ex.: `05/2026`).
 
 ## Histórico de versões
+
+### 1.5.2
+
+- **Temas visuais** em Configurações: Padrão ORC, Sun Valley, Azure e Forest (claro e escuro), aplicados em todo o aplicativo
+- Melhorias na configuração da interface da **Área Privativa**
 
 ### 1.5.0
 

@@ -409,8 +409,8 @@ class DialogoNovaEtapa(tk.Toplevel):
         ).pack(fill="x", pady=(0, 4))
 
         self.var_nome = tk.StringVar()
-        entrada_nome = ttk.Entry(painel, textvariable=self.var_nome, width=52)
-        entrada_nome.pack(fill="x", pady=(0, 14))
+        self.entrada_nome = ttk.Entry(painel, textvariable=self.var_nome, width=52)
+        self.entrada_nome.pack(fill="x", pady=(0, 14))
 
         tk.Label(
             painel,
@@ -444,11 +444,26 @@ class DialogoNovaEtapa(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self._fechar)
         self.update_idletasks()
         centralizar_janela(self, parent)
-        focar_entrada_apos_exibir(entrada_nome)
+        focar_entrada_apos_exibir(self.entrada_nome)
 
     def _ao_escolher_modelo(self, valor: str):
         if valor and valor != ETAPA_EM_BRANCO:
             self.var_nome.set(valor)
+        self._focar_nome_etapa()
+
+    def _focar_nome_etapa(self):
+        def aplicar():
+            try:
+                self.lift()
+                self.grab_set()
+                self.entrada_nome.focus_force()
+                self.entrada_nome.selection_range(0, "end")
+                self.entrada_nome.icursor("end")
+            except tk.TclError:
+                pass
+
+        self.after_idle(aplicar)
+        self.after(50, aplicar)
 
     def _fechar(self):
         self.campo_modelo.fechar_lista()

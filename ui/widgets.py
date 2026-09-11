@@ -1120,8 +1120,11 @@ class CampoListaPesquisavel(tk.Frame):
         self._popup = None
         self._lista = None
         self._ignorando_foco = False
+        self._fechando_escolha = False
         self._id_clique_fora = None
+        self._alvo_bind_clique = None
         self._id_configure_topo = None
+        self._grab_para_restaurar = None
         self.var = textvariable if textvariable is not None else tk.StringVar()
 
         self.btn_seta = ttk.Button(
@@ -1144,9 +1147,19 @@ class CampoListaPesquisavel(tk.Frame):
         self.entrada.bind("<FocusOut>", self._ao_foco_sair)
         self.btn_seta.bind("<ButtonPress-1>", self._ao_pressionar_interno, add="+")
         self.bind("<Destroy>", self._ao_destruir)
-        self._id_clique_fora = self.bind_all(
-            "<ButtonPress-1>", self._ao_clique_fora, add="+"
-        )
+        self._vincular_clique_fora()
+
+    def _vincular_clique_fora(self):
+        """Fecha a lista no clique fora, sem bind_all (no Windows isso trava ttk.Entry)."""
+        try:
+            alvo = self.winfo_toplevel()
+            self._alvo_bind_clique = alvo
+            self._id_clique_fora = alvo.bind(
+                "<ButtonPress-1>", self._ao_clique_fora, add="+"
+            )
+        except tk.TclError:
+            self._alvo_bind_clique = None
+            self._id_clique_fora = None
 
     def definir_opcoes(self, opcoes):
         self._opcoes = list(opcoes)
@@ -1159,13 +1172,34 @@ class CampoListaPesquisavel(tk.Frame):
 
     def fechar_lista(self):
         self._desvincular_configure_topo()
-        if self._popup_ativo():
-            try:
-                self._popup.destroy()
-            except tk.TclError:
-                pass
+        popup = self._popup
         self._popup = None
         self._lista = None
+        if popup is not None:
+            try:
+                if popup.winfo_exists():
+                    popup.withdraw()
+                    popup.destroy()
+            except tk.TclError:
+                pass
+        self._restaurar_grab()
+
+    def _lembrar_grab(self):
+        try:
+            self._grab_para_restaurar = self.grab_current()
+        except tk.TclError:
+            self._grab_para_restaurar = None
+
+    def _restaurar_grab(self):
+        alvo = self._grab_para_restaurar
+        self._grab_para_restaurar = None
+        if alvo is None:
+            return
+        try:
+            if alvo.winfo_exists():
+                alvo.grab_set()
+        except tk.TclError:
+            pass
 
     def _normalizar_texto(self, texto: str) -> str:
         if self._normalizar is not None:
@@ -1255,14 +1289,11 @@ class CampoListaPesquisavel(tk.Frame):
     def _criar_popup(self):
         from ui.temas import cores_tema, texto_contraste
 
+        self._lembrar_grab()
         cores = cores_tema(self)
         popup = tk.Toplevel(self)
         popup.withdraw()
         popup.overrideredirect(True)
-        try:
-            popup.transient(self.winfo_toplevel())
-        except tk.TclError:
-            pass
         popup.configure(bg=cores.borda_suave)
         lista = tk.Listbox(
             popup,
@@ -1311,6 +1342,8 @@ class CampoListaPesquisavel(tk.Frame):
         self.after(200, self._liberar_foco)
 
     def _ao_botao_seta(self):
+        if self._fechando_escolha:
+            return
         if self._popup_ativo():
             self.fechar_lista()
             return
@@ -1335,6 +1368,8 @@ class CampoListaPesquisavel(tk.Frame):
             pass
 
     def _mostrar_lista(self, forcar_todas: bool = False):
+        if self._fechando_escolha:
+            return
         opcoes = self._opcoes_filtradas(forcar_todas=forcar_todas)
         self._ignorando_foco = True
         try:
@@ -1369,9 +1404,13 @@ class CampoListaPesquisavel(tk.Frame):
             pass
 
     def _ao_clicar(self, _event=None):
+        if self._fechando_escolha:
+            return "break"
         self.after_idle(self._abrir_no_clique)
 
     def _abrir_no_clique(self):
+        if self._fechando_escolha:
+            return
         self._mostrar_lista(forcar_todas=True)
         self.after_idle(self._selecionar_texto)
 
@@ -1430,6 +1469,8 @@ class CampoListaPesquisavel(tk.Frame):
         self.fechar_lista()
 
     def _ao_digitar(self, event=None):
+        if self._fechando_escolha:
+            return
         if event is not None and event.keysym in (
             "Up",
             "Down",
@@ -1458,25 +1499,34 @@ class CampoListaPesquisavel(tk.Frame):
 
     def _confirmar_valor(self, valor: str):
         self.var.set(valor)
+        self._fechando_escolha = True
         self.fechar_lista()
-        try:
-            self.entrada.focus_set()
-            self.entrada.selection_range(0, "end")
-        except tk.TclError:
-            pass
         if self.on_escolher is not None:
             self.on_escolher(valor)
+        else:
+            try:
+                self.entrada.focus_set()
+                self.entrada.selection_range(0, "end")
+            except tk.TclError:
+                pass
+        self.after(300, self._liberar_escolha)
+
+    def _liberar_escolha(self):
+        self._fechando_escolha = False
 
     def _ao_destruir(self, event):
         if event.widget is not self:
             return
         self.fechar_lista()
         funcid = self._id_clique_fora
+        alvo = self._alvo_bind_clique
         self._id_clique_fora = None
+        self._alvo_bind_clique = None
         if not funcid:
             return
         try:
-            self._unbind(("bind", "all", "<ButtonPress-1>"), funcid)
+            if alvo is not None:
+                alvo.unbind("<ButtonPress-1>", funcid)
         except (tk.TclError, TypeError, AttributeError):
             pass
 

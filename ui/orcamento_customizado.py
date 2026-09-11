@@ -54,15 +54,10 @@ from ui.calculadora import abrir_calculadora
 from ui.dialogo_previa_composicao import DialogoPreviaComposicao
 from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from core.ui_prefs import definir_pref, obter_pref
-from ui.grade_orcamento import (
-    COR_ALERTA_DEPRECIADO,
-    COR_COMPOSICAO,
-    COR_DISCRIMINAR,
-    COR_ESTADO_ALTERNATIVO,
-    COR_GRUPO,
-    GradeOrcamento,
-)
+from ui.temas import aplicar_chrome_dialogo, cores_grade, cores_tema, estilos_botao
+from ui.grade_orcamento import GradeOrcamento
 from ui.icones import (
+    carregar_png_icone,
     criar_botao_inserir_prominente,
     criar_botao_ttk_com_icone,
     criar_botao_ttk_so_icone,
@@ -79,6 +74,7 @@ from ui.widgets import (
     centralizar_janela,
     preparar_toplevel,
     criar_barra_modulo,
+    criar_botao_cancelar,
     estado_do_combo,
     focar_entrada_apos_exibir,
     perguntar_texto,
@@ -95,7 +91,6 @@ UNIDADE_TODAS = "Todas"
 HISTORICO_MAX = 40
 DESCRICAO_BDI = "BDI alterado"
 COR_ALERTA_VAZIO = "#ffe082"
-COR_ALERTA_VAZIO_APAGADO = "#ececec"
 INTERVALO_ALERTA_VAZIO_MS = 550
 
 
@@ -120,25 +115,26 @@ class DialogoEditarQuantidade(tk.Toplevel):
     def __init__(self, parent, descricao_item, quantidade_atual, on_confirmar):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
         self.on_confirmar = on_confirmar
         self.title("Editar quantidade")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=self._cores.fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
         largura_wrap = min(560, max(280, parent.winfo_screenwidth() - 120))
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel = tk.Frame(self, bg=self._cores.fundo, padx=16, pady=14)
         painel.pack(fill="both", expand=True)
 
         tk.Label(
             painel,
             text="Item:",
             font=("Arial", 9, "bold"),
-            fg="#444444",
-            bg="#ececec",
+            fg=self._cores.texto,
+            bg=self._cores.fundo,
             anchor="w",
         ).pack(fill="x")
 
@@ -146,8 +142,8 @@ class DialogoEditarQuantidade(tk.Toplevel):
             painel,
             text=descricao_item,
             font=("Arial", 9),
-            fg="#333333",
-            bg="#f5fafc",
+            fg=self._cores.texto,
+            bg=self._cores.fundo_destaque,
             justify="left",
             anchor="w",
             wraplength=largura_wrap,
@@ -155,9 +151,9 @@ class DialogoEditarQuantidade(tk.Toplevel):
             pady=8,
         ).pack(fill="x", pady=(4, 12))
 
-        linha_qtd = tk.Frame(painel, bg="#ececec")
+        linha_qtd = tk.Frame(painel, bg=self._cores.fundo)
         linha_qtd.pack(fill="x", pady=(0, 4))
-        tk.Label(linha_qtd, text="Nova quantidade:", bg="#ececec").pack(side="left")
+        tk.Label(linha_qtd, text="Nova quantidade:", bg=self._cores.fundo, fg=self._cores.texto).pack(side="left")
         self.var_quantidade = tk.StringVar(
             value=formatar_quantidade_edicao(quantidade_atual)
         )
@@ -171,17 +167,15 @@ class DialogoEditarQuantidade(tk.Toplevel):
             painel,
             text="É possível usar expressões como 12,5*15  ou  2+3*4",
             font=("Arial", 8),
-            fg="#666666",
-            bg="#ececec",
+            fg=self._cores.texto_suave,
+            bg=self._cores.fundo,
             anchor="w",
         ).pack(fill="x", pady=(0, 10))
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right", padx=(6, 0)
-        )
-        ttk.Button(botoes, text="OK", command=self._confirmar, style="Add.TButton").pack(
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right", padx=(6, 0))
+        ttk.Button(botoes, text="OK", command=self._confirmar, style=self._estilos.adicionar).pack(
             side="right"
         )
 
@@ -209,34 +203,35 @@ class DialogoEstadoItemSinapi(tk.Toplevel):
     ):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
         self.on_confirmar = on_confirmar
         self.estados_disponiveis = list(estados_disponiveis)
         self.estado_orcamento = str(estado_orcamento or "").strip()
         self.title("Estado do item (UF)")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=self._cores.fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
         largura_wrap = min(560, max(280, parent.winfo_screenwidth() - 120))
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel = tk.Frame(self, bg=self._cores.fundo, padx=16, pady=14)
         painel.pack(fill="both", expand=True)
 
         tk.Label(
             painel,
             text=f"Código {codigo}",
             font=("Arial", 9, "bold"),
-            fg="#444444",
-            bg="#ececec",
+            fg=self._cores.texto,
+            bg=self._cores.fundo,
             anchor="w",
         ).pack(fill="x")
         tk.Label(
             painel,
             text=descricao_item,
             font=("Arial", 9),
-            fg="#333333",
-            bg="#f5fafc",
+            fg=self._cores.texto,
+            bg=self._cores.fundo_destaque,
             justify="left",
             anchor="w",
             wraplength=largura_wrap,
@@ -256,14 +251,14 @@ class DialogoEstadoItemSinapi(tk.Toplevel):
                 "Altere apenas a UF deste item para usar o preço de outro estado "
                 "(ex.: item existente só na SINAPI SP)."
             ),
-            bg="#ececec",
+            bg=self._cores.fundo,
             justify="left",
             anchor="w",
         ).pack(fill="x", pady=(0, 10))
 
-        linha = tk.Frame(painel, bg="#ececec")
+        linha = tk.Frame(painel, bg=self._cores.fundo)
         linha.pack(fill="x", pady=(0, 12))
-        tk.Label(linha, text="UF do item:", bg="#ececec").pack(side="left")
+        tk.Label(linha, text="UF do item:", bg=self._cores.fundo, fg=self._cores.texto).pack(side="left")
         self.combo_estado = ttk.Combobox(
             linha,
             values=self.estados_disponiveis,
@@ -283,11 +278,9 @@ class DialogoEstadoItemSinapi(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right", padx=(6, 0)
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right", padx=(6, 0))
         ttk.Button(
-            botoes, text="Aplicar", command=self._confirmar, style="Add.TButton"
+            botoes, text="Aplicar", command=self._confirmar, style=self._estilos.adicionar
         ).pack(side="right")
 
         self.bind("<Return>", lambda _e: self._confirmar())
@@ -313,23 +306,24 @@ class DialogoTrocarOrdemEtapa(tk.Toplevel):
     def __init__(self, parent, nome_etapa, posicao_atual, opcoes_posicao, on_confirmar):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
         self.on_confirmar = on_confirmar
         self.title("Trocar ordem da etapa")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=self._cores.fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel = tk.Frame(self, bg=self._cores.fundo, padx=16, pady=14)
         painel.pack(fill="both", expand=True)
 
         tk.Label(
             painel,
             text="Etapa selecionada:",
             font=("Arial", 9, "bold"),
-            fg="#444444",
-            bg="#ececec",
+            fg=self._cores.texto,
+            bg=self._cores.fundo,
             anchor="w",
         ).pack(fill="x")
 
@@ -337,16 +331,16 @@ class DialogoTrocarOrdemEtapa(tk.Toplevel):
             painel,
             text=f"{posicao_atual} — {nome_etapa}",
             font=("Arial", 9),
-            fg="#333333",
-            bg="#f5fafc",
+            fg=self._cores.texto,
+            bg=self._cores.fundo_destaque,
             anchor="w",
             padx=8,
             pady=8,
         ).pack(fill="x", pady=(4, 12))
 
-        linha_pos = tk.Frame(painel, bg="#ececec")
+        linha_pos = tk.Frame(painel, bg=self._cores.fundo)
         linha_pos.pack(fill="x", pady=(0, 12))
-        tk.Label(linha_pos, text="Nova posição:", bg="#ececec").pack(side="left")
+        tk.Label(linha_pos, text="Nova posição:", bg=self._cores.fundo, fg=self._cores.texto).pack(side="left")
 
         indice_inicial = max(0, min(posicao_atual - 1, len(opcoes_posicao) - 1))
         self.var_posicao = tk.StringVar(value=opcoes_posicao[indice_inicial])
@@ -362,10 +356,8 @@ class DialogoTrocarOrdemEtapa(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right", padx=(6, 0)
-        )
-        ttk.Button(botoes, text="Confirmar", command=self._confirmar, style="Add.TButton").pack(
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right", padx=(6, 0))
+        ttk.Button(botoes, text="Confirmar", command=self._confirmar, style=self._estilos.adicionar).pack(
             side="right"
         )
 
@@ -393,24 +385,26 @@ class DialogoNovaEtapa(tk.Toplevel):
     def __init__(self, parent, modelos, on_confirmar):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
         self.on_confirmar = on_confirmar
         self._modelos_por_nome = {m["nome"]: m for m in modelos}
         self._opcoes_modelo = [ETAPA_EM_BRANCO] + [m["nome"] for m in modelos]
         self.title("Nova etapa")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=self._cores.fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(True, False)
-        self.minsize(540, 200)
+        self.minsize(480, 0)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=self._cores.fundo, padx=20, pady=16)
+        painel.pack(fill="x")
 
         tk.Label(
             painel,
             text="Nome da etapa:",
-            bg="#ececec",
+            bg=self._cores.fundo,
+            fg=self._cores.texto,
             anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
@@ -421,7 +415,8 @@ class DialogoNovaEtapa(tk.Toplevel):
         tk.Label(
             painel,
             text="Modelo (opcional) — digite para filtrar:",
-            bg="#ececec",
+            bg=self._cores.fundo,
+            fg=self._cores.texto,
             anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
@@ -432,17 +427,15 @@ class DialogoNovaEtapa(tk.Toplevel):
             on_escolher=self._ao_escolher_modelo,
             altura_lista=8,
             largura_minima_lista=280,
-            bg="#ececec",
+            bg=self._cores.fundo,
         )
         self.campo_modelo.definir_opcoes(self._opcoes_modelo)
         self.campo_modelo.pack(fill="x", pady=(0, 10))
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self._fechar, style="Delete.TButton").pack(
-            side="right", padx=(6, 0)
-        )
-        ttk.Button(botoes, text="Criar", command=self._confirmar, style="Add.TButton").pack(
+        criar_botao_cancelar(botoes, self._fechar).pack(side="right", padx=(6, 0))
+        ttk.Button(botoes, text="Criar", command=self._confirmar, style=self._estilos.adicionar).pack(
             side="right"
         )
 
@@ -539,6 +532,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
     ):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
         self.ctx = ctx
         self.on_confirmar = on_confirmar
         self.on_confirmar_propria = on_confirmar_propria
@@ -558,7 +552,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.geometry("1100x700")
         self.minsize(700, 480)
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=self._cores.fundo)
         self.transient(parent)
         self.grab_set()
 
@@ -570,13 +564,13 @@ class DialogoBuscaSinapi(tk.Toplevel):
         focar_entrada_apos_exibir(self.entrada_busca)
 
     def _montar(self, estado_inicial):
-        painel = tk.Frame(self, bg="#ececec", padx=12, pady=10)
+        painel = tk.Frame(self, bg=self._cores.fundo, padx=12, pady=10)
         painel.pack(fill="both", expand=True)
 
-        linha_filtros = tk.Frame(painel, bg="#ececec")
+        linha_filtros = tk.Frame(painel, bg=self._cores.fundo)
         linha_filtros.pack(fill="x", pady=(0, 6))
 
-        tk.Label(linha_filtros, text="Estado:", bg="#ececec").grid(
+        tk.Label(linha_filtros, text="Estado:", bg=self._cores.fundo, fg=self._cores.texto).grid(
             row=0, column=0, padx=(0, 4), pady=3, sticky="w"
         )
         estados = self.ctx.obter_estados()
@@ -593,7 +587,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         else:
             self.combo_estado.set(PLACEHOLDER_ESTADO)
 
-        tk.Label(linha_filtros, text="Unidade:", bg="#ececec").grid(
+        tk.Label(linha_filtros, text="Unidade:", bg=self._cores.fundo, fg=self._cores.texto).grid(
             row=0, column=2, padx=(14, 4), pady=3, sticky="w"
         )
         self.combo_unidade = ttk.Combobox(
@@ -602,7 +596,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.combo_unidade.grid(row=0, column=3, padx=4, pady=3, sticky="w")
         self.combo_unidade.set(UNIDADE_TODAS)
 
-        tk.Label(linha_filtros, text="Tipo (I/C):", bg="#ececec").grid(
+        tk.Label(linha_filtros, text="Tipo (I/C):", bg=self._cores.fundo).grid(
             row=0, column=4, padx=(14, 4), pady=3, sticky="w"
         )
         self.combo_tipo = ttk.Combobox(
@@ -615,6 +609,9 @@ class DialogoBuscaSinapi(tk.Toplevel):
             linha_filtros,
             "funnel-outline",
             texto="Filtrar:",
+            bg=self._cores.fundo,
+            fg=self._cores.texto_suave,
+            cor=self._cores.titulo,
             refs=self._refs_icones,
         ).grid(row=1, column=0, padx=(0, 4), pady=3, sticky="w")
         self.var_busca = tk.StringVar()
@@ -622,7 +619,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.entrada_busca.grid(row=1, column=1, padx=4, pady=3, sticky="ew")
 
         if self.mostrar_quantidade:
-            tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(
+            tk.Label(linha_filtros, text="Quantidade:", bg=self._cores.fundo, fg=self._cores.texto).grid(
                 row=1, column=2, padx=(14, 4), pady=3, sticky="w"
             )
             self.var_quantidade = tk.StringVar(value="1")
@@ -639,14 +636,14 @@ class DialogoBuscaSinapi(tk.Toplevel):
             painel,
             text="Selecione o estado e digite para pesquisar.",
             font=("Arial", 8),
-            fg="#555555",
-            bg="#ececec",
+            fg=self._cores.texto_suave,
+            bg=self._cores.fundo,
             anchor="w",
         )
         self.label_status.pack(fill="x", pady=(0, 4))
 
         painel_resultados = tk.LabelFrame(
-            painel, text="Resultados", bg="#ececec", padx=6, pady=4
+            painel, text="Resultados", bg=self._cores.fundo, fg=self._cores.texto_suave, padx=6, pady=4
         )
         painel_resultados.pack(fill="both", expand=True, pady=(0, 8))
 
@@ -670,13 +667,13 @@ class DialogoBuscaSinapi(tk.Toplevel):
 
         if self.texto_item_substituindo:
             painel_atual = tk.LabelFrame(
-                painel, text="Item a substituir", bg="#ececec", padx=6, pady=4
+                painel, text="Item a substituir", bg=self._cores.fundo, fg=self._cores.texto_suave, padx=6, pady=4
             )
             painel_atual.pack(fill="x", pady=(0, 6))
             frame_atual = tk.Frame(
                 painel_atual,
-                bg="#e8ecf0",
-                highlightbackground="#cccccc",
+                bg=self._cores.fundo_destaque,
+                highlightbackground=self._cores.borda_suave,
                 highlightthickness=1,
             )
             frame_atual.pack(fill="x")
@@ -684,8 +681,8 @@ class DialogoBuscaSinapi(tk.Toplevel):
                 frame_atual,
                 text=self.texto_item_substituindo,
                 font=("Arial", 9),
-                fg="#333333",
-                bg="#e8ecf0",
+                fg=self._cores.texto,
+                bg=self._cores.fundo_destaque,
                 justify="left",
                 anchor="w",
                 padx=10,
@@ -697,7 +694,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
             "Novo item selecionado" if self.texto_item_substituindo else "Detalhes"
         )
         painel_detalhe = tk.LabelFrame(
-            painel, text=titulo_detalhe, bg="#ececec", padx=6, pady=4
+            painel, text=titulo_detalhe, bg=self._cores.fundo, fg=self._cores.texto_suave, padx=6, pady=4
         )
         painel_detalhe.pack(fill="x", pady=(0, 8))
 
@@ -708,8 +705,8 @@ class DialogoBuscaSinapi(tk.Toplevel):
         )
         frame_detalhe = tk.Frame(
             painel_detalhe,
-            bg="#f5fafc",
-            highlightbackground="#cccccc",
+            bg=self._cores.fundo_destaque,
+            highlightbackground=self._cores.borda_suave,
             highlightthickness=1,
         )
         frame_detalhe.pack(fill="x")
@@ -718,8 +715,8 @@ class DialogoBuscaSinapi(tk.Toplevel):
             frame_detalhe,
             text=texto_detalhe_inicial,
             font=("Arial", 9),
-            fg="#444444",
-            bg="#f5fafc",
+            fg=self._cores.texto,
+            bg=self._cores.fundo_destaque,
             justify="left",
             anchor="w",
             padx=10,
@@ -727,33 +724,40 @@ class DialogoBuscaSinapi(tk.Toplevel):
         )
         self.label_detalhe.pack(fill="x")
 
-        rodape = tk.Frame(painel, bg="#ececec")
+        rodape = tk.Frame(painel, bg=self._cores.fundo)
         rodape.pack(fill="x")
 
-        botoes_acao = tk.Frame(rodape, bg="#ececec")
+        botoes_acao = tk.Frame(rodape, bg=self._cores.fundo)
         botoes_acao.pack(side="right")
-        ttk.Button(
-            botoes_acao, text="Cancelar", command=self.destroy, style="Delete.TButton"
-        ).pack(side="right")
+        criar_botao_cancelar(botoes_acao, self.destroy).pack(side="right")
         if self.fechar_unico:
-            ttk.Button(
+            criar_botao_ttk_com_icone(
                 botoes_acao,
-                text=self.texto_confirmar,
+                texto=self.texto_confirmar,
+                nome_icone="add-circle-outline",
                 command=lambda: self._confirmar(fechar=True),
-                style="Add.TButton",
+                estilo=self._estilos.adicionar,
+                cor_icone=self._estilos.icone_adicionar,
+                refs=self._refs_icones,
             ).pack(side="right", padx=(0, 8))
         else:
-            ttk.Button(
+            criar_botao_ttk_com_icone(
                 botoes_acao,
-                text=self.texto_confirmar_fechar,
+                texto=self.texto_confirmar_fechar,
+                nome_icone="save-outline",
                 command=lambda: self._confirmar(fechar=True),
-                style="Save.TButton",
+                estilo=self._estilos.salvar,
+                cor_icone=self._estilos.icone_salvar,
+                refs=self._refs_icones,
             ).pack(side="right", padx=(0, 8))
-            ttk.Button(
+            criar_botao_ttk_com_icone(
                 botoes_acao,
-                text=self.texto_confirmar,
+                texto=self.texto_confirmar,
+                nome_icone="add-circle-outline",
                 command=lambda: self._confirmar(fechar=False),
-                style="Add.TButton",
+                estilo=self._estilos.adicionar,
+                cor_icone=self._estilos.icone_adicionar,
+                refs=self._refs_icones,
             ).pack(side="right", padx=(0, 8))
 
         self.var_busca.trace_add("write", self._ao_digitar)
@@ -768,7 +772,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.bind("<Configure>", self._ao_redimensionar)
 
         if self.ctx.sinapi.empty:
-            self.label_status.config(text="Base SINAPI indisponível.", fg="#C62828")
+            self.label_status.config(text="Base SINAPI indisponível.", fg=self._cores.perigo)
 
         self.after_idle(self._ajustar_layout_detalhe)
 
@@ -845,7 +849,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         estado = self._estado_selecionado()
         consulta = self.var_busca.get()
         if not estado:
-            self.label_status.config(text="Selecione um estado.", fg="#C62828")
+            self.label_status.config(text="Selecione um estado.", fg=self._cores.perigo)
             return
 
         resultados, mensagem, unidades = pesquisar_sinapi(
@@ -909,10 +913,19 @@ class DialogoBuscaSinapi(tk.Toplevel):
             mensagem = f"{total} resultado(s) encontrado(s) (SINAPI e composições próprias)."
 
         self.label_detalhe.config(text="Selecione um item na lista para ver os detalhes.")
-        cor = "#555555" if self.tree.get_children() else "#a67c00"
-        if "indisponível" in mensagem.lower() or "nenhum item" in mensagem.lower():
-            cor = "#C62828"
-        self.label_status.config(text=mensagem, fg=cor)
+        self.label_status.config(
+            text=mensagem,
+            fg=self._cor_status(mensagem, vazio=not self.tree.get_children()),
+        )
+
+    def _cor_status(self, mensagem, *, vazio=False):
+        cores = self._cores
+        texto = (mensagem or "").lower()
+        if "indisponível" in texto or "nenhum item" in texto or "nenhum insumo" in texto:
+            return cores.perigo
+        if vazio:
+            return "#ffb74d" if cores.escuro else "#a67c00"
+        return cores.texto_suave
 
     def _tipo_selecionado_sinapi(self):
         selecao = self.combo_tipo.get().strip()
@@ -1030,6 +1043,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
     ):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
         self.ctx = ctx
         self.catalogo = catalogo
         self.on_confirmar = on_confirmar
@@ -1042,7 +1056,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         self.geometry("900x620")
         self.minsize(640, 420)
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=self._cores.fundo)
         self.transient(parent)
         self.grab_set()
 
@@ -1054,13 +1068,13 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         focar_entrada_apos_exibir(self.entrada_busca)
 
     def _montar(self, estado_inicial):
-        painel = tk.Frame(self, bg="#ececec", padx=12, pady=10)
+        painel = tk.Frame(self, bg=self._cores.fundo, padx=12, pady=10)
         painel.pack(fill="both", expand=True)
 
-        linha_filtros = tk.Frame(painel, bg="#ececec")
+        linha_filtros = tk.Frame(painel, bg=self._cores.fundo)
         linha_filtros.pack(fill="x", pady=(0, 6))
 
-        tk.Label(linha_filtros, text="Estado:", bg="#ececec").grid(
+        tk.Label(linha_filtros, text="Estado:", bg=self._cores.fundo, fg=self._cores.texto).grid(
             row=0, column=0, padx=(0, 4), pady=3, sticky="w"
         )
         estados = self.ctx.obter_estados()
@@ -1081,6 +1095,9 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
             linha_filtros,
             "funnel-outline",
             texto="Filtrar:",
+            bg=self._cores.fundo,
+            fg=self._cores.texto_suave,
+            cor=self._cores.titulo,
             refs=self._refs_icones,
         ).grid(row=1, column=0, padx=(0, 4), pady=3, sticky="w")
         self.var_busca = tk.StringVar()
@@ -1089,7 +1106,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         self.entrada_busca.grid(row=1, column=1, padx=4, pady=3, sticky="ew")
 
         if self.mostrar_quantidade:
-            tk.Label(linha_filtros, text="Quantidade:", bg="#ececec").grid(
+            tk.Label(linha_filtros, text="Quantidade:", bg=self._cores.fundo, fg=self._cores.texto).grid(
                 row=1, column=2, padx=(14, 4), pady=3, sticky="w"
             )
             self.var_quantidade = tk.StringVar(value="1")
@@ -1101,7 +1118,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         linha_filtros.columnconfigure(1, weight=1)
 
         painel_resultados = tk.LabelFrame(
-            painel, text="Composições cadastradas", bg="#ececec", padx=6, pady=4
+            painel, text="Composições cadastradas", bg=self._cores.fundo, fg=self._cores.texto_suave, padx=6, pady=4
         )
         painel_resultados.pack(fill="both", expand=True, pady=(0, 8))
 
@@ -1122,7 +1139,7 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         scroll.pack(side="right", fill="y")
 
         painel_detalhe = tk.Frame(
-            painel, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
+            painel, bg=self._cores.fundo_destaque, highlightbackground=self._cores.borda_suave, highlightthickness=1
         )
         painel_detalhe.pack(fill="x", pady=(0, 8))
 
@@ -1130,8 +1147,8 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
             painel_detalhe,
             text="Selecione uma composição na lista para ver os detalhes.",
             font=("Arial", 9),
-            fg="#444444",
-            bg="#f5fafc",
+            fg=self._cores.texto,
+            bg=self._cores.fundo_destaque,
             justify="left",
             anchor="w",
             padx=10,
@@ -1139,18 +1156,19 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
         )
         self.label_detalhe.pack(fill="x")
 
-        rodape = tk.Frame(painel, bg="#ececec")
+        rodape = tk.Frame(painel, bg=self._cores.fundo)
         rodape.pack(fill="x")
-        botoes_acao = tk.Frame(rodape, bg="#ececec")
+        botoes_acao = tk.Frame(rodape, bg=self._cores.fundo)
         botoes_acao.pack(side="right")
-        ttk.Button(
-            botoes_acao, text="Cancelar", command=self.destroy, style="Delete.TButton"
-        ).pack(side="right")
-        ttk.Button(
+        criar_botao_cancelar(botoes_acao, self.destroy).pack(side="right")
+        criar_botao_ttk_com_icone(
             botoes_acao,
-            text=self.texto_confirmar,
+            texto=self.texto_confirmar,
+            nome_icone="add-circle-outline",
             command=self._confirmar,
-            style="Add.TButton",
+            estilo=self._estilos.adicionar,
+            cor_icone=self._estilos.icone_adicionar,
+            refs=self._refs_icones,
         ).pack(side="right", padx=(0, 8))
 
         self.combo_estado.bind("<<ComboboxSelected>>", self._atualizar_lista)
@@ -1266,7 +1284,11 @@ class DialogoBuscaComposicaoPropria(tk.Toplevel):
 
 class OrcamentoCustomizadoFrame(tk.Frame):
     def __init__(self, parent, ctx, on_voltar, *, orcamento_id=None):
-        super().__init__(parent, bg="#ececec")
+        cores = cores_tema(parent)
+        super().__init__(parent, bg=cores.fundo)
+        self._cores = cores
+        self._estilos = estilos_botao(self)
+        self._cg = cores_grade(self)
         self.ctx = ctx
         self.on_voltar = on_voltar
         self._orcamento_id = orcamento_id
@@ -1342,29 +1364,32 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self._alerta_vazio_job = None
 
     def _garantir_estilo_alerta_vazio(self):
+        """Estilo de pulso com o mesmo padding do botão compacto (não muda o tamanho)."""
         raiz = self.winfo_toplevel()
-        if getattr(raiz, "_orc_alerta_vazio_ok", False):
+        tema = getattr(raiz, "_orc_tema_atual", None)
+        estilo_base = self._estilos.compacto_adicionar
+        estilo_alerta = f"AlertaVazio.{estilo_base}"
+        chave = (tema, estilo_base, bool(self._cores.escuro))
+        if getattr(raiz, "_orc_alerta_vazio_chave", None) == chave:
+            self._estilo_alerta_nova_etapa = estilo_alerta
             return
         style = ttk.Style(self)
+        padding = style.lookup(estilo_base, "padding") or (4, 1)
+        cor_texto = COR_ALERTA_VAZIO if self._cores.escuro else "#1a1a1a"
         style.configure(
-            "AlertaVazio.TButton",
+            estilo_alerta,
+            padding=padding,
+            foreground=cor_texto,
             background=COR_ALERTA_VAZIO,
-            foreground="black",
-            borderwidth=1,
             focuscolor="none",
-            padding=(4, 1),
         )
         style.map(
-            "AlertaVazio.TButton",
+            estilo_alerta,
+            foreground=[("active", cor_texto), ("pressed", cor_texto)],
             background=[
                 ("disabled", "#e0e0e0"),
                 ("active", "#ffd54f"),
                 ("pressed", "#f9a825"),
-            ],
-            foreground=[
-                ("disabled", "#9e9e9e"),
-                ("active", "black"),
-                ("pressed", "black"),
             ],
         )
         style.configure(
@@ -1380,7 +1405,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             ],
             background=[("readonly", COR_ALERTA_VAZIO)],
         )
-        raiz._orc_alerta_vazio_ok = True
+        raiz._orc_alerta_vazio_chave = chave
+        self._estilo_alerta_nova_etapa = estilo_alerta
 
     def _aplicar_alerta_orcamento_vazio(self, aceso: bool):
         etapa_acesa = aceso and self._alerta_precisa_etapa
@@ -1389,9 +1415,12 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._pintar_halo(getattr(self, "_halo_estado", None), estado_aceso)
         botao = getattr(self, "btn_nova_etapa", None)
         if botao is not None:
+            estilo_alerta = getattr(
+                self, "_estilo_alerta_nova_etapa", f"AlertaVazio.{self._estilos.compacto_adicionar}"
+            )
             try:
                 botao.configure(
-                    style="AlertaVazio.TButton" if etapa_acesa else "Add.Compact.TButton"
+                    style=estilo_alerta if etapa_acesa else self._estilos.compacto_adicionar
                 )
             except tk.TclError:
                 pass
@@ -1404,11 +1433,15 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             except tk.TclError:
                 pass
 
+    def _criar_halo(self, parent, *, padx=3, pady=2):
+        """Moldura com folga igual nos quatro lados para o pulso amarelo."""
+        return tk.Frame(parent, bg=self._cores.fundo, padx=padx, pady=pady)
+
     def _pintar_halo(self, halo, aceso: bool):
         if halo is None:
             return
         try:
-            halo.configure(bg=COR_ALERTA_VAZIO if aceso else COR_ALERTA_VAZIO_APAGADO)
+            halo.configure(bg=COR_ALERTA_VAZIO if aceso else self._cores.fundo)
         except tk.TclError:
             pass
 
@@ -1462,17 +1495,17 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             montar_acoes_antes_referencia=self._montar_botao_calculadora_cabecalho,
         )
 
-        conteudo = tk.Frame(self, bg="#ececec")
+        conteudo = tk.Frame(self, bg=self._cores.fundo)
         conteudo.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
-        linha_cabecalho = tk.Frame(conteudo, bg="#ececec")
+        linha_cabecalho = tk.Frame(conteudo, bg=self._cores.fundo)
         linha_cabecalho.pack(fill="x", padx=4, pady=(0, 8))
 
         self.label_nome_orcamento = tk.Label(
             linha_cabecalho,
             text="",
-            bg="#ececec",
-            fg="#0d5c75",
+            bg=self._cores.fundo,
+            fg=self._cores.titulo,
             font=("Arial", 11, "bold"),
             anchor="w",
         )
@@ -1481,7 +1514,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             linha_cabecalho,
             nome_icone="pencil",
             command=self._renomear_orcamento,
-            estilo="Edit.Compact.TButton",
+            estilo=self._estilos.compacto_editar,
+            cor_icone=self._estilos.icone_editar,
             refs=self._icones_botoes,
         )
         btn_renomear.pack(side="left", padx=(8, 0))
@@ -1495,63 +1529,72 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             text="Legenda",
             variable=self.var_mostrar_legenda,
             command=self._ao_alternar_legenda,
+            style="Cartao.TCheckbutton",
         )
         chk_legenda.pack(side="right")
         vincular_tooltip(chk_legenda, "Mostrar ou ocultar a legenda de cores da grade")
 
-        linha_acoes = tk.Frame(conteudo, bg="#ececec")
+        linha_acoes = tk.Frame(conteudo, bg=self._cores.fundo)
         linha_acoes.pack(fill="x", padx=4, pady=(0, 8))
 
         frame_etapas = tk.LabelFrame(
             linha_acoes,
             text="Etapas e itens",
-            bg="#ececec",
+            bg=self._cores.fundo,
+            fg=self._cores.texto,
             padx=8,
             pady=6,
         )
-        frame_etapas.pack(side="left")
+        frame_etapas.pack(side="left", anchor="n")
 
-        linha_etapas_1 = tk.Frame(frame_etapas, bg="#ececec")
+        linha_etapas_1 = tk.Frame(frame_etapas, bg=self._cores.fundo)
         linha_etapas_1.pack(fill="x", pady=(0, 4))
-        self._halo_nova_etapa = tk.Frame(linha_etapas_1, bg="#ececec", padx=3, pady=2)
+        self._halo_nova_etapa = self._criar_halo(linha_etapas_1)
         self._halo_nova_etapa.pack(side="left", padx=(0, 4))
         self.btn_nova_etapa = criar_botao_ttk_com_icone(
             self._halo_nova_etapa,
             texto="Nova etapa",
             nome_icone="add-circle-outline",
             command=self._novo_grupo,
-            estilo="Add.Compact.TButton",
+            estilo=self._estilos.compacto_adicionar,
+            cor_icone=self._estilos.icone_adicionar,
             refs=self._icones_botoes,
         )
         self.btn_nova_etapa.pack()
 
-        linha_etapas_2 = tk.Frame(frame_etapas, bg="#ececec")
+        linha_etapas_2 = tk.Frame(frame_etapas, bg=self._cores.fundo)
         linha_etapas_2.pack(fill="x")
+        alinhador_remover = self._criar_halo(linha_etapas_2)
+        alinhador_remover.pack(side="left", padx=(0, 4))
         criar_botao_ttk_com_icone(
-            linha_etapas_2,
+            alinhador_remover,
             texto="Remover etapa/item",
             nome_icone="remove-circle-outline",
             command=self._remover_selecionado,
-            estilo="Delete.Compact.TButton",
+            estilo=self._estilos.compacto_excluir,
+            cor_icone=self._estilos.icone_excluir,
             refs=self._icones_botoes,
-        ).pack(side="left", padx=(0, 4))
+        ).pack()
+        alinhador_uf = self._criar_halo(linha_etapas_2)
+        alinhador_uf.pack(side="left")
         ttk.Button(
-            linha_etapas_2,
+            alinhador_uf,
             text="Estado do item (UF)",
             command=self._alterar_estado_item,
-            style="Compact.TButton",
-        ).pack(side="left")
+            style=self._estilos.compacto,
+        ).pack()
 
         frame_inserir = tk.LabelFrame(
             linha_acoes,
             text="Inserir itens",
-            bg="#ececec",
+            bg=self._cores.fundo,
+            fg=self._cores.texto,
             padx=8,
             pady=6,
         )
-        frame_inserir.pack(side="left", padx=(12, 0))
+        frame_inserir.pack(side="left", padx=(12, 0), anchor="n")
 
-        linha_inserir_1 = tk.Frame(frame_inserir, bg="#ececec")
+        linha_inserir_1 = tk.Frame(frame_inserir, bg=self._cores.fundo)
         linha_inserir_1.pack(fill="x", pady=(0, 4))
         criar_botao_inserir_prominente(
             linha_inserir_1,
@@ -1566,18 +1609,18 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             refs=self._icones_botoes,
         ).pack(side="left")
 
-        linha_inserir_2 = tk.Frame(frame_inserir, bg="#ececec")
+        linha_inserir_2 = tk.Frame(frame_inserir, bg=self._cores.fundo)
         linha_inserir_2.pack(fill="x")
-        tk.Label(linha_inserir_2, text="Rápido — Cód.:", bg="#ececec").pack(side="left")
+        tk.Label(linha_inserir_2, text="Rápido — Cód.:", bg=self._cores.fundo, fg=self._cores.texto).pack(side="left")
         self.var_codigo_rapido = tk.StringVar()
         entrada_cod = ttk.Entry(linha_inserir_2, textvariable=self.var_codigo_rapido, width=10)
         entrada_cod.pack(side="left", padx=(4, 8))
-        tk.Label(linha_inserir_2, text="Qtd.:", bg="#ececec").pack(side="left")
+        tk.Label(linha_inserir_2, text="Qtd.:", bg=self._cores.fundo, fg=self._cores.texto).pack(side="left")
         self.var_qtd_rapido = tk.StringVar(value="1")
         entrada_qtd = ttk.Entry(linha_inserir_2, textvariable=self.var_qtd_rapido, width=10)
         entrada_qtd.pack(side="left", padx=(4, 8))
         ttk.Button(
-            linha_inserir_2, text="Inserir", command=self._inserir_rapido, style="Compact.TButton"
+            linha_inserir_2, text="Inserir", command=self._inserir_rapido, style=self._estilos.compacto
         ).pack(side="left")
         entrada_cod.bind("<Return>", lambda _e: self._inserir_rapido())
         entrada_qtd.bind("<Return>", lambda _e: self._inserir_rapido())
@@ -1585,24 +1628,25 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         frame_dados = tk.LabelFrame(
             linha_acoes,
             text="Dados do orçamento",
-            bg="#ececec",
+            bg=self._cores.fundo,
+            fg=self._cores.texto,
             padx=8,
             pady=6,
         )
         frame_dados.pack(side="left", padx=(12, 0), anchor="n")
 
-        linha_dados = tk.Frame(frame_dados, bg="#ececec")
+        linha_dados = tk.Frame(frame_dados, bg=self._cores.fundo)
         linha_dados.pack(fill="x", pady=(0, 4))
-        tk.Label(linha_dados, text="BDI (%):", bg="#ececec").pack(side="left")
+        tk.Label(linha_dados, text="BDI (%):", bg=self._cores.fundo, fg=self._cores.texto).pack(side="left")
         self.var_bdi = tk.StringVar(value=_formatar_bdi(BDI_PADRAO))
         self.var_bdi.trace_add("write", self._ao_alterar_bdi)
         ttk.Entry(linha_dados, textvariable=self.var_bdi, width=7).pack(
             side="left", padx=(4, 10)
         )
 
-        tk.Label(linha_dados, text="Estado:", bg="#ececec").pack(side="left")
+        tk.Label(linha_dados, text="Estado:", bg=self._cores.fundo, fg=self._cores.texto).pack(side="left")
         estados = self.ctx.obter_estados()
-        self._halo_estado = tk.Frame(linha_dados, bg="#ececec", padx=3, pady=2)
+        self._halo_estado = self._criar_halo(linha_dados)
         self._halo_estado.pack(side="left", padx=(4, 0))
         self.combo_estado = ttk.Combobox(
             self._halo_estado,
@@ -1614,24 +1658,24 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.combo_estado.bind("<<ComboboxSelected>>", self._ao_mudar_estado)
 
         # Espaçador para igualar a altura dos painéis de duas linhas à esquerda.
-        tk.Frame(frame_dados, bg="#ececec", height=1).pack(fill="x")
+        tk.Frame(frame_dados, bg=self._cores.fundo, height=1).pack(fill="x")
 
-        self.frame_area_reservada = tk.Frame(linha_acoes, bg="#ececec")
+        self.frame_area_reservada = tk.Frame(linha_acoes, bg=self._cores.fundo)
         self.frame_area_reservada.pack(side="left", fill="x", expand=True)
 
-        titulo_grade = tk.Frame(conteudo, bg="#ececec")
+        titulo_grade = tk.Frame(conteudo, bg=self._cores.fundo)
         tk.Label(
             titulo_grade,
             text="Estrutura do orçamento",
-            bg="#ececec",
-            fg="#444444",
+            bg=self._cores.fundo,
+            fg=self._cores.texto,
             font=("Arial", 9, "bold"),
         ).pack(side="left")
         btn_ajuda = tk.Label(
             titulo_grade,
             text="?",
-            bg="#dfe8ec",
-            fg="#006699",
+            bg=self._cores.fundo_destaque,
+            fg=self._cores.titulo,
             font=("Arial", 9, "bold"),
             width=2,
             cursor="hand2",
@@ -1653,17 +1697,21 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         painel_grade = tk.LabelFrame(
             conteudo,
             labelwidget=titulo_grade,
-            bg="#ececec",
+            bg=self._cores.fundo,
+            fg=self._cores.texto_suave,
             padx=6,
             pady=6,
         )
         painel_grade.pack(fill="both", expand=True, padx=4, pady=(0, 6))
 
-        self._barra_filtro_grade = tk.Frame(painel_grade, bg="#ececec")
+        self._barra_filtro_grade = tk.Frame(painel_grade, bg=self._cores.fundo)
         criar_label_icone(
             self._barra_filtro_grade,
             "funnel-outline",
             texto="Filtrar:",
+            bg=self._cores.fundo,
+            fg=self._cores.texto_suave,
+            cor=self._cores.titulo,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         self.var_filtro_grade = tk.StringVar()
@@ -1675,15 +1723,15 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         tk.Label(
             self._barra_filtro_grade,
             text="código ou descrição  ·  Esc",
-            bg="#ececec",
-            fg="#888888",
+            bg=self._cores.fundo,
+            fg=self._cores.texto_suave,
             font=("Arial", 8),
         ).pack(side="left")
         btn_fechar_filtro = tk.Label(
             self._barra_filtro_grade,
             text="✕",
-            bg="#ececec",
-            fg="#666666",
+            bg=self._cores.fundo,
+            fg=self._cores.texto_suave,
             font=("Arial", 9),
             cursor="hand2",
             padx=2,
@@ -1692,18 +1740,18 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         btn_fechar_filtro.pack(side="left", padx=(4, 0))
         btn_fechar_filtro.bind("<Button-1>", lambda _e: self._ocultar_filtro_grade())
         btn_fechar_filtro.bind(
-            "<Enter>", lambda _e: btn_fechar_filtro.configure(fg="#222222")
+            "<Enter>", lambda _e: btn_fechar_filtro.configure(fg=self._cores.texto)
         )
         btn_fechar_filtro.bind(
-            "<Leave>", lambda _e: btn_fechar_filtro.configure(fg="#666666")
+            "<Leave>", lambda _e: btn_fechar_filtro.configure(fg=self._cores.texto_suave)
         )
         vincular_tooltip(btn_fechar_filtro, "Fechar filtro (Esc)")
         self._entrada_filtro_grade.bind("<Escape>", self._ocultar_filtro_grade)
 
         self._banner_depreciados = tk.Frame(
             painel_grade,
-            bg="#fff3cd",
-            highlightbackground="#e0c36a",
+            bg=self._cg.banner,
+            highlightbackground=self._cg.banner_borda,
             highlightthickness=1,
         )
         tk.Label(
@@ -1712,8 +1760,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
                 "Há itens depreciados ou indisponíveis na base atual. "
                 "Substitua-os (duplo clique no código) antes de gerar a planilha."
             ),
-            bg="#fff3cd",
-            fg="#7a5b00",
+            bg=self._cg.banner,
+            fg=self._cg.banner_texto,
             font=("Arial", 9),
             anchor="w",
             justify="left",
@@ -1741,21 +1789,23 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             self.bind(tecla, self._ao_tecla_delete_orcamento, add="+")
             painel_grade.bind(tecla, self._ao_tecla_delete_orcamento, add="+")
 
+        bg_barra = self._cores.fundo_barra
         rodape_orc = tk.Frame(
-            conteudo, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
+            conteudo, bg=bg_barra, highlightbackground=self._cores.borda_suave, highlightthickness=1
         )
         rodape_orc.pack(fill="x", padx=4, pady=(4, 0))
 
-        linha_total = tk.Frame(rodape_orc, bg="#f5fafc")
+        linha_total = tk.Frame(rodape_orc, bg=bg_barra)
         linha_total.pack(fill="x")
 
-        container_historico = tk.Frame(linha_total, bg="#f5fafc")
+        container_historico = tk.Frame(linha_total, bg=bg_barra)
         container_historico.pack(side="left", padx=10, pady=6)
 
         self.btn_desfazer = criar_botao_ttk_so_icone(
             container_historico,
             nome_icone="caret-back-outline",
             command=self._desfazer,
+            cor_icone=self._estilos.icone,
             refs=self._icones_botoes,
         )
         self.btn_desfazer.pack(side="left", padx=(0, 4))
@@ -1766,6 +1816,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             container_historico,
             nome_icone="caret-forward-outline",
             command=self._refazer,
+            cor_icone=self._estilos.icone,
             refs=self._icones_botoes,
         )
         self.btn_refazer.pack(side="left", padx=(0, 10))
@@ -1776,23 +1827,24 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             container_historico,
             text="",
             font=("Arial", 9),
-            fg="#555555",
-            bg="#f5fafc",
+            fg=self._cores.texto_suave,
+            bg=bg_barra,
             anchor="w",
         )
         self.label_ultima_acao.pack(side="left")
 
-        container_total = tk.Frame(linha_total, bg="#f5fafc")
+        container_total = tk.Frame(linha_total, bg=bg_barra)
         container_total.pack(side="right", padx=10, pady=8)
 
+        cores = self._cores
         kwargs_botao_excel = {
             "text": "Gerar Planilha",
             "command": self._exportar_planilha,
             "font": ("Arial", 10, "bold"),
-            "fg": "#000000",
-            "activeforeground": "#000000",
-            "bg": "#f5fafc",
-            "activebackground": "#e8f0f3",
+            "fg": cores.texto if cores.escuro else "#000000",
+            "activeforeground": cores.texto if cores.escuro else "#000000",
+            "bg": bg_barra,
+            "activebackground": cores.fundo_hover,
             "relief": "flat",
             "bd": 0,
             "padx": 2,
@@ -1802,17 +1854,22 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         }
         caminho_icone_excel = asset_path("icons", "excel-preto.png")
         if caminho_icone_excel is not None:
-            self._icone_excel_export = tk.PhotoImage(file=str(caminho_icone_excel))
-            kwargs_botao_excel["image"] = self._icone_excel_export
-            kwargs_botao_excel["compound"] = "right"
+            try:
+                self._icone_excel_export = carregar_png_icone(
+                    self, "excel-preto.png", inverter=bool(cores.escuro)
+                )
+                kwargs_botao_excel["image"] = self._icone_excel_export
+                kwargs_botao_excel["compound"] = "right"
+            except (FileNotFoundError, OSError, tk.TclError):
+                pass
         tk.Button(container_total, **kwargs_botao_excel).pack(side="left", padx=(0, 16))
 
         self.label_total = tk.Label(
             container_total,
             text="Total geral (c/ BDI): R$ 0,00",
             font=("Arial", 11, "bold"),
-            fg="#006699",
-            bg="#f5fafc",
+            fg=self._cores.titulo,
+            bg=bg_barra,
             anchor="e",
         )
         self.label_total.pack(side="left")
@@ -2104,8 +2161,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         """Botão flat só com ícone — mesmo visual de Gerar Planilha / Abrir SINAPI."""
         kwargs = {
             "command": self._abrir_calculadora,
-            "bg": "#ececec",
-            "activebackground": "#dfe8ec",
+            "bg": self._cores.fundo,
+            "activebackground": self._cores.fundo_hover,
             "relief": "flat",
             "bd": 0,
             "padx": 4,
@@ -2115,42 +2172,43 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         }
         try:
             icone = criar_icone_svg(
-                parent, "calculator-outline", altura=20, cor="#006699"
+                parent, "calculator-outline", altura=20, cor=self._cores.titulo
             )
             self._icones_botoes.append(icone)
             kwargs["image"] = icone
         except (ImportError, FileNotFoundError, tk.TclError, OSError):
             kwargs["text"] = "Calc"
             kwargs["font"] = ("Arial", 9)
-            kwargs["fg"] = "#006699"
-            kwargs["activeforeground"] = "#006699"
+            kwargs["fg"] = self._cores.titulo
+            kwargs["activeforeground"] = self._cores.titulo
         botao = tk.Button(parent, **kwargs)
         botao.pack(side=side, padx=(0, 10))
         vincular_tooltip(botao, "Abrir Calculadora")
 
     def _montar_legenda_grade(self, parent):
-        self._frame_legenda = tk.Frame(parent, bg="#ececec")
-        self._conteudo_legenda = tk.Frame(self._frame_legenda, bg="#ececec")
+        self._frame_legenda = tk.Frame(parent, bg=self._cores.fundo)
+        self._conteudo_legenda = tk.Frame(self._frame_legenda, bg=self._cores.fundo)
         tk.Label(
             self._conteudo_legenda,
             text="Legenda:",
-            bg="#ececec",
-            fg="#555555",
+            bg=self._cores.fundo,
+            fg=self._cores.texto_suave,
             font=("Arial", 8, "bold"),
         ).pack(side="left", padx=(0, 8))
+        cg = self._cg
         for cor, texto in (
-            (COR_GRUPO, "Etapa"),
-            (COR_ALERTA_DEPRECIADO, "Depreciado / indisponível"),
-            (COR_ESTADO_ALTERNATIVO, "UF alternativa"),
-            (COR_COMPOSICAO, "Composição própria"),
-            (COR_DISCRIMINAR, "Discriminar no Excel/Word"),
+            (cg.grupo, "Etapa"),
+            (cg.alerta_depreciado, "Depreciado / indisponível"),
+            (cg.estado_alternativo, "UF alternativa"),
+            (cg.composicao, "Composição própria"),
+            (cg.discriminar, "Discriminar no Excel/Word"),
         ):
             amostra = tk.Frame(
                 self._conteudo_legenda,
                 bg=cor,
                 width=12,
                 height=12,
-                highlightbackground="#aaaaaa",
+                highlightbackground=self._cores.borda_suave,
                 highlightthickness=1,
             )
             amostra.pack(side="left", padx=(0, 4))
@@ -2158,8 +2216,8 @@ class OrcamentoCustomizadoFrame(tk.Frame):
             tk.Label(
                 self._conteudo_legenda,
                 text=texto,
-                bg="#ececec",
-                fg="#555555",
+                bg=self._cores.fundo,
+                fg=self._cores.texto_suave,
                 font=("Arial", 8),
             ).pack(side="left", padx=(0, 12))
         self._conteudo_legenda.pack(side="left", fill="x", expand=True)

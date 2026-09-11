@@ -24,34 +24,41 @@ from ui.icones import (
 )
 from ui.orcamento_customizado import DialogoBuscaComposicaoPropria, DialogoBuscaSinapi
 from ui.recarga_catalogo import RecarregadorCatalogo
+from ui.temas import aplicar_chrome_dialogo, cores_tema, estilos_botao
 from ui.widgets import (
     ControleAtualizacaoPagina,
     aplicar_icone_janela,
     centralizar_janela,
     confirmar_exclusao_com_espera,
     criar_barra_modulo,
+    criar_botao_cancelar,
     focar_entrada_apos_exibir,
+    preparar_toplevel,
 )
 
 
 class DialogoNovaEtapaPredefinida(tk.Toplevel):
     def __init__(self, parent, on_confirmar):
         super().__init__(parent)
+        preparar_toplevel(self)
+        cores, estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
         self.on_confirmar = on_confirmar
+        self._refs_icones: list = []
         self.title("Nova etapa pré-definida")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
+        painel.pack(fill="x")
 
         tk.Label(
             painel,
             text="Nome da etapa:",
-            bg="#ececec",
+            bg=fundo,
+            fg=cores.texto,
             anchor="w",
         ).pack(fill="x", pady=(0, 8))
 
@@ -61,12 +68,16 @@ class DialogoNovaEtapaPredefinida(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right", padx=(6, 0)
-        )
-        ttk.Button(botoes, text="Criar", command=self._confirmar, style="Add.TButton").pack(
-            side="right"
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right")
+        criar_botao_ttk_com_icone(
+            botoes,
+            texto="Criar",
+            nome_icone="add-circle-outline",
+            command=self._confirmar,
+            estilo=estilos.adicionar,
+            cor_icone=estilos.icone_adicionar,
+            refs=self._refs_icones,
+        ).pack(side="right", padx=(0, 8))
 
         self.bind("<Escape>", lambda _e: self.destroy())
         self.bind("<Return>", lambda _e: self._confirmar())
@@ -89,7 +100,10 @@ class DialogoNovaEtapaPredefinida(tk.Toplevel):
 
 class EtapasPredefinidasFrame(tk.Frame):
     def __init__(self, parent, ctx, on_voltar):
-        super().__init__(parent, bg="#ececec")
+        cores = cores_tema(parent)
+        super().__init__(parent, bg=cores.fundo)
+        self._cores = cores
+        self._estilos = estilos_botao(self)
         self.ctx = ctx
         self.on_voltar = on_voltar
         self._dados = {"versao": 1, "etapas": []}
@@ -149,6 +163,9 @@ class EtapasPredefinidasFrame(tk.Frame):
         self._suprimir_selecao = False
 
     def _montar(self):
+        cores = self._cores
+        estilos = self._estilos
+        fundo = cores.fundo
         self.label_referencia = criar_barra_modulo(
             self,
             "Etapas pré-definidas",
@@ -157,32 +174,37 @@ class EtapasPredefinidasFrame(tk.Frame):
             montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
         )
 
-        conteudo = tk.Frame(self, bg="#ececec")
+        conteudo = tk.Frame(self, bg=fundo)
         conteudo.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
-        painel = tk.PanedWindow(conteudo, orient=tk.HORIZONTAL, sashwidth=6, bg="#cccccc")
+        painel = tk.PanedWindow(
+            conteudo, orient=tk.HORIZONTAL, sashwidth=6, bg=cores.borda_suave
+        )
         painel.pack(fill="both", expand=True)
 
         esquerda = tk.LabelFrame(
-            painel, text="Etapas cadastradas", bg="#ececec", padx=6, pady=6
+            painel, text="Etapas cadastradas", bg=fundo, fg=cores.texto, padx=6, pady=6
         )
         painel.add(esquerda, minsize=320)
 
         self.var_busca = tk.StringVar()
         self.var_busca.trace_add("write", lambda *_a: self._atualizar_lista_etapas())
-        linha_busca = tk.Frame(esquerda, bg="#ececec")
+        linha_busca = tk.Frame(esquerda, bg=fundo)
         linha_busca.pack(fill="x", pady=(0, 6))
         criar_label_icone(
             linha_busca,
             "funnel-outline",
             texto="Filtrar:",
+            bg=fundo,
+            fg=cores.texto_suave,
+            cor=cores.titulo,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Entry(linha_busca, textvariable=self.var_busca, width=28).pack(
             side="left", padx=(0, 0), fill="x", expand=True
         )
 
-        container_tree = tk.Frame(esquerda, bg="#ececec")
+        container_tree = tk.Frame(esquerda, bg=fundo)
         container_tree.pack(fill="both", expand=True)
 
         colunas_etapas = ("nome", "itens")
@@ -201,14 +223,15 @@ class EtapasPredefinidasFrame(tk.Frame):
         scroll_etapas.pack(side="right", fill="y")
         self.tree_etapas.bind("<<TreeviewSelect>>", self._ao_selecionar_etapa)
 
-        linha_bt_etapas = tk.Frame(esquerda, bg="#ececec")
+        linha_bt_etapas = tk.Frame(esquerda, bg=fundo)
         linha_bt_etapas.pack(fill="x", pady=(6, 0))
         criar_botao_ttk_com_icone(
             linha_bt_etapas,
             texto="Nova etapa",
             nome_icone="add-circle-outline",
             command=self._nova_etapa,
-            estilo="Add.Compact.TButton",
+            estilo=estilos.compacto_adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         criar_botao_ttk_com_icone(
@@ -216,20 +239,25 @@ class EtapasPredefinidasFrame(tk.Frame):
             texto="Excluir",
             nome_icone="trash-outline",
             command=self._excluir_etapa,
-            estilo="Delete.Compact.TButton",
+            estilo=estilos.compacto_excluir,
+            cor_icone=estilos.icone_excluir,
             refs=self._icones_botoes,
         ).pack(side="left")
 
-        direita = tk.LabelFrame(painel, text="Edição da etapa", bg="#ececec", padx=8, pady=8)
+        direita = tk.LabelFrame(
+            painel, text="Edição da etapa", bg=fundo, fg=cores.texto, padx=8, pady=8
+        )
         painel.add(direita, minsize=420)
 
-        form = tk.Frame(direita, bg="#ececec")
+        form = tk.Frame(direita, bg=fundo)
         form.pack(fill="x", pady=(0, 8))
 
         self.var_nome = tk.StringVar()
-        linha_nome = tk.Frame(form, bg="#ececec")
+        linha_nome = tk.Frame(form, bg=fundo)
         linha_nome.pack(fill="x", pady=2)
-        tk.Label(linha_nome, text="Nome:", width=10, anchor="w", bg="#ececec").pack(side="left")
+        tk.Label(
+            linha_nome, text="Nome:", width=10, anchor="w", bg=fundo, fg=cores.texto
+        ).pack(side="left")
         ttk.Entry(linha_nome, textvariable=self.var_nome, width=48).pack(
             side="left", fill="x", expand=True
         )
@@ -239,12 +267,13 @@ class EtapasPredefinidasFrame(tk.Frame):
             texto="Salvar alterações",
             nome_icone="save-outline",
             command=self._salvar_etapa,
-            estilo="Save.TButton",
+            estilo=estilos.salvar,
+            cor_icone=estilos.icone_salvar,
             refs=self._icones_botoes,
         ).pack(anchor="e", pady=(6, 0))
 
         painel_itens = tk.LabelFrame(
-            direita, text="Itens da etapa", bg="#ececec", padx=6, pady=6
+            direita, text="Itens da etapa", bg=fundo, fg=cores.texto, padx=6, pady=6
         )
         painel_itens.pack(fill="both", expand=True)
 
@@ -267,7 +296,7 @@ class EtapasPredefinidasFrame(tk.Frame):
         self.tree_itens.pack(side="left", fill="both", expand=True)
         scroll_itens.pack(side="right", fill="y")
 
-        linha_bt_itens = tk.Frame(direita, bg="#ececec")
+        linha_bt_itens = tk.Frame(direita, bg=fundo)
         linha_bt_itens.pack(fill="x", pady=(8, 0))
         criar_botao_inserir_prominente(
             linha_bt_itens,
@@ -286,28 +315,29 @@ class EtapasPredefinidasFrame(tk.Frame):
             texto="Remover item",
             nome_icone="remove-circle-outline",
             command=self._remover_item,
-            estilo="Delete.Compact.TButton",
+            estilo=estilos.compacto_excluir,
+            cor_icone=estilos.icone_excluir,
             refs=self._icones_botoes,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_bt_itens,
             text="Item ↑",
             command=lambda: self._mover_item(-1),
-            style="Compact.TButton",
+            style=estilos.compacto,
         ).pack(side="left", padx=(0, 4))
         ttk.Button(
             linha_bt_itens,
             text="Item ↓",
             command=lambda: self._mover_item(1),
-            style="Compact.TButton",
+            style=estilos.compacto,
         ).pack(side="left")
 
         tk.Label(
             direita,
             text="Os itens serão inseridos com quantidade 1 ao usar o modelo no orçamento.",
             font=("Arial", 8),
-            fg="#666666",
-            bg="#ececec",
+            fg=cores.texto_suave,
+            bg=fundo,
             anchor="w",
         ).pack(fill="x", pady=(8, 0))
 

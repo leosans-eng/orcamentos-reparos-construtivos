@@ -32,11 +32,13 @@ from ui.dialogo_importar_autor_idebras import DialogoImportarAutorIdebras
 from ui.dialogo_previa_anomalia import DialogoPreviaAnomalia
 from ui.icones import (
     IndicadorAmpulheta,
+    carregar_png_icone,
     criar_botao_ttk_com_icone,
     criar_botao_ttk_so_icone,
     criar_icone_svg,
     definir_estado_botao_icone,
 )
+from ui.temas import cores_tema, estilos_botao
 from ui.widgets import (
     CampoListaPesquisavel,
     criar_barra_modulo,
@@ -59,12 +61,17 @@ def criar_area_privativa(parent, ctx, on_voltar):
     _aplicando_historico = False
     _binds_historico = []
 
-    wrapper = tk.Frame(parent, bg="#ececec")
+    cores = cores_tema(parent)
+    estilos = estilos_botao(parent)
+    fundo = cores.fundo
+    barra = cores.fundo_barra
+
+    wrapper = tk.Frame(parent, bg=fundo)
     wrapper._refs_icones = _refs_icones
 
     criar_barra_modulo(wrapper, "Área Privativa", on_voltar)
 
-    corpo = tk.Frame(wrapper, bg="#ececec")
+    corpo = tk.Frame(wrapper, bg=fundo)
     corpo.pack(fill="both", expand=True, padx=12, pady=(0, 8))
     corpo.columnconfigure(0, weight=1)
     corpo.rowconfigure(1, weight=1)
@@ -73,19 +80,19 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # FRAME DADOS DO ORÇAMENTO     #
     # ---------------------------- #
     frame_dados = tk.LabelFrame(
-        corpo, text="1. Dados do orçamento", bg="#ececec", padx=8, pady=6
+        corpo, text="1. Dados do orçamento", bg=fundo, fg=cores.texto, padx=8, pady=6
     )
     frame_dados.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
-    linha_topo = tk.Frame(frame_dados, bg="#ececec")
+    linha_topo = tk.Frame(frame_dados, bg=fundo)
     linha_topo.pack(fill="x")
 
-    bloco_autor = tk.Frame(linha_topo, bg="#ececec")
+    bloco_autor = tk.Frame(linha_topo, bg=fundo)
     bloco_autor.pack(side="left", fill="x", expand=True)
-    bloco_valores = tk.Frame(linha_topo, bg="#ececec")
+    bloco_valores = tk.Frame(linha_topo, bg=fundo)
     bloco_valores.pack(side="left", fill="x", expand=True, padx=(12, 0))
 
-    tk.Label(bloco_autor, text="Autor(a):", bg="#ececec").pack(side="left")
+    tk.Label(bloco_autor, text="Autor(a):", bg=fundo, fg=cores.texto).pack(side="left")
 
     var_proprietario = tk.StringVar()
 
@@ -95,7 +102,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     var_proprietario.trace_add("write", forcar_maiusculo)
 
-    entrada_proprietario = tk.Entry(bloco_autor, textvariable=var_proprietario)
+    entrada_proprietario = ttk.Entry(bloco_autor, textvariable=var_proprietario)
     entrada_proprietario.pack(side="left", fill="x", expand=True, padx=(6, 6))
 
     ctrl_idebras = {
@@ -141,12 +148,13 @@ def criar_area_privativa(parent, ctx, on_voltar):
         bloco_autor,
         nome_icone="cloud-download-outline",
         command=abrir_importar_autor,
+        cor_icone=estilos.icone,
         refs=_refs_icones,
     )
     btn_importar_autor.pack(side="left")
     vincular_tooltip(btn_importar_autor, "Importar autor do Idebras")
 
-    tk.Label(bloco_valores, text="Estado:", bg="#ececec").pack(side="left")
+    tk.Label(bloco_valores, text="Estado:", bg=fundo, fg=cores.texto).pack(side="left")
 
     estados = ctx.obter_estados()
 
@@ -172,12 +180,12 @@ def criar_area_privativa(parent, ctx, on_voltar):
     def linha_sinapi_codigo(codigo, estado):
         return obter_item_sinapi(ctx.sinapi, str(codigo).strip(), estado)
 
-    tk.Label(bloco_valores, text="Aluguel (R$):", bg="#ececec").pack(side="left")
-    entrada_aluguel = tk.Entry(bloco_valores, width=10)
+    tk.Label(bloco_valores, text="Aluguel (R$):", bg=fundo, fg=cores.texto).pack(side="left")
+    entrada_aluguel = ttk.Entry(bloco_valores, width=10)
     entrada_aluguel.pack(side="left", padx=(6, 16))
     entrada_aluguel.insert(0, "1000")
 
-    tk.Label(bloco_valores, text="BDI (%):", bg="#ececec").pack(side="left")
+    tk.Label(bloco_valores, text="BDI (%):", bg=fundo, fg=cores.texto).pack(side="left")
     entrada_bdi = ttk.Entry(bloco_valores, width=8)
     entrada_bdi.pack(side="left", padx=(6, 0))
     entrada_bdi.insert(0, "30,45")
@@ -187,21 +195,19 @@ def criar_area_privativa(parent, ctx, on_voltar):
     checks_opcoes = []
 
     def _montar_checks_orcamento(parent):
-        bloco = tk.Frame(parent, bg="#ececec")
-        chk_acompanhamento = tk.Checkbutton(
+        bloco = tk.Frame(parent, bg=fundo)
+        chk_acompanhamento = ttk.Checkbutton(
             bloco,
             text="Acompanhamento técnico",
             variable=var_acompanhamento,
-            bg="#ececec",
-            activebackground="#ececec",
+            style="Fundo.TCheckbutton",
         )
         chk_acompanhamento.pack(side="left")
-        chk_eventuais = tk.Checkbutton(
+        chk_eventuais = ttk.Checkbutton(
             bloco,
             text="Eventuais (10%)",
             variable=var_eventuais,
-            bg="#ececec",
-            activebackground="#ececec",
+            style="Fundo.TCheckbutton",
         )
         chk_eventuais.pack(side="left", padx=(16, 0))
         checks_opcoes.extend([chk_acompanhamento, chk_eventuais])
@@ -210,7 +216,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
     bloco_checks_topo = _montar_checks_orcamento(bloco_valores)
     bloco_checks_topo.pack(side="left", padx=(16, 0))
 
-    linha_opcoes = tk.Frame(frame_dados, bg="#ececec")
+    linha_opcoes = tk.Frame(frame_dados, bg=fundo)
     bloco_checks_baixo = _montar_checks_orcamento(linha_opcoes)
     bloco_checks_baixo.pack(side="left")
     _checks_na_segunda_linha = {"ativo": False}
@@ -252,7 +258,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     frame_dados.bind("<Configure>", _reflow_linha_dados)
 
-    frame_idebras_host = tk.Frame(frame_dados, bg="#ececec")
+    frame_idebras_host = tk.Frame(frame_dados, bg=fundo)
     frame_idebras_host.pack(fill="x", pady=(8, 0))
 
     # ---------------------------- #
@@ -265,36 +271,43 @@ def criar_area_privativa(parent, ctx, on_voltar):
         sashrelief="flat",
         showhandle=False,
         bd=0,
-        bg="#ececec",
+        bg=cores.borda_suave,
         opaqueresize=True,
     )
     painel_colunas.grid(row=1, column=0, sticky="nsew", pady=(0, 0))
 
     frame_metragem = tk.LabelFrame(
-        painel_colunas, text="2. Metragem dos cômodos", bg="#ececec", padx=8, pady=6
+        painel_colunas, text="2. Metragem dos cômodos", bg=fundo, fg=cores.texto, padx=8, pady=6
     )
 
-    frame_tabela = tk.Frame(frame_metragem, bg="#ececec")
+    frame_tabela = tk.Frame(frame_metragem, bg=fundo)
     frame_tabela.pack(fill="both", expand=True)
 
     tk.Label(
-        frame_tabela, text="Cômodo", font=("Arial", 9, "bold"), bg="#ececec", anchor="w"
+        frame_tabela,
+        text="Cômodo",
+        font=("Arial", 9, "bold"),
+        bg=fundo,
+        fg=cores.texto,
+        anchor="w",
     ).grid(row=0, column=0, sticky="ew", padx=2, pady=(0, 4))
     tk.Label(
-        frame_tabela, text="Piso (m²)", font=("Arial", 9, "bold"), bg="#ececec"
+        frame_tabela, text="Piso (m²)", font=("Arial", 9, "bold"), bg=fundo, fg=cores.texto
     ).grid(row=0, column=1, padx=2, pady=(0, 4))
     tk.Label(
         frame_tabela,
         text="Rev. Arg.\n(m²)",
         font=("Arial", 9, "bold"),
-        bg="#ececec",
+        bg=fundo,
+        fg=cores.texto,
         justify="center",
     ).grid(row=0, column=2, padx=2, pady=(0, 4))
     tk.Label(
         frame_tabela,
         text="Rev. Cer.\n(m²)",
         font=("Arial", 9, "bold"),
-        bg="#ececec",
+        bg=fundo,
+        fg=cores.texto,
         justify="center",
     ).grid(row=0, column=3, padx=2, pady=(0, 4))
     frame_tabela.columnconfigure(0, weight=1)
@@ -323,20 +336,20 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     for i, c in enumerate(lista_comodos, start=1):
 
-        tk.Label(frame_tabela, text=c, bg="#ececec", anchor="w").grid(
+        tk.Label(frame_tabela, text=c, bg=fundo, fg=cores.texto, anchor="w").grid(
             row=i, column=0, sticky="ew", padx=2, pady=2
         )
 
-        entrada_piso = tk.Entry(frame_tabela, width=9, justify="right")
+        entrada_piso = ttk.Entry(frame_tabela, width=9, justify="right")
         entrada_piso.grid(row=i, column=1, padx=2, pady=2)
 
-        entrada_rev_arg = tk.Entry(frame_tabela, width=9, justify="right")
+        entrada_rev_arg = ttk.Entry(frame_tabela, width=9, justify="right")
         entrada_rev_arg.grid(row=i, column=2, padx=2, pady=2)
 
-        if c in comodos_com_rev_cer:
-            entrada_rev_cer = tk.Entry(frame_tabela, width=9, justify="right")
-        else:
-            entrada_rev_cer = tk.Entry(frame_tabela, width=9, justify="right", state="disabled")
+        kwargs_cer = {"width": 9, "justify": "right"}
+        if c not in comodos_com_rev_cer:
+            kwargs_cer["state"] = "disabled"
+        entrada_rev_cer = ttk.Entry(frame_tabela, **kwargs_cer)
 
         entrada_rev_cer.grid(row=i, column=3, padx=2, pady=2)
 
@@ -364,14 +377,15 @@ def criar_area_privativa(parent, ctx, on_voltar):
         atualizar_valores()
         registrar_historico("Limpar metragens ao trocar conjunto")
 
-    botoes_metragem = tk.Frame(frame_metragem, bg="#ececec")
+    botoes_metragem = tk.Frame(frame_metragem, bg=fundo)
     botoes_metragem.pack(fill="x", pady=(6, 0))
     criar_botao_ttk_com_icone(
         botoes_metragem,
         texto="Limpar",
         nome_icone="sweeper-cleaning-icon",
         command=limpar_metragens,
-        estilo="Compact.TButton",
+        estilo=estilos.compacto,
+        cor_icone=estilos.icone,
         refs=_refs_icones,
     ).pack(side="left")
 
@@ -402,14 +416,14 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # FRAME SELEÇÃO DE ANOMALIA    #
     # ---------------------------- #
     frame_anomalia = tk.LabelFrame(
-        painel_colunas, text="3. Selecionar anomalia", bg="#ececec", padx=8, pady=6
+        painel_colunas, text="3. Selecionar anomalia", bg=fundo, fg=cores.texto, padx=8, pady=6
     )
 
     def obter_vicios():
         nomes = nomes_anomalias(ctx.dados_json)
         return sorted(nomes, key=lambda nome: (normalizar_ambiente(nome), nome))
 
-    frame_combo_anomalia = tk.Frame(frame_anomalia, bg="#ececec")
+    frame_combo_anomalia = tk.Frame(frame_anomalia, bg=fundo)
     frame_combo_anomalia.pack(fill="x", padx=6, pady=5)
 
     var_vicio = tk.StringVar()
@@ -420,7 +434,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
         on_escolher=lambda _nome: atualizar_checkboxes_por_vicio(),
         altura_lista=16,
         largura_minima_lista=420,
-        bg="#ececec",
+        bg=fundo,
     )
     campo_vicio.pack(side="left", fill="x", expand=True)
     campo_vicio.definir_opcoes(obter_vicios())
@@ -432,10 +446,10 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # CHECKBOXES DE CÔMODOS        #
     # ---------------------------- #
     tk.Label(
-        frame_anomalia, text="Cômodos afetados:", bg="#ececec", anchor="w"
+        frame_anomalia, text="Cômodos afetados:", bg=fundo, fg=cores.texto, anchor="w"
     ).pack(fill="x", padx=6, pady=(4, 0))
 
-    frame_check = tk.Frame(frame_anomalia, bg="#ececec")
+    frame_check = tk.Frame(frame_anomalia, bg=fundo)
     frame_check.pack(fill="x", padx=6, pady=4)
 
     linhas = [
@@ -454,13 +468,11 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
             var = tk.BooleanVar()
 
-            chk = tk.Checkbutton(
+            chk = ttk.Checkbutton(
                 frame_check,
                 text=comodo,
                 variable=var,
-                bg="#ececec",
-                activebackground="#ececec",
-                anchor="w",
+                style="Fundo.TCheckbutton",
             )
             chk.grid(row=r, column=c, sticky="w", padx=(0, 12), pady=1)
 
@@ -522,10 +534,12 @@ def criar_area_privativa(parent, ctx, on_voltar):
             texto="Configurar",
             nome_icone="cog-outline",
             command=abrir_config_anomalias,
+            estilo=estilos.compacto,
+            cor_icone=estilos.icone,
             refs=_refs_icones,
         ).pack(side="left", padx=(6, 0))
 
-    frame_btn_adicionar = tk.Frame(frame_anomalia, bg="#ececec")
+    frame_btn_adicionar = tk.Frame(frame_anomalia, bg=fundo)
     frame_btn_adicionar.pack(fill="x", padx=6, pady=(8, 4))
 
     # ---------------------------- #
@@ -536,7 +550,13 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
         nonlocal _feedback_timer
 
-        feedback_label.config(text=mensagem, fg=cor)
+        mapa = {
+            "red": cores.perigo,
+            "orange red": cores.perigo,
+            "orange": "#ffb74d" if cores.escuro else "#ef6c00",
+            "green": "#81c784" if cores.escuro else "#2e7d32",
+        }
+        feedback_label.config(text=mensagem, fg=mapa.get(cor, cor))
 
         if _feedback_timer is not None:
             root.after_cancel(_feedback_timer)
@@ -551,7 +571,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # LISTA DE ANOMALIAS           #
     # ---------------------------- #
     frame_lista = tk.LabelFrame(
-        painel_colunas, text="4. Anomalias adicionadas", bg="#ececec", padx=8, pady=6
+        painel_colunas, text="4. Anomalias adicionadas", bg=fundo, fg=cores.texto, padx=8, pady=6
     )
     frame_lista.rowconfigure(0, weight=1)
     frame_lista.columnconfigure(0, weight=1)
@@ -658,7 +678,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     lista_anomalias = []
 
-    frame_listbox = tk.Frame(frame_lista)
+    frame_listbox = tk.Frame(frame_lista, bg=fundo)
     frame_listbox.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
 
     tree_anomalias = ttk.Treeview(
@@ -675,7 +695,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
     tree_anomalias.column("subtotal", width=100, minwidth=90, stretch=False, anchor="e")
 
     icone_previa = criar_icone_svg(
-        tree_anomalias, "search-outline", altura=14, cor="#006699"
+        tree_anomalias, "search-outline", altura=14, cor=cores.titulo
     )
     _refs_icones.append(icone_previa)
 
@@ -924,18 +944,20 @@ def criar_area_privativa(parent, ctx, on_voltar):
         texto="Adicionar anomalia",
         nome_icone="add-circle-outline",
         command=adicionar_anomalia,
-        estilo="Add.TButton",
+        estilo=estilos.adicionar,
+        cor_icone=estilos.icone_adicionar,
         refs=_refs_icones,
     ).pack(fill="x")
 
-    botoes_lista = tk.Frame(frame_lista, bg="#ececec")
+    botoes_lista = tk.Frame(frame_lista, bg=fundo)
     botoes_lista.grid(row=1, column=0, sticky="ew", pady=(8, 0))
     criar_botao_ttk_com_icone(
         botoes_lista,
         texto="Remover selecionada",
         nome_icone="remove-circle-outline",
         command=remover_anomalia,
-        estilo="Delete.Compact.TButton",
+        estilo=estilos.compacto_excluir,
+        cor_icone=estilos.icone_excluir,
         refs=_refs_icones,
     ).pack(side="left")
     criar_botao_ttk_com_icone(
@@ -943,7 +965,8 @@ def criar_area_privativa(parent, ctx, on_voltar):
         texto="Remover todas",
         nome_icone="trash-outline",
         command=remover_todas_anomalias,
-        estilo="Delete.Compact.TButton",
+        estilo=estilos.compacto_excluir,
+        cor_icone=estilos.icone_excluir,
         refs=_refs_icones,
     ).pack(side="left", padx=(6, 0))
 
@@ -951,20 +974,21 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # RODAPÉ: FEEDBACK + GERAR     #
     # ---------------------------- #
     frame_rodape_modulo = tk.Frame(
-        corpo, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1
+        corpo, bg=barra, highlightbackground=cores.borda_suave, highlightthickness=1
     )
     frame_rodape_modulo.grid(row=2, column=0, sticky="ew", pady=(8, 0))
 
-    linha_rodape = tk.Frame(frame_rodape_modulo, bg="#f5fafc")
+    linha_rodape = tk.Frame(frame_rodape_modulo, bg=barra)
     linha_rodape.pack(fill="x")
 
-    container_historico = tk.Frame(linha_rodape, bg="#f5fafc")
+    container_historico = tk.Frame(linha_rodape, bg=barra)
     container_historico.pack(side="left", padx=10, pady=6)
 
     btn_desfazer = criar_botao_ttk_so_icone(
         container_historico,
         nome_icone="caret-back-outline",
         command=lambda: desfazer(),
+        cor_icone=estilos.icone,
         refs=_refs_icones,
     )
     btn_desfazer.pack(side="left", padx=(0, 4))
@@ -975,6 +999,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
         container_historico,
         nome_icone="caret-forward-outline",
         command=lambda: refazer(),
+        cor_icone=estilos.icone,
         refs=_refs_icones,
     )
     btn_refazer.pack(side="left", padx=(0, 10))
@@ -985,13 +1010,13 @@ def criar_area_privativa(parent, ctx, on_voltar):
         linha_rodape,
         text="",
         font=("Arial", 10, "bold"),
-        fg="#a67c00",
-        bg="#f5fafc",
+        fg="#ffb74d" if cores.escuro else "#a67c00",
+        bg=barra,
         anchor="w",
     )
     feedback_label.pack(side="left", fill="x", expand=True, padx=(0, 12))
 
-    container_total = tk.Frame(linha_rodape, bg="#f5fafc")
+    container_total = tk.Frame(linha_rodape, bg=barra)
     container_total.pack(side="right", padx=10, pady=6)
 
     var_total = tk.StringVar(value="Total geral: R$ 0,00")
@@ -999,8 +1024,8 @@ def criar_area_privativa(parent, ctx, on_voltar):
         container_total,
         textvariable=var_total,
         font=("Arial", 11, "bold"),
-        fg="#006699",
-        bg="#f5fafc",
+        fg=cores.titulo,
+        bg=barra,
         anchor="e",
     )
 
@@ -1866,14 +1891,15 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # ---------------------------- #
     wrapper._icone_excel_export = None
     wrapper._icone_word_parecer = None
+    fg_barra = cores.texto if cores.escuro else "#000000"
     kwargs_botao_word = {
         "text": "Parecer de atualização",
         "state": "disabled",
         "font": ("Arial", 10, "bold"),
-        "fg": "#000000",
-        "disabledforeground": "#9e9e9e",
-        "bg": "#f5fafc",
-        "activebackground": "#f5fafc",
+        "fg": fg_barra,
+        "disabledforeground": cores.texto_suave,
+        "bg": barra,
+        "activebackground": barra,
         "relief": "flat",
         "bd": 0,
         "padx": 2,
@@ -1881,12 +1907,15 @@ def criar_area_privativa(parent, ctx, on_voltar):
         "highlightthickness": 0,
         "takefocus": 0,
     }
-    caminho_icone_word = asset_path("icons", "microsoft-word-24.png")
-    if caminho_icone_word is not None:
-        wrapper._icone_word_parecer = tk.PhotoImage(file=str(caminho_icone_word))
+    try:
+        wrapper._icone_word_parecer = carregar_png_icone(
+            wrapper, "microsoft-word-24.png", inverter=bool(cores.escuro)
+        )
         kwargs_botao_word["image"] = wrapper._icone_word_parecer
         kwargs_botao_word["compound"] = "right"
-    host_parecer = tk.Frame(container_total, bg="#f5fafc")
+    except (FileNotFoundError, OSError, tk.TclError):
+        pass
+    host_parecer = tk.Frame(container_total, bg=barra)
     host_parecer.pack(side="left", padx=(0, 12))
     btn_parecer = tk.Button(host_parecer, **kwargs_botao_word)
     btn_parecer.pack()
@@ -1899,10 +1928,10 @@ def criar_area_privativa(parent, ctx, on_voltar):
         "text": "Gerar orçamento",
         "command": gerar_orcamento,
         "font": ("Arial", 10, "bold"),
-        "fg": "#000000",
-        "activeforeground": "#000000",
-        "bg": "#f5fafc",
-        "activebackground": "#e8f0f3",
+        "fg": fg_barra,
+        "activeforeground": fg_barra,
+        "bg": barra,
+        "activebackground": cores.fundo_hover,
         "relief": "flat",
         "bd": 0,
         "padx": 2,
@@ -1910,11 +1939,14 @@ def criar_area_privativa(parent, ctx, on_voltar):
         "cursor": "hand2",
         "highlightthickness": 0,
     }
-    caminho_icone_excel = asset_path("icons", "excel-preto.png")
-    if caminho_icone_excel is not None:
-        wrapper._icone_excel_export = tk.PhotoImage(file=str(caminho_icone_excel))
+    try:
+        wrapper._icone_excel_export = carregar_png_icone(
+            wrapper, "excel-preto.png", inverter=bool(cores.escuro)
+        )
         kwargs_botao_excel["image"] = wrapper._icone_excel_export
         kwargs_botao_excel["compound"] = "right"
+    except (FileNotFoundError, OSError, tk.TclError):
+        pass
     tk.Button(container_total, **kwargs_botao_excel).pack(
         side="left", padx=(0, 16)
     )
@@ -2178,13 +2210,16 @@ def _montar_painel_idebras(
     host, root, preencher_metragens, refs_icones, on_conjunto=None, on_limpar_metragens=None
 ):
     """Painel de conjunto/planta do Idebras, preenchido de forma assíncrona."""
+    cores = cores_tema(host)
+    estilos = estilos_botao(host)
+    fundo = cores.fundo
     cliente = IdebrasClient()
     conjuntos = []
     plantas = []
     conjunto_por_nome = {}
     conjunto_carregado_id = None
 
-    frame = tk.Frame(host, bg="#ececec")
+    frame = tk.Frame(host, bg=fundo)
     frame.pack(fill="x")
     frame.columnconfigure(1, weight=1)
     frame.columnconfigure(3, weight=1)
@@ -2193,41 +2228,45 @@ def _montar_painel_idebras(
     var_conjunto = tk.StringVar()
     var_planta = tk.StringVar()
 
-    tk.Label(frame, text="Conjunto:", bg="#ececec").grid(row=0, column=0, padx=(0, 4), sticky="w")
+    tk.Label(frame, text="Conjunto:", bg=fundo, fg=cores.texto).grid(
+        row=0, column=0, padx=(0, 4), sticky="w"
+    )
     campo_conjunto = CampoListaPesquisavel(
         frame,
         textvariable=var_conjunto,
         normalizar=normalizar_ambiente,
         altura_lista=12,
         largura_minima_lista=420,
-        bg="#ececec",
+        bg=fundo,
     )
     campo_conjunto.grid(row=0, column=1, padx=(0, 10), sticky="ew")
 
-    tk.Label(frame, text="Planta:", bg="#ececec").grid(row=0, column=2, padx=(0, 4), sticky="w")
+    tk.Label(frame, text="Planta:", bg=fundo, fg=cores.texto).grid(
+        row=0, column=2, padx=(0, 4), sticky="w"
+    )
     combo_planta = ttk.Combobox(frame, textvariable=var_planta, state="readonly")
     combo_planta.grid(row=0, column=3, sticky="ew")
 
-    linha_status = tk.Frame(frame, bg="#ececec")
+    linha_status = tk.Frame(frame, bg=fundo)
     linha_status.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(6, 0))
     linha_status.columnconfigure(0, weight=1)
 
     tk.Label(
         linha_status,
         textvariable=var_status,
-        fg="#555555",
-        bg="#ececec",
+        fg=cores.texto_suave,
+        bg=fundo,
         anchor="w",
     ).grid(row=0, column=0, sticky="ew", padx=(0, 8))
 
-    slot_ampulheta = tk.Frame(linha_status, bg="#ececec", width=30, height=26)
+    slot_ampulheta = tk.Frame(linha_status, bg=fundo, width=30, height=26)
     slot_ampulheta.grid(row=0, column=1, padx=(0, 8), sticky="e")
     slot_ampulheta.pack_propagate(False)
     ampulheta = IndicadorAmpulheta(
         slot_ampulheta,
         altura=24,
-        cor="#006699",
-        bg="#ececec",
+        cor=cores.titulo,
+        bg=fundo,
         refs=refs_icones,
     )
 
@@ -2236,6 +2275,8 @@ def _montar_painel_idebras(
         texto="Visualizar ambientes",
         nome_icone="search-outline",
         command=lambda: None,
+        estilo=estilos.compacto,
+        cor_icone=estilos.icone,
         refs=refs_icones,
     )
     btn_visualizar.grid(row=0, column=2, sticky="e")
@@ -2245,6 +2286,8 @@ def _montar_painel_idebras(
         texto="Preencher metragens",
         nome_icone="color-wand-outline",
         command=lambda: None,
+        estilo=estilos.compacto,
+        cor_icone=estilos.icone,
         refs=refs_icones,
     )
     btn_preencher.grid(row=0, column=3, sticky="e", padx=(6, 0))

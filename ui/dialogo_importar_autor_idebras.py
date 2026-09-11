@@ -18,6 +18,7 @@ from ui.icones import (
     criar_botao_ttk_com_icone,
     definir_estado_botao_icone,
 )
+from ui.temas import aplicar_chrome_dialogo
 from ui.widgets import (
     CampoListaPesquisavel,
     aplicar_icone_janela,
@@ -40,6 +41,8 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
     ):
         super().__init__(parent)
         preparar_toplevel(self)
+        cores, estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
         self.cliente = cliente
         self.conjuntos = list(conjuntos or [])
         self._conjunto_por_nome = {c.nome: c for c in self.conjuntos}
@@ -51,13 +54,12 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
 
         self.title("Importar autor do Idebras")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.geometry("920x520")
         self.minsize(720, 400)
 
-        painel = tk.Frame(self, bg="#ececec", padx=16, pady=14)
+        painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
         painel.pack(fill="both", expand=True)
         painel.columnconfigure(0, weight=1)
         painel.rowconfigure(3, weight=1)
@@ -66,8 +68,8 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
             painel,
             text="Importar autor do Idebras",
             font=("Arial", 12, "bold"),
-            fg="#006699",
-            bg="#ececec",
+            fg=cores.titulo,
+            bg=fundo,
             anchor="w",
         ).grid(row=0, column=0, sticky="w")
         tk.Label(
@@ -75,14 +77,14 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
             text="Pesquise pelo nome do cliente e/ou pelo conjunto. "
             "Ao selecionar um autor, o conjunto e a planta são carregados.",
             font=("Arial", 9),
-            fg="#555555",
-            bg="#ececec",
+            fg=cores.texto_suave,
+            bg=fundo,
             anchor="w",
             wraplength=860,
             justify="left",
         ).grid(row=1, column=0, sticky="ew", pady=(2, 10))
 
-        filtros = tk.Frame(painel, bg="#ececec")
+        filtros = tk.Frame(painel, bg=fundo)
         filtros.grid(row=2, column=0, sticky="ew")
         filtros.columnconfigure(1, weight=3)
         filtros.columnconfigure(3, weight=4)
@@ -93,14 +95,14 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
             value="Informe o nome e/ou o conjunto e clique em Pesquisar."
         )
 
-        tk.Label(filtros, text="Nome Cliente:", bg="#ececec").grid(
+        tk.Label(filtros, text="Nome Cliente:", bg=fundo, fg=cores.texto).grid(
             row=0, column=0, sticky="w", padx=(0, 6)
         )
         self.entrada_nome = ttk.Entry(filtros, textvariable=self.var_nome)
         self.entrada_nome.grid(row=0, column=1, sticky="ew")
         self.entrada_nome.bind("<Return>", lambda _e: self._pesquisar())
 
-        tk.Label(filtros, text="Conjunto:", bg="#ececec").grid(
+        tk.Label(filtros, text="Conjunto:", bg=fundo, fg=cores.texto).grid(
             row=0, column=2, sticky="w", padx=(12, 6)
         )
         self.campo_conjunto = CampoListaPesquisavel(
@@ -109,7 +111,7 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
             normalizar=normalizar_ambiente,
             altura_lista=14,
             largura_minima_lista=480,
-            bg="#ececec",
+            bg=fundo,
         )
         self.campo_conjunto.definir_opcoes([c.nome for c in self.conjuntos])
         self.campo_conjunto.grid(row=0, column=3, sticky="ew")
@@ -119,12 +121,14 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
             texto="Pesquisar",
             nome_icone="search-outline",
             command=self._pesquisar,
+            estilo=estilos.compacto,
+            cor_icone=estilos.icone,
             refs=self._refs_icones,
         )
         self.btn_pesquisar.grid(row=0, column=4, padx=(10, 0))
 
         colunas = ("autor", "conjunto", "cidade_uf", "endereco")
-        tree_frame = tk.Frame(painel, bg="#ececec")
+        tree_frame = tk.Frame(painel, bg=fundo)
         tree_frame.grid(row=3, column=0, sticky="nsew", pady=(12, 0))
         tree_frame.columnconfigure(0, weight=1)
         tree_frame.rowconfigure(0, weight=1)
@@ -148,7 +152,7 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
         self.tree.bind("<Return>", lambda _e: self._confirmar())
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._atualizar_botao_importar())
 
-        rodape = tk.Frame(painel, bg="#ececec")
+        rodape = tk.Frame(painel, bg=fundo)
         rodape.grid(row=4, column=0, sticky="ew", pady=(10, 0))
         rodape.columnconfigure(0, weight=1)
 
@@ -156,16 +160,16 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
             rodape,
             textvariable=self.var_status,
             font=("Arial", 9),
-            fg="#555555",
-            bg="#ececec",
+            fg=cores.texto_suave,
+            bg=fundo,
             anchor="w",
         ).grid(row=0, column=0, sticky="ew", padx=(0, 8))
 
-        slot = tk.Frame(rodape, bg="#ececec", width=30, height=26)
+        slot = tk.Frame(rodape, bg=fundo, width=30, height=26)
         slot.grid(row=0, column=1, padx=(0, 8), sticky="e")
         slot.pack_propagate(False)
         self.ampulheta = IndicadorAmpulheta(
-            slot, altura=24, cor="#006699", bg="#ececec", refs=self._refs_icones
+            slot, altura=24, cor=cores.titulo, bg=fundo, refs=self._refs_icones
         )
 
         criar_botao_fechar(rodape, command=self.destroy).grid(
@@ -176,7 +180,8 @@ class DialogoImportarAutorIdebras(tk.Toplevel):
             texto="Importar",
             nome_icone="cloud-download-outline",
             command=self._confirmar,
-            estilo="Add.TButton",
+            estilo=estilos.adicionar,
+            cor_icone=estilos.icone_adicionar,
             refs=self._refs_icones,
         )
         self.btn_importar.grid(row=0, column=2, sticky="e")

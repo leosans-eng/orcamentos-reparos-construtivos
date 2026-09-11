@@ -5,20 +5,16 @@ from core.api_client import get_client
 from core.api_config import carregar_config, salvar_config
 from core.api_exceptions import ApiError
 from ui.dialogo_admin_usuarios import abrir_dialogo_admin_usuarios, usuario_atual_eh_admin
-from ui.icones import criar_botao_ttk_com_icone
+from ui.icones import criar_botao_ttk_com_icone, definir_estado_botao_icone
+from ui.temas import aplicar_chrome_dialogo, aplicar_tema, opcoes_tema, rotulo_tema, salvar_tema, tema_salvo
 from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
+    criar_botao_cancelar,
+    criar_botao_fechar,
     focar_entrada_apos_exibir,
     preparar_toplevel,
 )
-
-_CORES_STATUS = {
-    "Atualizado": "#2e7d32",
-    "Erro": "#ef6c00",
-    "Crítico": "#c62828",
-    "Verificando...": "#006699",
-}
 
 
 def _formatar_http_status(http: str) -> str:
@@ -40,33 +36,38 @@ class DialogoTrocarSenha(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
+        cores = self._cores
+        estilos = self._estilos
+        fundo = cores.fundo
+        cartao = cores.fundo_cartao
         self._refs_icones: list = []
         self.title("Trocar senha")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=fundo, padx=20, pady=16)
+        painel.pack(fill="x")
 
         tk.Label(
             painel,
             text="Trocar senha",
             font=("Arial", 12, "bold"),
-            fg="#333333",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=fundo,
         ).pack(anchor="w", pady=(0, 12))
 
         form = tk.Frame(
             painel,
-            bg="#ffffff",
-            highlightbackground="#cccccc",
+            bg=cartao,
+            highlightbackground=cores.borda_suave,
             highlightthickness=1,
         )
         form.pack(fill="x")
-        inner = tk.Frame(form, bg="#ffffff", padx=14, pady=12)
+        inner = tk.Frame(form, bg=cartao, padx=14, pady=12)
         inner.pack(fill="x")
 
         self.var_atual = tk.StringVar()
@@ -82,8 +83,8 @@ class DialogoTrocarSenha(tk.Toplevel):
             painel,
             text="",
             font=("Arial", 9),
-            fg="#c62828",
-            bg="#ececec",
+            fg=cores.perigo,
+            bg=fundo,
             wraplength=320,
             justify="left",
         )
@@ -91,15 +92,14 @@ class DialogoTrocarSenha(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x")
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right"
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right")
         criar_botao_ttk_com_icone(
             botoes,
             texto="Salvar",
             nome_icone="save-outline",
             command=self._confirmar,
-            estilo="Add.TButton",
+            estilo=estilos.salvar,
+            cor_icone=estilos.icone_salvar,
             refs=self._refs_icones,
         ).pack(side="right", padx=(0, 8))
 
@@ -110,11 +110,12 @@ class DialogoTrocarSenha(tk.Toplevel):
         focar_entrada_apos_exibir(self._entrada_atual)
 
     def _campo(self, parent, rotulo, variavel, linha):
+        cores = self._cores
         tk.Label(
             parent,
             text=rotulo,
-            bg="#ffffff",
-            fg="#555555",
+            bg=cores.fundo_cartao,
+            fg=cores.texto_suave,
             font=("Arial", 9),
         ).grid(row=linha, column=0, sticky="w", pady=(0 if linha == 0 else 8, 4))
         entrada = ttk.Entry(parent, textvariable=variavel, width=32, show="•")
@@ -170,39 +171,82 @@ class DialogoConfiguracoes(tk.Toplevel):
         self._refs_icones: list = []
         self._trace_status = None
         self._trace_http = None
+        self._combo_tema = None
+        self._trocando_tema = False
+        self._job_tema = None
+        self._eh_admin = usuario_atual_eh_admin()
+        self.var_tema = tk.StringVar(master=self)
 
         self.title("Configurações")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self._montar()
+        self.update_idletasks()
+        centralizar_janela(self, parent)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
+    def _janela_app(self):
+        if self.ctx.janela is not None:
+            return self.ctx.janela
+        master = self.master
+        return master if isinstance(master, tk.Tk) else self.winfo_toplevel()
+
+    def _soltar_traces(self):
+        if self._trace_status is not None and self.ctx.status_servidor_sinapi is not None:
+            try:
+                self.ctx.status_servidor_sinapi.trace_remove("write", self._trace_status)
+            except tk.TclError:
+                pass
+            self._trace_status = None
+        if self._trace_http is not None and self.ctx.http_servidor_sinapi is not None:
+            try:
+                self.ctx.http_servidor_sinapi.trace_remove("write", self._trace_http)
+            except tk.TclError:
+                pass
+            self._trace_http = None
+
+    def _montar(self):
+        self._soltar_traces()
+        self._refs_icones.clear()
+        self._combo_tema = None
+        for filho in list(self.winfo_children()):
+            try:
+                filho.destroy()
+            except tk.TclError:
+                pass
+
+        cores, estilos = aplicar_chrome_dialogo(self)
+        fundo = cores.fundo
+        cartao = cores.fundo_cartao
+
+        painel = tk.Frame(self, bg=fundo, padx=20, pady=16)
         painel.pack(fill="both", expand=True)
 
         tk.Label(
             painel,
             text="Configurações",
             font=("Arial", 12, "bold"),
-            fg="#333333",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=fundo,
         ).pack(anchor="w", pady=(0, 14))
 
-        secao = tk.Frame(painel, bg="#ffffff", highlightbackground="#cccccc", highlightthickness=1)
+        secao = tk.Frame(painel, bg=cartao, highlightbackground=cores.borda_suave, highlightthickness=1)
         secao.pack(fill="x", pady=(0, 12))
-        secao_inner = tk.Frame(secao, bg="#ffffff", padx=14, pady=12)
+        secao_inner = tk.Frame(secao, bg=cartao, padx=14, pady=12)
         secao_inner.pack(fill="x")
 
         tk.Label(
             secao_inner,
             text="Base SINAPI",
             font=("Arial", 10, "bold"),
-            fg="#006699",
-            bg="#ffffff",
+            fg=cores.titulo,
+            bg=cartao,
         ).pack(anchor="w", pady=(0, 10))
 
-        linha_acao = tk.Frame(secao_inner, bg="#ffffff")
+        linha_acao = tk.Frame(secao_inner, bg=cartao)
         linha_acao.pack(fill="x")
 
         self._btn_verificar = criar_botao_ttk_com_icone(
@@ -210,28 +254,28 @@ class DialogoConfiguracoes(tk.Toplevel):
             texto="Verificar SINAPI",
             nome_icone="sync-outline",
             command=self._verificar_sinapi,
-            estilo="Compact.TButton",
-            cor_icone="#006699",
+            estilo=estilos.compacto,
+            cor_icone=cores.titulo,
             refs=self._refs_icones,
         )
         self._btn_verificar.pack(side="left")
 
-        quadro_status = tk.Frame(linha_acao, bg="#ffffff")
+        quadro_status = tk.Frame(linha_acao, bg=cartao)
         quadro_status.pack(side="left", padx=(18, 0))
 
         tk.Label(
             quadro_status,
             text="Status Servidor:",
             font=("Arial", 9),
-            fg="#555555",
-            bg="#ffffff",
+            fg=cores.texto_suave,
+            bg=cartao,
         ).pack(anchor="w")
 
         self._lbl_status = tk.Label(
             quadro_status,
             text="",
             font=("Arial", 9, "bold"),
-            bg="#ffffff",
+            bg=cartao,
         )
         self._lbl_status.pack(anchor="w")
 
@@ -239,26 +283,26 @@ class DialogoConfiguracoes(tk.Toplevel):
             quadro_status,
             text="",
             font=("Arial", 8),
-            fg="#777777",
-            bg="#ffffff",
+            fg=cores.texto_suave,
+            bg=cartao,
             wraplength=220,
             justify="left",
         )
         self._lbl_http.pack(anchor="w")
 
         secao_conta = tk.Frame(
-            painel, bg="#ffffff", highlightbackground="#cccccc", highlightthickness=1
+            painel, bg=cartao, highlightbackground=cores.borda_suave, highlightthickness=1
         )
         secao_conta.pack(fill="x", pady=(0, 12))
-        conta_inner = tk.Frame(secao_conta, bg="#ffffff", padx=14, pady=12)
+        conta_inner = tk.Frame(secao_conta, bg=cartao, padx=14, pady=12)
         conta_inner.pack(fill="x")
 
         tk.Label(
             conta_inner,
             text="Conta",
             font=("Arial", 10, "bold"),
-            fg="#006699",
-            bg="#ffffff",
+            fg=cores.titulo,
+            bg=cartao,
         ).pack(anchor="w", pady=(0, 10))
 
         usuario = get_client().username or "—"
@@ -266,8 +310,8 @@ class DialogoConfiguracoes(tk.Toplevel):
             conta_inner,
             text=f"Usuário conectado: {usuario}",
             font=("Arial", 9),
-            fg="#555555",
-            bg="#ffffff",
+            fg=cores.texto_suave,
+            bg=cartao,
         ).pack(anchor="w", pady=(0, 8))
 
         ttk.Button(
@@ -277,27 +321,74 @@ class DialogoConfiguracoes(tk.Toplevel):
             style="Compact.TButton",
         ).pack(anchor="w")
 
-        if usuario_atual_eh_admin():
+        secao_aparencia = tk.Frame(
+            painel, bg=cartao, highlightbackground=cores.borda_suave, highlightthickness=1
+        )
+        secao_aparencia.pack(fill="x", pady=(0, 12))
+        aparencia_inner = tk.Frame(secao_aparencia, bg=cartao, padx=14, pady=12)
+        aparencia_inner.pack(fill="x")
+
+        tk.Label(
+            aparencia_inner,
+            text="Aparência",
+            font=("Arial", 10, "bold"),
+            fg=cores.titulo,
+            bg=cartao,
+        ).pack(anchor="w", pady=(0, 6))
+        tk.Label(
+            aparencia_inner,
+            text="Tema visual da interface (Hub, botões, listas e campos).",
+            font=("Arial", 9),
+            fg=cores.texto_suave,
+            bg=cartao,
+        ).pack(anchor="w", pady=(0, 8))
+
+        janela_app = self._janela_app()
+        self._opcoes_tema = opcoes_tema(janela_app)
+        self._rotulo_para_id = {rotulo: tema_id for tema_id, rotulo in self._opcoes_tema}
+        rotulos = [rotulo for _tema_id, rotulo in self._opcoes_tema]
+        atual = rotulo_tema(tema_salvo())
+        if atual not in self._rotulo_para_id:
+            atual = rotulo_tema("orc")
+        self.var_tema.set(atual)
+
+        combo_tema = ttk.Combobox(
+            aparencia_inner,
+            textvariable=self.var_tema,
+            values=rotulos,
+            state="readonly",
+            width=28,
+        )
+        combo_tema.pack(anchor="w")
+        try:
+            combo_tema.current(rotulos.index(atual))
+        except ValueError:
+            if rotulos:
+                combo_tema.current(0)
+        combo_tema.bind("<<ComboboxSelected>>", self._ao_trocar_tema)
+        self._combo_tema = combo_tema
+
+        if self._eh_admin:
             secao_admin = tk.Frame(
-                painel, bg="#ffffff", highlightbackground="#cccccc", highlightthickness=1
+                painel, bg=cartao, highlightbackground=cores.borda_suave, highlightthickness=1
             )
             secao_admin.pack(fill="x", pady=(0, 12))
-            admin_inner = tk.Frame(secao_admin, bg="#ffffff", padx=14, pady=12)
+            admin_inner = tk.Frame(secao_admin, bg=cartao, padx=14, pady=12)
             admin_inner.pack(fill="x")
 
             tk.Label(
                 admin_inner,
                 text="Administração",
                 font=("Arial", 10, "bold"),
-                fg="#006699",
-                bg="#ffffff",
+                fg=cores.titulo,
+                bg=cartao,
             ).pack(anchor="w", pady=(0, 6))
             tk.Label(
                 admin_inner,
                 text="Gerencie usuários, senhas e permissões.",
                 font=("Arial", 9),
-                fg="#555555",
-                bg="#ffffff",
+                fg=cores.texto_suave,
+                bg=cartao,
             ).pack(anchor="w", pady=(0, 8))
             ttk.Button(
                 admin_inner,
@@ -308,30 +399,87 @@ class DialogoConfiguracoes(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(4, 0))
-        ttk.Button(botoes, text="Fechar", command=self.destroy, style="Delete.TButton").pack(
-            side="right"
-        )
+        criar_botao_fechar(botoes, self.destroy).pack(side="right")
 
-        if ctx.status_servidor_sinapi is not None:
-            self._trace_status = ctx.status_servidor_sinapi.trace_add(
+        if self.ctx.status_servidor_sinapi is not None:
+            self._trace_status = self.ctx.status_servidor_sinapi.trace_add(
                 "write", lambda *_: self._atualizar_status()
             )
-        if ctx.http_servidor_sinapi is not None:
-            self._trace_http = ctx.http_servidor_sinapi.trace_add(
+        if self.ctx.http_servidor_sinapi is not None:
+            self._trace_http = self.ctx.http_servidor_sinapi.trace_add(
                 "write", lambda *_: self._atualizar_status()
             )
 
         self._atualizar_status()
-        self.bind("<Escape>", lambda _e: self.destroy())
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.update_idletasks()
-        centralizar_janela(self, parent)
 
     def _trocar_senha(self):
         DialogoTrocarSenha(self)
 
+    def _fechar_lista_tema(self):
+        combo = self._combo_tema
+        if combo is None:
+            return
+        try:
+            combo.tk.call("ttk::combobox::Unpost", combo)
+        except tk.TclError:
+            pass
+        try:
+            self.focus_set()
+        except tk.TclError:
+            pass
+
+    def _ao_trocar_tema(self, _event=None):
+        if self._trocando_tema:
+            return
+        tema_id = self._rotulo_para_id.get((self.var_tema.get() or "").strip(), "orc")
+        self._trocando_tema = True
+        self._fechar_lista_tema()
+        self._job_tema = self.after(10, lambda: self._concluir_troca_tema(tema_id))
+
+    def _concluir_troca_tema(self, tema_id):
+        self._job_tema = None
+        try:
+            if not self.winfo_exists():
+                return
+            janela_app = self._janela_app()
+            aplicado = aplicar_tema(janela_app, tema_id)
+            salvar_tema(aplicado)
+            if aplicado != tema_id:
+                messagebox.showwarning(
+                    "Tema visual",
+                    f"Não foi possível aplicar “{rotulo_tema(tema_id)}”. "
+                    "O tema Padrão ORC foi restaurado.",
+                    parent=self,
+                )
+            self._montar()
+            self.update_idletasks()
+            centralizar_janela(self, self.master)
+            try:
+                self.grab_set()
+                self.lift()
+            except tk.TclError:
+                pass
+        finally:
+            try:
+                if self.winfo_exists():
+                    self._trocando_tema = False
+            except tk.TclError:
+                pass
+
     def _abrir_admin_usuarios(self):
         abrir_dialogo_admin_usuarios(self)
+
+    def _cor_status_servidor(self, status: str) -> str:
+        cores = self._cores
+        if status == "Atualizado":
+            return "#81c784" if cores.escuro else "#2e7d32"
+        if status == "Erro":
+            return "#ffb74d" if cores.escuro else "#ef6c00"
+        if status == "Crítico":
+            return cores.perigo
+        if status == "Verificando...":
+            return cores.titulo
+        return cores.texto_suave
 
     def _atualizar_status(self):
         status = "—"
@@ -341,8 +489,7 @@ class DialogoConfiguracoes(tk.Toplevel):
         if self.ctx.http_servidor_sinapi is not None:
             http = self.ctx.http_servidor_sinapi.get() or "—"
 
-        cor = _CORES_STATUS.get(status, "#555555")
-        self._lbl_status.config(text=status, fg=cor)
+        self._lbl_status.config(text=status, fg=self._cor_status_servidor(status))
 
         if http and http != "—":
             self._lbl_http.config(text=_formatar_http_status(http))
@@ -350,9 +497,9 @@ class DialogoConfiguracoes(tk.Toplevel):
             self._lbl_http.config(text="")
 
         if status == "Verificando...":
-            self._btn_verificar.state(["disabled"])
+            definir_estado_botao_icone(self._btn_verificar, "disabled")
         else:
-            self._btn_verificar.state(["!disabled"])
+            definir_estado_botao_icone(self._btn_verificar, "normal")
 
     def _verificar_sinapi(self):
         if self.ctx._sinapi_verificando:
@@ -361,10 +508,14 @@ class DialogoConfiguracoes(tk.Toplevel):
         self.ctx.iniciar_verificacao_sinapi(silencioso=True)
 
     def destroy(self):
-        if self._trace_status is not None and self.ctx.status_servidor_sinapi is not None:
-            self.ctx.status_servidor_sinapi.trace_remove("write", self._trace_status)
-        if self._trace_http is not None and self.ctx.http_servidor_sinapi is not None:
-            self.ctx.http_servidor_sinapi.trace_remove("write", self._trace_http)
+        job = self._job_tema
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except (tk.TclError, ValueError):
+                pass
+            self._job_tema = None
+        self._soltar_traces()
         super().destroy()
 
 

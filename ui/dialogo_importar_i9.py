@@ -1,7 +1,14 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from ui.widgets import aplicar_icone_janela, centralizar_janela, preparar_toplevel
+from ui.icones import criar_botao_ttk_com_icone, definir_estado_botao_icone
+from ui.temas import aplicar_chrome_dialogo
+from ui.widgets import (
+    aplicar_icone_janela,
+    centralizar_janela,
+    criar_botao_cancelar,
+    preparar_toplevel,
+)
 
 try:
     import windnd
@@ -15,25 +22,29 @@ class DialogoImportarI9(tk.Toplevel):
     def __init__(self, parent, on_importar=None):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
+        cores = self._cores
+        estilos = self._estilos
         self.on_importar = on_importar
         self._importando = False
+        self._refs_icones: list = []
 
         self.title("Importar i9")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=cores.fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=cores.fundo, padx=20, pady=16)
+        painel.pack(fill="x")
 
         tk.Label(
             painel,
             text="Importar planilha sintética do i9",
             font=("Arial", 11, "bold"),
-            fg="#006699",
-            bg="#ececec",
+            fg=cores.titulo,
+            bg=cores.fundo,
         ).pack(anchor="w")
 
         tk.Label(
@@ -42,16 +53,16 @@ class DialogoImportarI9(tk.Toplevel):
                 "Selecione o arquivo Excel exportado pelo i9 ou arraste-o "
                 "para a área abaixo."
             ),
-            bg="#ececec",
-            fg="#333333",
+            bg=cores.fundo,
+            fg=cores.texto,
             justify="left",
             wraplength=420,
         ).pack(anchor="w", pady=(8, 12))
 
         self.zona_arquivo = tk.Frame(
             painel,
-            bg="#f5fafc",
-            highlightbackground="#006699",
+            bg=cores.fundo_destaque,
+            highlightbackground=cores.borda,
             highlightthickness=2,
             width=420,
             height=120,
@@ -62,8 +73,8 @@ class DialogoImportarI9(tk.Toplevel):
         self.label_arquivo = tk.Label(
             self.zona_arquivo,
             text="Nenhum arquivo selecionado",
-            bg="#f5fafc",
-            fg="#666666",
+            bg=cores.fundo_destaque,
+            fg=cores.texto_suave,
             wraplength=380,
             justify="center",
         )
@@ -87,47 +98,49 @@ class DialogoImportarI9(tk.Toplevel):
         tk.Label(
             painel,
             text=dica_arrastar,
-            bg="#ececec",
-            fg="#888888",
+            bg=cores.fundo,
+            fg=cores.texto_suave,
             font=("Arial", 9),
         ).pack(pady=(8, 12))
 
-        botoes = tk.Frame(painel, bg="#ececec")
+        botoes = tk.Frame(painel, bg=cores.fundo)
         botoes.pack(fill="x")
 
-        ttk.Button(
+        criar_botao_ttk_com_icone(
             botoes,
-            text="Procurar arquivo...",
+            texto="Procurar arquivo...",
+            nome_icone="folder-open-outline",
             command=self._procurar_arquivo,
-            style="Compact.TButton",
+            estilo=estilos.compacto,
+            cor_icone=estilos.icone,
+            refs=self._refs_icones,
         ).pack(side="left")
 
-        ttk.Button(
-            botoes,
-            text="Cancelar",
-            command=self.destroy,
-            style="Delete.Compact.TButton",
-        ).pack(side="right", padx=(8, 0))
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right", padx=(8, 0))
 
-        self.btn_importar = ttk.Button(
+        self.btn_importar = criar_botao_ttk_com_icone(
             botoes,
-            text="Importar",
+            texto="Importar",
+            nome_icone="attach-outline",
             command=self._confirmar_importacao,
-            style="Add.Compact.TButton",
-            state="disabled",
+            estilo=estilos.compacto_adicionar,
+            cor_icone=estilos.icone_adicionar,
+            refs=self._refs_icones,
         )
         self.btn_importar.pack(side="right")
+        definir_estado_botao_icone(self.btn_importar, "disabled")
 
         self._caminho_selecionado = None
         centralizar_janela(self, parent)
 
     def _definir_arquivo(self, caminho: str):
+        cores = self._cores
         self._caminho_selecionado = caminho
         self.label_arquivo.config(
             text=caminho,
-            fg="#333333",
+            fg=cores.texto,
         )
-        self.btn_importar.config(state="normal")
+        definir_estado_botao_icone(self.btn_importar, "normal")
 
     def _normalizar_caminho_soltado(self, caminho) -> str:
         if isinstance(caminho, bytes):

@@ -2,13 +2,12 @@ import tkinter as tk
 from tkinter import ttk
 
 from app_paths import asset_path
+from ui.temas import aplicar_chrome_dialogo
 from ui.widgets import (
-    COR_BORDA_PADRAO,
-    COR_FUNDO_CARTAO,
-    COR_TITULO_PADRAO,
     aplicar_hover_cartao,
     aplicar_icone_janela,
     centralizar_janela,
+    criar_botao_cancelar,
     preparar_toplevel,
 )
 
@@ -35,28 +34,30 @@ class DialogoSelecionarModeloPlanilha(tk.Toplevel):
     def __init__(self, parent, on_selecionar=None):
         super().__init__(parent)
         preparar_toplevel(self)
+        aplicar_chrome_dialogo(self)
+        cores = self._cores
         self.on_selecionar = on_selecionar
         self._imagens = []
 
         self.title("Selecionar modelo")
         aplicar_icone_janela(self)
-        self.configure(bg="#ececec")
+        self.configure(bg=cores.fundo)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
-        painel = tk.Frame(self, bg="#ececec", padx=20, pady=16)
-        painel.pack(fill="both", expand=True)
+        painel = tk.Frame(self, bg=cores.fundo, padx=20, pady=16)
+        painel.pack(fill="x")
 
         tk.Label(
             painel,
             text="Selecione o modelo da Planilha",
             font=("Arial", 11, "bold"),
-            fg="#333333",
-            bg="#ececec",
+            fg=cores.texto,
+            bg=cores.fundo,
         ).pack(anchor="w", pady=(0, 14))
 
-        grade = tk.Frame(painel, bg="#ececec")
+        grade = tk.Frame(painel, bg=cores.fundo)
         grade.pack(fill="x")
         for col in range(len(MODELOS_PLANILHA)):
             grade.columnconfigure(col, weight=1, uniform="modelo_planilha")
@@ -66,21 +67,20 @@ class DialogoSelecionarModeloPlanilha(tk.Toplevel):
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(16, 0))
-        ttk.Button(botoes, text="Cancelar", command=self.destroy, style="Delete.TButton").pack(
-            side="right"
-        )
+        criar_botao_cancelar(botoes, self.destroy).pack(side="right")
 
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
 
     def _criar_cartao_modelo(self, parent, coluna, numero, arquivo, descricao):
+        cores = self._cores
         cartao = tk.Frame(
             parent,
             width=LARGURA_CARTAO,
             height=ALTURA_CARTAO,
-            bg=COR_FUNDO_CARTAO,
-            highlightbackground=COR_BORDA_PADRAO,
+            bg=cores.fundo_cartao,
+            highlightbackground=cores.borda,
             highlightthickness=2,
             cursor="hand2",
         )
@@ -95,14 +95,14 @@ class DialogoSelecionarModeloPlanilha(tk.Toplevel):
         if caminho is not None:
             imagem = _carregar_imagem_modelo(caminho)
             self._imagens.append(imagem)
-            lbl_imagem = tk.Label(cartao, image=imagem, bg=COR_FUNDO_CARTAO)
+            lbl_imagem = tk.Label(cartao, image=imagem, bg=cores.fundo_cartao)
         else:
             lbl_imagem = tk.Label(
                 cartao,
                 text="Imagem\nindisponível",
                 font=("Arial", 8),
-                fg="#999999",
-                bg="#f0f0f0",
+                fg=cores.texto_suave,
+                bg=cores.fundo_cartao_off,
                 width=18,
                 height=7,
             )
@@ -113,8 +113,8 @@ class DialogoSelecionarModeloPlanilha(tk.Toplevel):
             cartao,
             text=f"Modelo {numero}",
             font=("Arial", 10, "bold"),
-            fg=COR_TITULO_PADRAO,
-            bg=COR_FUNDO_CARTAO,
+            fg=cores.titulo,
+            bg=cores.fundo_cartao,
         )
         lbl_numero.grid(row=1, column=0, pady=(0, 4))
         filhos.append(lbl_numero)
@@ -123,8 +123,8 @@ class DialogoSelecionarModeloPlanilha(tk.Toplevel):
             cartao,
             text=descricao,
             font=("Arial", 9),
-            fg="#555555",
-            bg=COR_FUNDO_CARTAO,
+            fg=cores.texto_suave,
+            bg=cores.fundo_cartao,
             wraplength=LARGURA_CARTAO - 24,
             justify="center",
         )
@@ -140,4 +140,13 @@ class DialogoSelecionarModeloPlanilha(tk.Toplevel):
         for filho in filhos:
             filho.bind("<Button-1>", ao_clicar)
 
-        aplicar_hover_cartao(cartao, filhos)
+        aplicar_hover_cartao(
+            cartao,
+            filhos,
+            cor_borda_normal=cores.borda,
+            cor_borda_hover=cores.borda_hover,
+            cor_fundo_normal=cores.fundo_cartao,
+            cor_fundo_hover=cores.fundo_hover,
+            cor_titulo_normal=cores.titulo,
+            cor_titulo_hover=cores.titulo_hover,
+        )

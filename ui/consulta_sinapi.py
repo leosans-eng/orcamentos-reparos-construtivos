@@ -11,11 +11,10 @@ from core.sinapi_busca import (
     tipo_sinapi_para_filtro,
 )
 from core.sinapi_loader import obter_xlsx_sinapi_referencia_mais_recente
-from app_paths import asset_path
-from ui.icones import criar_label_icone
+from ui.icones import carregar_png_icone, criar_label_icone
+from ui.temas import cores_tema
 from ui.widgets import (
     PLACEHOLDER_ESTADO,
-    centralizar_janela,
     criar_barra_modulo,
     estado_do_combo,
     formatar_moeda_br,
@@ -29,7 +28,9 @@ UNIDADE_TODAS = "Todas"
 
 class ConsultaSinapiFrame(tk.Frame):
     def __init__(self, parent, ctx, on_voltar):
-        super().__init__(parent, bg="#ececec")
+        cores = cores_tema(parent)
+        super().__init__(parent, bg=cores.fundo)
+        self._cores = cores
         self.ctx = ctx
         self.on_voltar = on_voltar
         self._job_busca = None
@@ -39,6 +40,8 @@ class ConsultaSinapiFrame(tk.Frame):
         ctx.registrar_callback_sinapi(self._ao_atualizar_sinapi)
 
     def _montar(self):
+        cores = self._cores
+        fundo = cores.fundo
         self._icone_excel = None
         self.label_referencia = criar_barra_modulo(
             self,
@@ -51,16 +54,17 @@ class ConsultaSinapiFrame(tk.Frame):
         painel_busca = tk.LabelFrame(
             self,
             text="Pesquisar insumo ou composição",
-            bg="#ececec",
+            bg=fundo,
+            fg=cores.texto,
             padx=10,
             pady=8,
         )
         painel_busca.pack(fill="x", padx=16, pady=(0, 8))
 
-        linha_filtros = tk.Frame(painel_busca, bg="#ececec")
+        linha_filtros = tk.Frame(painel_busca, bg=fundo)
         linha_filtros.pack(fill="x")
 
-        tk.Label(linha_filtros, text="Estado:", bg="#ececec").grid(
+        tk.Label(linha_filtros, text="Estado:", bg=fundo, fg=cores.texto).grid(
             row=0, column=0, padx=(4, 6), pady=4, sticky="w"
         )
 
@@ -74,7 +78,7 @@ class ConsultaSinapiFrame(tk.Frame):
         self.combo_estado.grid(row=0, column=1, padx=4, pady=4, sticky="w")
         self.combo_estado.set(PLACEHOLDER_ESTADO)
 
-        tk.Label(linha_filtros, text="Unidade:", bg="#ececec").grid(
+        tk.Label(linha_filtros, text="Unidade:", bg=fundo, fg=cores.texto).grid(
             row=0, column=2, padx=(16, 6), pady=4, sticky="w"
         )
 
@@ -87,7 +91,7 @@ class ConsultaSinapiFrame(tk.Frame):
         self.combo_unidade.grid(row=0, column=3, padx=4, pady=4, sticky="w")
         self.combo_unidade.set(UNIDADE_TODAS)
 
-        tk.Label(linha_filtros, text="Tipo (I/C):", bg="#ececec").grid(
+        tk.Label(linha_filtros, text="Tipo (I/C):", bg=fundo, fg=cores.texto).grid(
             row=0, column=4, padx=(16, 6), pady=4, sticky="w"
         )
 
@@ -104,6 +108,9 @@ class ConsultaSinapiFrame(tk.Frame):
             linha_filtros,
             "funnel-outline",
             texto="Pesquisar:",
+            bg=fundo,
+            fg=cores.texto_suave,
+            cor=cores.titulo,
             refs=self._refs_icones,
         ).grid(row=0, column=6, padx=(16, 6), pady=4, sticky="w")
 
@@ -122,8 +129,8 @@ class ConsultaSinapiFrame(tk.Frame):
                 "Acentos são opcionais e não é preciso digitar todas as palavras — ex.: “ceramica piso” ou “reboco parede”."
             ),
             font=("Arial", 8),
-            fg="#666666",
-            bg="#ececec",
+            fg=cores.texto_suave,
+            bg=fundo,
             justify="left",
         )
         self.label_dica.pack(fill="x", anchor="w", padx=4, pady=(4, 0))
@@ -132,8 +139,8 @@ class ConsultaSinapiFrame(tk.Frame):
             self,
             text="Selecione o estado e digite para pesquisar.",
             font=("Arial", 9),
-            fg="#555555",
-            bg="#ececec",
+            fg=cores.texto_suave,
+            bg=fundo,
             anchor="w",
         )
         self.label_status.pack(fill="x", padx=18, pady=(0, 4))
@@ -141,7 +148,8 @@ class ConsultaSinapiFrame(tk.Frame):
         painel_resultados = tk.LabelFrame(
             self,
             text="Resultados",
-            bg="#ececec",
+            bg=fundo,
+            fg=cores.texto,
             padx=8,
             pady=6,
         )
@@ -172,15 +180,21 @@ class ConsultaSinapiFrame(tk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         scroll_y.pack(side="right", fill="y")
 
-        painel_detalhe = tk.Frame(self, bg="#f5fafc", highlightbackground="#cccccc", highlightthickness=1)
+        barra = cores.fundo_barra
+        painel_detalhe = tk.Frame(
+            self,
+            bg=barra,
+            highlightbackground=cores.borda_suave,
+            highlightthickness=1,
+        )
         painel_detalhe.pack(fill="x", padx=16, pady=(0, 10))
 
         self.label_detalhe = tk.Label(
             painel_detalhe,
             text="Selecione um item na lista para ver os detalhes.",
             font=("Arial", 9),
-            fg="#444444",
-            bg="#f5fafc",
+            fg=cores.texto,
+            bg=barra,
             justify="left",
             anchor="w",
             padx=10,
@@ -198,7 +212,7 @@ class ConsultaSinapiFrame(tk.Frame):
         if self.ctx.sinapi.empty:
             self.label_status.config(
                 text="Base SINAPI indisponível. Aguarde a atualização ou verifique sinapi/sinapi_processado.",
-                fg="#C62828",
+                fg=cores.perigo,
             )
 
     def _texto_referencia(self):
@@ -207,25 +221,38 @@ class ConsultaSinapiFrame(tk.Frame):
             return "Base não carregada"
         return f"Referência SINAPI: {ref}"
 
+    def _cor_status(self, mensagem, *, vazio=False):
+        cores = self._cores
+        texto = (mensagem or "").lower()
+        if "indisponível" in texto or "nenhum item" in texto:
+            return cores.perigo
+        if vazio:
+            return "#ffb74d" if cores.escuro else "#a67c00"
+        return cores.texto_suave
+
     def _montar_botao_sinapi_cabecalho(self, parent):
-        caminho_icone = asset_path("icons", "excel24.png")
+        cores = self._cores
         kwargs_botao = {
             "text": "Abrir SINAPI Completa",
             "command": self._abrir_sinapi_real,
-            "bg": "#ececec",
-            "activebackground": "#dfe8ec",
+            "bg": cores.fundo,
+            "activebackground": cores.fundo_hover,
             "relief": "flat",
             "bd": 0,
             "padx": 4,
             "pady": 0,
             "cursor": "hand2",
             "font": ("Arial", 9),
-            "fg": "#444444",
+            "fg": cores.texto,
+            "activeforeground": cores.texto,
+            "highlightthickness": 0,
         }
-        if caminho_icone is not None:
-            self._icone_excel = tk.PhotoImage(file=str(caminho_icone))
+        try:
+            self._icone_excel = carregar_png_icone(self, "excel24.png")
             kwargs_botao["image"] = self._icone_excel
             kwargs_botao["compound"] = "left"
+        except (FileNotFoundError, OSError, tk.TclError):
+            pass
         tk.Button(parent, **kwargs_botao).pack(side="right", padx=(0, 10))
 
     def _abrir_sinapi_real(self):
@@ -327,7 +354,7 @@ class ConsultaSinapiFrame(tk.Frame):
         if not estado:
             self.label_status.config(
                 text="Selecione um estado antes de pesquisar.",
-                fg="#C62828",
+                fg=self._cores.perigo,
             )
             return
 
@@ -340,10 +367,7 @@ class ConsultaSinapiFrame(tk.Frame):
         )
         self._aplicar_unidades(unidades)
         self._preencher_resultados(resultados)
-        cor = "#555555" if not resultados.empty else "#a67c00"
-        if "indisponível" in mensagem.lower() or "nenhum item" in mensagem.lower():
-            cor = "#C62828"
-        self.label_status.config(text=mensagem, fg=cor)
+        self.label_status.config(text=mensagem, fg=self._cor_status(mensagem, vazio=resultados.empty))
 
     def _preencher_resultados(self, df):
         self.tree.delete(*self.tree.get_children())

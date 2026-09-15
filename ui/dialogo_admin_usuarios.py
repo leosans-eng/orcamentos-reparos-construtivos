@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 
 from core.api_client import get_client
 from core.api_exceptions import ApiError
-from ui.icones import criar_botao_ttk_com_icone
+from ui.icones import criar_botao_ttk_com_icone, definir_estado_botao_icone
 from ui.temas import aplicar_chrome_dialogo
 from ui.widgets import (
     aplicar_icone_janela,
@@ -319,7 +319,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
         criar_botao_ttk_com_icone(
             linha_botoes,
             texto="Novo usuário",
-            nome_icone="add-circle-outline",
+            nome_icone="person-add",
             command=self._novo_usuario,
             estilo=estilos.compacto_adicionar,
             cor_icone=estilos.icone_adicionar,
@@ -358,16 +358,17 @@ class DialogoAdminUsuarios(tk.Toplevel):
         )
         self.btn_admin.pack(side="left", padx=(0, 4))
 
-        # Sem ícone SVG: no Windows, ttk + SVG desabilitado gera artefato vermelho.
-        self.btn_excluir = ttk.Button(
+        self.btn_excluir = criar_botao_ttk_com_icone(
             linha_botoes,
-            text="Excluir",
+            texto="Excluir",
+            nome_icone="person-remove",
             command=self._excluir,
-            style=estilos.compacto_excluir,
-            state="disabled",
-            width=8,
+            estilo=estilos.compacto_excluir,
+            cor_icone=estilos.icone_excluir,
+            refs=self._refs_icones,
         )
         self.btn_excluir.pack(side="left", padx=(0, 4))
+        definir_estado_botao_icone(self.btn_excluir, "disabled")
 
         criar_botao_ttk_com_icone(
             linha_botoes,
@@ -433,7 +434,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
         self.btn_senha.config(state=estado)
         self.btn_ativo.config(state=estado)
         self.btn_admin.config(state=estado)
-        self.btn_excluir.config(state=estado)
+        definir_estado_botao_icone(self.btn_excluir, estado)
         if not tem:
             self.btn_ativo.config(text="Desativar")
             self.btn_admin.config(text="Tornar admin")

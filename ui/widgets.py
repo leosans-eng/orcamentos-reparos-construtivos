@@ -894,8 +894,26 @@ def criar_botao_voltar(parent, command, bg_parent=None):
     return btn
 
 
+def _limitar_posicao_a_area(x, y, largura, altura, area, margem=4):
+    """Mantém o retângulo dentro da área de trabalho do monitor."""
+    area_x, area_y, area_w, area_h = area
+    x_min = area_x + margem
+    y_min = area_y + margem
+    x_max = area_x + area_w - largura - margem
+    y_max = area_y + area_h - altura - margem
+    if x_max < x_min:
+        x = x_min
+    else:
+        x = min(max(int(x), x_min), x_max)
+    if y_max < y_min:
+        y = y_min
+    else:
+        y = min(max(int(y), y_min), y_max)
+    return x, y
+
+
 def vincular_tooltip(widget, texto: str):
-    """Exibe texto ao passar o mouse (tooltip simples, dentro da tela)."""
+    """Exibe texto ao passar o mouse (tooltip simples, no mesmo monitor)."""
     estado = {"janela": None}
 
     def _mostrar(_event):
@@ -922,14 +940,17 @@ def vincular_tooltip(widget, texto: str):
         janela.update_idletasks()
         largura = janela.winfo_reqwidth()
         altura = janela.winfo_reqheight()
-        tela_w = janela.winfo_screenwidth()
-        tela_h = janela.winfo_screenheight()
+        try:
+            referencia = widget.winfo_toplevel()
+        except tk.TclError:
+            referencia = widget
+        area = _obter_area_util_tela(referencia)
+        _area_x, area_y, _area_w, area_h = area
         x = widget.winfo_rootx() + widget.winfo_width() // 2 - largura // 2
         y = widget.winfo_rooty() + widget.winfo_height() + 4
-        if y + altura > tela_h - 8:
+        if y + altura > area_y + area_h - 8:
             y = widget.winfo_rooty() - altura - 4
-        x = max(4, min(x, tela_w - largura - 4))
-        y = max(4, min(y, tela_h - altura - 4))
+        x, y = _limitar_posicao_a_area(x, y, largura, altura, area)
         janela.wm_geometry(f"+{x}+{y}")
         estado["janela"] = janela
 
@@ -1119,9 +1140,11 @@ class CampoListaPesquisavel(tk.Frame):
         self._opcoes = []
         self._popup = None
         self._lista = None
+        self._scroll = None
         self._ignorando_foco = False
         self._fechando_escolha = False
         self._id_clique_fora = None
+        self._id_esconder = None
         self._alvo_bind_clique = None
         self._id_configure_topo = None
         self._grab_para_restaurar = None
@@ -1171,10 +1194,12 @@ class CampoListaPesquisavel(tk.Frame):
         self.var.set(valor or "")
 
     def fechar_lista(self):
+        self._cancelar_esconder()
         self._desvincular_configure_topo()
         popup = self._popup
         self._popup = None
         self._lista = None
+        self._scroll = None
         if popup is not None:
             try:
                 if popup.winfo_exists():
@@ -1236,20 +1261,26 @@ class CampoListaPesquisavel(tk.Frame):
             y_campo = self.winfo_rooty()
             h_campo = self.winfo_height()
             largura = max(self.winfo_width(), self._largura_minima_lista)
-            tela_h = self.winfo_screenheight()
+            try:
+                referencia = self.winfo_toplevel()
+            except tk.TclError:
+                referencia = self
+            area = _obter_area_util_tela(referencia)
+            _area_x, area_y, _area_w, area_h = area
         except tk.TclError:
             return
 
         altura = self._altura_popup_px()
         y = y_campo + h_campo
         # Prefere abrir para baixo, mesmo que ultrapasse a janela do diálogo.
-        # Só sobe se não couber na tela.
-        if y + altura > tela_h - 8:
+        # Só sobe se não couber no monitor.
+        if y + altura > area_y + area_h - 8:
             y_acima = y_campo - altura
-            if y_acima >= 8:
+            if y_acima >= area_y + 8:
                 y = y_acima
             else:
-                altura = max(160, tela_h - y - 8)
+                altura = max(160, area_y + area_h - y - 8)
+        x, y = _limitar_posicao_a_area(x, y, largura, altura, area)
         self._popup.geometry(f"{int(largura)}x{int(altura)}+{int(x)}+{int(y)}")
         try:
             self._popup.deiconify()
@@ -1260,20 +1291,26 @@ class CampoListaPesquisavel(tk.Frame):
     def _ponto_interno(self, x, y) -> bool:
         widgets = [self, self.entrada, self.btn_seta]
         if self._popup_ativo():
-            widgets.extend([self._popup, self._lista])
+            widgets.extend([self._popup, self._lista, self._scroll])
         for widget in widgets:
             try:
-                if not widget.winfo_ismapped():
+                if widget is None or not widget.winfo_ismapped():
                     continue
                 x0 = widget.winfo_rootx()
                 y0 = widget.winfo_rooty()
-                x1 = x0 + widget.winfo_width()
-                y1 = y0 + widget.winfo_height()
+                x1 = x0 + max(widget.winfo_width(), 1)
+                y1 = y0 + max(widget.winfo_height(), 1)
                 if x0 <= x < x1 and y0 <= y < y1:
                     return True
             except tk.TclError:
                 continue
         return False
+
+    def _ponteiro_interno(self) -> bool:
+        try:
+            return self._ponto_interno(self.winfo_pointerx(), self.winfo_pointery())
+        except tk.TclError:
+            return False
 
     def _ao_clique_fora(self, event):
         if not self._popup_ativo():
@@ -1319,8 +1356,13 @@ class CampoListaPesquisavel(tk.Frame):
         lista.bind("<ButtonRelease-1>", self._ao_escolher)
         lista.bind("<Return>", self._ao_escolher)
         lista.bind("<Escape>", lambda _e: self._fechar_e_focar())
+        for widget in (popup, lista, scroll):
+            widget.bind("<ButtonPress-1>", self._ao_pressionar_interno, add="+")
+            widget.bind("<B1-Motion>", self._ao_pressionar_interno, add="+")
+            widget.bind("<ButtonRelease-1>", self._ao_soltar_interno, add="+")
         self._popup = popup
         self._lista = lista
+        self._scroll = scroll
         self._desvincular_configure_topo()
         try:
             topo = self.winfo_toplevel()
@@ -1339,7 +1381,10 @@ class CampoListaPesquisavel(tk.Frame):
 
     def _ao_pressionar_interno(self, _event=None):
         self._ignorando_foco = True
-        self.after(200, self._liberar_foco)
+        self._cancelar_esconder()
+
+    def _ao_soltar_interno(self, _event=None):
+        self.after(250, self._liberar_foco)
 
     def _ao_botao_seta(self):
         if self._fechando_escolha:
@@ -1393,7 +1438,20 @@ class CampoListaPesquisavel(tk.Frame):
             self.after(200, self._liberar_foco)
 
     def _liberar_foco(self):
+        if self._ponteiro_interno():
+            self._ignorando_foco = True
+            return
         self._ignorando_foco = False
+
+    def _cancelar_esconder(self):
+        job = self._id_esconder
+        self._id_esconder = None
+        if job is None:
+            return
+        try:
+            self.after_cancel(job)
+        except tk.TclError:
+            pass
 
     def _selecionar_texto(self):
         try:
@@ -1452,20 +1510,31 @@ class CampoListaPesquisavel(tk.Frame):
         return None
 
     def _ao_foco_sair(self, _event=None):
-        if self._ignorando_foco:
+        if self._ignorando_foco or self._ponteiro_interno():
             return
-        self.after(120, self._esconder_lista_se_foco_fora)
+        self._cancelar_esconder()
+        self._id_esconder = self.after(200, self._esconder_lista_se_foco_fora)
 
     def _esconder_lista_se_foco_fora(self):
-        if self._ignorando_foco:
+        self._id_esconder = None
+        if self._ignorando_foco or self._ponteiro_interno():
             return
         try:
             foco = self.focus_get()
         except tk.TclError:
             self.fechar_lista()
             return
-        if foco in (self.entrada, self._lista, self.btn_seta):
+        internos = (self.entrada, self._lista, self.btn_seta, self._popup, self._scroll)
+        if foco in internos:
             return
+        try:
+            atual = foco
+            while atual is not None:
+                if atual in (self._popup, self._lista, self._scroll):
+                    return
+                atual = getattr(atual, "master", None)
+        except tk.TclError:
+            pass
         self.fechar_lista()
 
     def _ao_digitar(self, event=None):

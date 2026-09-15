@@ -5,7 +5,7 @@ from core.api_client import get_client
 from core.api_config import carregar_config, salvar_config
 from core.api_exceptions import ApiError
 from ui.dialogo_admin_usuarios import abrir_dialogo_admin_usuarios, usuario_atual_eh_admin
-from ui.icones import criar_botao_ttk_com_icone, definir_estado_botao_icone
+from ui.icones import criar_botao_ttk_com_icone, criar_label_icone, definir_estado_botao_icone
 from ui.temas import aplicar_chrome_dialogo, aplicar_tema, opcoes_tema, rotulo_tema, salvar_tema, tema_salvo
 from ui.widgets import (
     aplicar_icone_janela,
@@ -238,13 +238,7 @@ class DialogoConfiguracoes(tk.Toplevel):
         secao_inner = tk.Frame(secao, bg=cartao, padx=14, pady=12)
         secao_inner.pack(fill="x")
 
-        tk.Label(
-            secao_inner,
-            text="Base SINAPI",
-            font=("Arial", 10, "bold"),
-            fg=cores.titulo,
-            bg=cartao,
-        ).pack(anchor="w", pady=(0, 10))
+        self._titulo_secao(secao_inner, "server", "Base SINAPI", cores)
 
         linha_acao = tk.Frame(secao_inner, bg=cartao)
         linha_acao.pack(fill="x")
@@ -297,13 +291,7 @@ class DialogoConfiguracoes(tk.Toplevel):
         conta_inner = tk.Frame(secao_conta, bg=cartao, padx=14, pady=12)
         conta_inner.pack(fill="x")
 
-        tk.Label(
-            conta_inner,
-            text="Conta",
-            font=("Arial", 10, "bold"),
-            fg=cores.titulo,
-            bg=cartao,
-        ).pack(anchor="w", pady=(0, 10))
+        self._titulo_secao(conta_inner, "build", "Conta", cores)
 
         usuario = get_client().username or "—"
         tk.Label(
@@ -328,13 +316,9 @@ class DialogoConfiguracoes(tk.Toplevel):
         aparencia_inner = tk.Frame(secao_aparencia, bg=cartao, padx=14, pady=12)
         aparencia_inner.pack(fill="x")
 
-        tk.Label(
-            aparencia_inner,
-            text="Aparência",
-            font=("Arial", 10, "bold"),
-            fg=cores.titulo,
-            bg=cartao,
-        ).pack(anchor="w", pady=(0, 6))
+        self._titulo_secao(
+            aparencia_inner, "color-palette", "Aparência", cores, pady_baixo=6
+        )
         tk.Label(
             aparencia_inner,
             text="Tema visual da interface (Hub, botões, listas e campos).",
@@ -376,13 +360,9 @@ class DialogoConfiguracoes(tk.Toplevel):
             admin_inner = tk.Frame(secao_admin, bg=cartao, padx=14, pady=12)
             admin_inner.pack(fill="x")
 
-            tk.Label(
-                admin_inner,
-                text="Administração",
-                font=("Arial", 10, "bold"),
-                fg=cores.titulo,
-                bg=cartao,
-            ).pack(anchor="w", pady=(0, 6))
+            self._titulo_secao(
+                admin_inner, "people", "Administração", cores, pady_baixo=6
+            )
             tk.Label(
                 admin_inner,
                 text="Gerencie usuários, senhas e permissões.",
@@ -411,6 +391,19 @@ class DialogoConfiguracoes(tk.Toplevel):
             )
 
         self._atualizar_status()
+
+    def _titulo_secao(self, parent, nome_icone, texto, cores, *, pady_baixo=10):
+        criar_label_icone(
+            parent,
+            nome_icone,
+            texto=texto,
+            altura=16,
+            cor=cores.titulo,
+            bg=cores.fundo_cartao,
+            fg=cores.titulo,
+            fonte=("Arial", 10, "bold"),
+            refs=self._refs_icones,
+        ).pack(anchor="w", pady=(0, pady_baixo))
 
     def _trocar_senha(self):
         DialogoTrocarSenha(self)

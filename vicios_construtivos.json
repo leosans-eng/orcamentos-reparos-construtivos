@@ -564,6 +564,42 @@
         "Varanda",
         "Residência Inteira"
       ]
+    },
+    "Caimento incorreto dos pisos": {
+      "grupo_reparo": "Caimento incorreto dos pisos",
+      "etapas": [
+        {
+          "codigo_sinapi": "97633",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+        {
+          "codigo_sinapi": "87757",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+        {
+          "codigo_sinapi": "98554",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        },
+        {
+          "codigo_sinapi": "87250",
+          "unidade": "m²",
+          "tipo_calculo": "area_piso",
+          "coeficiente": 1.0
+        }
+      ],
+      "comodos_permitidos": [
+        "Banheiro",
+        "Cozinha",
+        "Área de Serviço",
+        "Área Externa",
+        "Varanda"
+      ]
     }
   },
   "itens_gerais": {

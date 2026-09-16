@@ -122,3 +122,13 @@ def composicoes_proprias_path() -> Path:
 
 def etapas_predefinidas_path() -> Path:
     return dados_usuario_dir() / "etapas_predefinidas.json"
+
+
+def area_comum_rascunhos_dir() -> Path:
+    pasta = dados_usuario_dir() / "area_comum_rascunhos"
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta
+
+
+def area_comum_autosave_path() -> Path:
+    return area_comum_rascunhos_dir() / "_autosave.json"

@@ -5,6 +5,7 @@ from core.api_client import get_client
 from ui.dialogo_configuracoes import abrir_dialogo_configuracoes
 from ui.icones import criar_icone_svg
 from ui.temas import cores_tema, tema_usa_imagens
+from ui.area_comum import acesso_area_comum_liberado
 from ui.widgets import aplicar_hover_cartao
 
 LARGURA_CARTAO = 240
@@ -15,11 +16,14 @@ ALTURA_ICONE_CARTAO = 20
 
 
 class HubFrame(tk.Frame):
-    def __init__(self, parent, ctx, on_selecionar_modulo, on_logout=None):
+    def __init__(
+        self, parent, ctx, on_selecionar_modulo, on_logout=None, *, offline=False
+    ):
         super().__init__(parent)
         self.ctx = ctx
         self.on_selecionar_modulo = on_selecionar_modulo
         self.on_logout = on_logout
+        self.offline = offline
         self._cache_icones = {}
         self._refs_icones = []
         self._montar()
@@ -37,6 +41,7 @@ class HubFrame(tk.Frame):
     def _montar(self):
         cores = cores_tema(self)
         self.configure(bg=cores.fundo)
+        area_comum_liberada = acesso_area_comum_liberado(offline=self.offline)
 
         faixa = tk.Frame(self, bg=cores.faixa, height=6)
         faixa.pack(fill="x")
@@ -99,8 +104,8 @@ class HubFrame(tk.Frame):
                         "com a opção de composições próprias"
                     ),
                     "modulo": "area_comum",
-                    "habilitado": False,
-                    "aviso": "Em breve",
+                    "habilitado": area_comum_liberada,
+                    "aviso": "Prévia" if area_comum_liberada else "Em breve",
                     "icone_titulo": "construct-outline",
                 },
             ],

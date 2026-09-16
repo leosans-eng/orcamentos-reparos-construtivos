@@ -11,6 +11,7 @@ from core.app_state import (
 )
 from core.precarga_catalogos import iniciar_precarga_catalogos
 from ui.area_privativa import criar_area_privativa
+from ui.area_comum import AreaComumFrame, acesso_area_comum_liberado
 from ui.composicoes_proprias import ComposicoesPropriasFrame
 from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.etapas_predefinidas import EtapasPredefinidasFrame
@@ -24,6 +25,7 @@ from tkinter import messagebox
 TITULOS_JANELA = {
     "hub": "ORC — Orçamentos de Reparos Construtivos",
     "area_privativa": "ORC — Área Privativa",
+    "area_comum": "ORC — Área Comum",
     "consulta_sinapi": "ORC — Consulta SINAPI",
     "orcamento_customizado": "ORC — Orçamento Customizado",
     "composicoes_proprias": "ORC — Composições Próprias",
@@ -204,6 +206,7 @@ class OrcApp:
             self.ctx,
             on_selecionar_modulo=self._ao_selecionar_modulo_hub,
             on_logout=None if self.offline else self._logout,
+            offline=self.offline,
         )
 
     def _logout(self):
@@ -279,10 +282,23 @@ class OrcApp:
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),
             )
+        elif nome == "area_comum":
+            self._frames[nome] = AreaComumFrame(
+                self.area_conteudo,
+                self.ctx,
+                on_voltar=lambda: self.mostrar_modulo("hub"),
+            )
 
     def _ao_selecionar_modulo_hub(self, modulo):
-        if modulo == "area_comum":
-            print("[ORC] Módulo Área Comum ainda não disponível")
+        if modulo == "area_comum" and not acesso_area_comum_liberado(
+            offline=self.offline
+        ):
+            messagebox.showinfo(
+                "Área Comum",
+                "Este módulo ainda está em desenvolvimento e, por enquanto, "
+                "está disponível apenas para administradores.",
+                parent=self.janela,
+            )
             return
         self.mostrar_modulo(modulo)
 
@@ -303,6 +319,7 @@ class OrcApp:
 
         modulos_expandidos = (
             "area_privativa",
+            "area_comum",
             "consulta_sinapi",
             "orcamento_customizado",
             "composicoes_proprias",
@@ -345,6 +362,7 @@ class OrcApp:
                 )
             elif nome in (
                 "area_privativa",
+                "area_comum",
                 "consulta_sinapi",
                 "orcamento_customizado",
                 "composicoes_proprias",

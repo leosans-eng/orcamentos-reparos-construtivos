@@ -70,12 +70,9 @@ def cidade_do_conjunto(nome_conjunto: str) -> str:
     return ALIAS_CIDADE.get(cidade, cidade)
 
 
-def resolver_uf_conjunto(nome_conjunto: str) -> ResultadoUfConjunto:
-    """Identifica a UF pela cidade no início do nome do conjunto Idebras."""
-    cidade = cidade_do_conjunto(nome_conjunto)
+def _resolver_cidade_normalizada(cidade: str) -> ResultadoUfConjunto:
     if not cidade:
         return ResultadoUfConjunto(cidade="", motivo="sem_cidade")
-
     unicos, ambiguos = _indice_municipios()
     if cidade in unicos:
         return ResultadoUfConjunto(cidade=cidade, uf=unicos[cidade], motivo="ok")
@@ -86,6 +83,18 @@ def resolver_uf_conjunto(nome_conjunto: str) -> ResultadoUfConjunto:
             motivo="ambigua",
         )
     return ResultadoUfConjunto(cidade=cidade, motivo="nao_encontrada")
+
+
+def resolver_uf_municipio(nome: str) -> ResultadoUfConjunto:
+    """Identifica a UF pelo nome do município (IBGE)."""
+    cidade = normalizar_cidade(nome)
+    cidade = ALIAS_CIDADE.get(cidade, cidade)
+    return _resolver_cidade_normalizada(cidade)
+
+
+def resolver_uf_conjunto(nome_conjunto: str) -> ResultadoUfConjunto:
+    """Identifica a UF pela cidade no início do nome do conjunto Idebras."""
+    return _resolver_cidade_normalizada(cidade_do_conjunto(nome_conjunto))
 
 
 def estado_uf_do_conjunto(nome_conjunto: str) -> str | None:

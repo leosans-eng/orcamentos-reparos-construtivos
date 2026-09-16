@@ -204,6 +204,7 @@ def medidas_para_orcamento(ambientes: list[AmbienteIdebras]) -> dict[str, dict[s
             "piso": parse_decimal_br(amb.area_piso),
             "rev_arg": parse_decimal_br(amb.area_parede),
             "rev_cer": parse_decimal_br(amb.area_parede_ceramica),
+            "perimetro": parse_decimal_br(amb.perimetro_piso),
         }
     return medidas
 

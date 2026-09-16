@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import math
 import os
 import threading
 import unicodedata
@@ -310,9 +309,18 @@ def criar_area_privativa(parent, ctx, on_voltar):
         fg=cores.texto,
         justify="center",
     ).grid(row=0, column=3, padx=2, pady=(0, 4))
+    tk.Label(
+        frame_tabela,
+        text="Perímetro\n(m)",
+        font=("Arial", 9, "bold"),
+        bg=fundo,
+        fg=cores.texto,
+        justify="center",
+    ).grid(row=0, column=4, padx=2, pady=(0, 4))
     frame_tabela.columnconfigure(0, weight=1)
 
     lista_comodos = list(COMODOS_AREA_PRIVATIVA)
+    CHAVES_METRAGEM = ("piso", "rev_arg", "rev_cer", "perimetro")
 
     comodos_area_molhada = [
         "Banheiro",
@@ -340,23 +348,29 @@ def criar_area_privativa(parent, ctx, on_voltar):
             row=i, column=0, sticky="ew", padx=2, pady=2
         )
 
-        entrada_piso = ttk.Entry(frame_tabela, width=9, justify="right")
+        entrada_piso = ttk.Entry(frame_tabela, width=7, justify="right")
         entrada_piso.grid(row=i, column=1, padx=2, pady=2)
 
-        entrada_rev_arg = ttk.Entry(frame_tabela, width=9, justify="right")
+        entrada_rev_arg = ttk.Entry(frame_tabela, width=7, justify="right")
         entrada_rev_arg.grid(row=i, column=2, padx=2, pady=2)
 
-        kwargs_cer = {"width": 9, "justify": "right"}
+        kwargs_cer = {"width": 7, "justify": "right"}
         if c not in comodos_com_rev_cer:
             kwargs_cer["state"] = "disabled"
         entrada_rev_cer = ttk.Entry(frame_tabela, **kwargs_cer)
-
         entrada_rev_cer.grid(row=i, column=3, padx=2, pady=2)
+
+        kwargs_perim = {"width": 7, "justify": "right"}
+        if c == "Residência Inteira":
+            kwargs_perim["state"] = "disabled"
+        entrada_perimetro = ttk.Entry(frame_tabela, **kwargs_perim)
+        entrada_perimetro.grid(row=i, column=4, padx=2, pady=2)
 
         comodos[c] = {
             "piso": entrada_piso,
             "rev_arg": entrada_rev_arg,
-            "rev_cer": entrada_rev_cer
+            "rev_cer": entrada_rev_cer,
+            "perimetro": entrada_perimetro,
         }
 
     def limpar_campos_metragem():
@@ -395,7 +409,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
         for comodo, valores in medidas.items():
             if comodo not in comodos:
                 continue
-            for chave in ("piso", "rev_arg", "rev_cer"):
+            for chave in CHAVES_METRAGEM:
                 entrada = comodos[comodo][chave]
                 if str(entrada.cget("state")) == "disabled":
                     continue
@@ -576,13 +590,13 @@ def criar_area_privativa(parent, ctx, on_voltar):
     frame_lista.rowconfigure(0, weight=1)
     frame_lista.columnconfigure(0, weight=1)
 
-    min_metragem, min_anomalia, min_lista = 200, 200, 260
-    painel_colunas.add(frame_metragem, minsize=min_metragem, stretch="never", width=240)
+    min_metragem, min_anomalia, min_lista = 340, 200, 240
+    painel_colunas.add(frame_metragem, minsize=min_metragem, stretch="never", width=360)
     painel_colunas.add(frame_anomalia, minsize=min_anomalia, stretch="never", width=240)
-    painel_colunas.add(frame_lista, minsize=min_lista, stretch="always", width=720)
+    painel_colunas.add(frame_lista, minsize=min_lista, stretch="always", width=640)
 
     _fracoes_colunas = {
-        "vals": list(obter_pref("area_privativa_colunas", [0.20, 0.20, 0.60]))
+        "vals": list(obter_pref("area_privativa_colunas", [0.26, 0.20, 0.54]))
     }
     _arrastando_colunas = {"ok": False}
     _job_aplicar_colunas = {"id": None}
@@ -758,7 +772,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
         for comodo in comodos_afetados:
             campos = comodos[comodo]
             tem_medida = False
-            for chave in ("piso", "rev_arg", "rev_cer"):
+            for chave in CHAVES_METRAGEM:
                 entrada = campos[chave]
                 if str(entrada.cget("state")) == "disabled":
                     continue
@@ -1066,7 +1080,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
             return medidas["rev_cer"] * etapa.get("coeficiente", 1)
 
         if tipo == "perimetro":
-            return math.sqrt(medidas["piso"]) * 4 * etapa.get("coeficiente", 1)
+            return medidas.get("perimetro", 0) * etapa.get("coeficiente", 1)
 
         if tipo == "por_comodo":
             return etapa["coeficiente"]
@@ -1088,19 +1102,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
         for comodo in item["comodos"]:
 
-            piso = ler_float_seguro(comodos[comodo]["piso"])
-            arg = ler_float_seguro(comodos[comodo]["rev_arg"])
-
-            if comodos[comodo]["rev_cer"].cget("state") != "disabled":
-                cer = ler_float_seguro(comodos[comodo]["rev_cer"])
-            else:
-                cer = 0
-
-            medidas = {
-                "piso": piso,
-                "rev_arg": arg,
-                "rev_cer": cer
-            }
+            medidas = medidas_do_comodo(comodo)
 
             for etapa in etapas:
 
@@ -1120,14 +1122,16 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
         return total
 
-    def medidas_do_comodo(comodo):
-        piso = ler_float_seguro(comodos[comodo]["piso"])
-        arg = ler_float_seguro(comodos[comodo]["rev_arg"])
-        if comodos[comodo]["rev_cer"].cget("state") != "disabled":
-            cer = ler_float_seguro(comodos[comodo]["rev_cer"])
-        else:
-            cer = 0
-        return {"piso": piso, "rev_arg": arg, "rev_cer": cer}
+    def medidas_do_comodo(comodo, *, estrito=False):
+        ler = ler_float if estrito else ler_float_seguro
+        medidas = {}
+        for chave in CHAVES_METRAGEM:
+            entrada = comodos[comodo][chave]
+            if str(entrada.cget("state")) == "disabled":
+                medidas[chave] = 0
+            else:
+                medidas[chave] = ler(entrada)
+        return medidas
 
     def montar_linhas_previa(item):
         linhas = []
@@ -1340,14 +1344,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
             for comodo in comodos_afetados:
                 try:
-                    piso = ler_float(comodos[comodo]["piso"])
-                    arg = ler_float(comodos[comodo]["rev_arg"])
-
-                    if comodos[comodo]["rev_cer"].cget("state") != "disabled":
-                        cer = ler_float(comodos[comodo]["rev_cer"])
-                    else:
-                        cer = 0
-
+                    medidas = medidas_do_comodo(comodo, estrito=True)
                 except Exception as e:
                     print("ERRO:", e)
                     mostrar_feedback(
@@ -1356,12 +1353,6 @@ def criar_area_privativa(parent, ctx, on_voltar):
                     )
 
                     return
-
-                medidas = {
-                    "piso": piso,
-                    "rev_arg": arg,
-                    "rev_cer": cer
-                }
 
                 for ordem, etapa in enumerate(etapas):
 
@@ -1974,7 +1965,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
         for nome, campos in comodos.items():
             metragens[nome] = {
                 chave: campos[chave].get()
-                for chave in ("piso", "rev_arg", "rev_cer")
+                for chave in CHAVES_METRAGEM
             }
         return {
             "anomalias": deepcopy(lista_anomalias),
@@ -1995,12 +1986,12 @@ def criar_area_privativa(parent, ctx, on_voltar):
             for nome, valores in (snap.get("metragens") or {}).items():
                 if nome not in comodos:
                     continue
-                for chave, valor in valores.items():
+                for chave in CHAVES_METRAGEM:
                     entrada = comodos[nome][chave]
                     if str(entrada.cget("state")) == "disabled":
                         continue
                     entrada.delete(0, "end")
-                    entrada.insert(0, valor)
+                    entrada.insert(0, valores.get(chave, ""))
             entrada_bdi.delete(0, "end")
             entrada_bdi.insert(0, snap.get("bdi", ""))
             entrada_aluguel.delete(0, "end")

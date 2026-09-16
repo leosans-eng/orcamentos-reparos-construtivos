@@ -32,8 +32,8 @@ class DialogoAmbientesPlanta(tk.Toplevel):
         aplicar_icone_janela(self)
         self.transient(parent)
         self.grab_set()
-        self.geometry("980x460")
-        self.minsize(760, 360)
+        self.geometry("1060x460")
+        self.minsize(820, 360)
 
         painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
         painel.pack(fill="both", expand=True)
@@ -62,7 +62,7 @@ class DialogoAmbientesPlanta(tk.Toplevel):
             fg=cores.texto_suave,
             bg=fundo,
             anchor="w",
-            wraplength=900,
+            wraplength=1000,
             justify="left",
         ).grid(row=1, column=0, sticky="ew", pady=(2, 8))
 
@@ -82,17 +82,17 @@ class DialogoAmbientesPlanta(tk.Toplevel):
         tree.heading("piso", text="Piso (m²)")
         tree.heading("parede", text="Rev. Arg. (m²)")
         tree.heading("ceramica", text="Rev. Cer. (m²)")
-        tree.heading("perimetro", text="Perímetro")
+        tree.heading("perimetro", text="Perímetro (m)")
         tree.heading("tipo_piso", text="Tipo de piso")
         tree.heading("teto", text="Teto")
-        tree.column("ambiente", width=160, anchor="w")
-        tree.column("mapeamento", width=130, anchor="w")
-        tree.column("piso", width=90, anchor="e")
-        tree.column("parede", width=110, anchor="e")
-        tree.column("ceramica", width=110, anchor="e")
-        tree.column("perimetro", width=90, anchor="e")
-        tree.column("tipo_piso", width=150, anchor="w")
-        tree.column("teto", width=110, anchor="w")
+        tree.column("ambiente", width=150, minwidth=110, anchor="w", stretch=False)
+        tree.column("mapeamento", width=120, minwidth=90, anchor="w", stretch=False)
+        tree.column("piso", width=80, minwidth=70, anchor="e", stretch=False)
+        tree.column("parede", width=100, minwidth=80, anchor="e", stretch=False)
+        tree.column("ceramica", width=100, minwidth=80, anchor="e", stretch=False)
+        tree.column("perimetro", width=100, minwidth=90, anchor="e", stretch=False)
+        tree.column("tipo_piso", width=210, minwidth=190, anchor="w", stretch=True)
+        tree.column("teto", width=110, minwidth=80, anchor="w", stretch=False)
 
         scroll = ttk.Scrollbar(painel, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scroll.set)

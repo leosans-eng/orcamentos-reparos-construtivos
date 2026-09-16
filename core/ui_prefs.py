@@ -10,7 +10,8 @@ from app_paths import dados_usuario_dir
 ORDENACAO_CRIADO = "criado_em"
 ORDENACAO_ATUALIZADO = "atualizado_em"
 ORDENACOES_LISTA_ORCAMENTOS = (ORDENACAO_CRIADO, ORDENACAO_ATUALIZADO)
-COLUNAS_AREA_PRIVATIVA_PADRAO = (0.20, 0.20, 0.60)
+COLUNAS_AREA_PRIVATIVA_PADRAO = (0.26, 0.20, 0.54)
+COLUNAS_AREA_PRIVATIVA_LEGADO = (0.20, 0.20, 0.60)
 
 
 def _normalizar_colunas_area_privativa(valor) -> list[float]:
@@ -23,7 +24,13 @@ def _normalizar_colunas_area_privativa(valor) -> list[float]:
     total = sum(vals)
     if total <= 0:
         return list(COLUNAS_AREA_PRIVATIVA_PADRAO)
-    return [round(v / total, 4) for v in vals]
+    normalizados = [round(v / total, 4) for v in vals]
+    if all(
+        abs(atual - antigo) < 0.012
+        for atual, antigo in zip(normalizados, COLUNAS_AREA_PRIVATIVA_LEGADO)
+    ):
+        return list(COLUNAS_AREA_PRIVATIVA_PADRAO)
+    return normalizados
 
 
 def _prefs_padrao() -> dict:

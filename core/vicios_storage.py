@@ -22,7 +22,7 @@ ROTULOS_TIPO_CALCULO = {
     "area_piso": "Área de piso",
     "area_rev_arg": "Área de revestimento argamassado",
     "area_rev_cer": "Área de revestimento cerâmico",
-    "perimetro": "Perímetro (a partir do piso)",
+    "perimetro": "Perímetro (m)",
     "por_comodo": "Por cômodo",
     "fixo": "Quantidade fixa",
 }

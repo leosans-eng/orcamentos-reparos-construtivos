@@ -1818,7 +1818,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         self.btn_desfazer = criar_botao_ttk_so_icone(
             container_historico,
-            nome_icone="caret-back-outline",
+            nome_icone="arrow-undo-sharp",
             command=self._desfazer,
             cor_icone=self._estilos.icone,
             refs=self._icones_botoes,
@@ -1829,7 +1829,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
 
         self.btn_refazer = criar_botao_ttk_so_icone(
             container_historico,
-            nome_icone="caret-forward-outline",
+            nome_icone="arrow-redo-sharp",
             command=self._refazer,
             cor_icone=self._estilos.icone,
             refs=self._icones_botoes,

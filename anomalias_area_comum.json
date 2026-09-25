@@ -1,0 +1,40 @@
+{
+  "versao": 1,
+  "anomalias": {
+    "Desplacamento de pisos cerâmicos": {
+      "reparos": [
+        {
+          "id": "abd99789-560c-4186-ae93-141f78bd9d73",
+          "nome": "Reparo padrão",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "95a7b460-ebbe-4b34-a22d-18e3597327be",
+          "etapa_nome": "SUBSTITUIÇÃO DOS PISOS CERÂMICOS (DESPLACAMENTO/HALL)",
+          "tipo_calculo_etapa": "area_piso_hall_total",
+          "itens": []
+        }
+      ]
+    },
+    "TESTE": {
+      "reparos": [
+        {
+          "id": "e9c10a56-5fd3-4f68-9cdc-d3a589d6cbd8",
+          "nome": "Reparo padrão",
+          "origem": "itens",
+          "etapa_predefinida_id": "",
+          "etapa_nome": "",
+          "tipo_calculo_etapa": "fixo",
+          "itens": []
+        },
+        {
+          "id": "6cd1df7e-8222-441d-8d55-f2ed58548b32",
+          "nome": "Teste2",
+          "origem": "itens",
+          "etapa_predefinida_id": "",
+          "etapa_nome": "",
+          "tipo_calculo_etapa": "fixo",
+          "itens": []
+        }
+      ]
+    }
+  }
+}

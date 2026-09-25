@@ -488,6 +488,9 @@ def estilos_botao(widget, tema_id: str | None = None) -> EstilosBotao:
             icone_editar=cores.titulo,
             icone_salvar=verde,
         )
+    # No tema padrão os botões coloridos (Add/Save/Delete) usam ícone preto
+    # para contrastar com o fundo verde/vermelho. Ícones soltos (Compact)
+    # usam a cor do título — senão ficam pretos sobre cinza.
     preto = "#000000"
     return EstilosBotao(
         adicionar="Add.TButton",
@@ -498,7 +501,7 @@ def estilos_botao(widget, tema_id: str | None = None) -> EstilosBotao:
         compacto_adicionar="Add.Compact.TButton",
         compacto_excluir="Delete.Compact.TButton",
         compacto_editar="Edit.Compact.TButton",
-        icone=preto,
+        icone=cores.titulo,
         icone_adicionar=preto,
         icone_excluir=preto,
         icone_editar=preto,

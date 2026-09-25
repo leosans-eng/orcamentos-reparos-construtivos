@@ -29,6 +29,7 @@ from ui.dialogo_ambientes_planta import DialogoAmbientesPlanta
 from ui.dialogo_config_anomalias import DialogoConfigAnomalias
 from ui.dialogo_importar_autor_idebras import DialogoImportarAutorIdebras
 from ui.dialogo_previa_anomalia import DialogoPreviaAnomalia
+from ui.calculadora import abrir_calculadora
 from ui.icones import (
     IndicadorAmpulheta,
     carregar_png_icone,
@@ -402,6 +403,32 @@ def criar_area_privativa(parent, ctx, on_voltar):
         cor_icone=estilos.icone,
         refs=_refs_icones,
     ).pack(side="left")
+
+    kwargs_calc = {
+        "command": lambda: abrir_calculadora(root, ancora=btn_calculadora),
+        "bg": fundo,
+        "activebackground": cores.fundo_hover,
+        "relief": "flat",
+        "bd": 0,
+        "padx": 4,
+        "pady": 0,
+        "cursor": "hand2",
+        "highlightthickness": 0,
+    }
+    try:
+        icone_calc = criar_icone_svg(
+            botoes_metragem, "calculator-outline", altura=20, cor=cores.titulo
+        )
+        _refs_icones.append(icone_calc)
+        kwargs_calc["image"] = icone_calc
+    except (ImportError, FileNotFoundError, tk.TclError, OSError):
+        kwargs_calc["text"] = "Calc"
+        kwargs_calc["font"] = ("Arial", 9)
+        kwargs_calc["fg"] = cores.titulo
+        kwargs_calc["activeforeground"] = cores.titulo
+    btn_calculadora = tk.Button(botoes_metragem, **kwargs_calc)
+    btn_calculadora.pack(side="right")
+    vincular_tooltip(btn_calculadora, "Abrir Calculadora")
 
     def preencher_metragens(medidas):
         limpar_campos_metragem()
@@ -1000,7 +1027,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     btn_desfazer = criar_botao_ttk_so_icone(
         container_historico,
-        nome_icone="caret-back-outline",
+        nome_icone="arrow-undo-sharp",
         command=lambda: desfazer(),
         cor_icone=estilos.icone,
         refs=_refs_icones,
@@ -1011,7 +1038,7 @@ def criar_area_privativa(parent, ctx, on_voltar):
 
     btn_refazer = criar_botao_ttk_so_icone(
         container_historico,
-        nome_icone="caret-forward-outline",
+        nome_icone="arrow-redo-sharp",
         command=lambda: refazer(),
         cor_icone=estilos.icone,
         refs=_refs_icones,

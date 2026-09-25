@@ -87,6 +87,19 @@ def vicios_construtivos_path_gravacao() -> Path:
     return app_dir() / "vicios_construtivos.json"
 
 
+def anomalias_area_comum_path() -> Path:
+    gravacao = app_dir() / "anomalias_area_comum.json"
+    bundle = bundle_dir() / "anomalias_area_comum.json"
+    for candidate in (gravacao, bundle):
+        if candidate.is_file():
+            return candidate
+    return gravacao
+
+
+def anomalias_area_comum_path_gravacao() -> Path:
+    return app_dir() / "anomalias_area_comum.json"
+
+
 def municipios_uf_path() -> Path | None:
     """JSON compacto município → UF (IBGE), empacotado com o aplicativo."""
     for candidate in (

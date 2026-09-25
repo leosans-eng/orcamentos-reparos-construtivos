@@ -854,9 +854,27 @@ def aplicar_hover_cartao(
 
 def criar_botao_voltar(parent, command, bg_parent=None):
     """Botão 'Voltar ao início' no mesmo padrão visual dos cartões do Hub."""
+    import tkinter.font as tkfont
+
+    from ui.icones import criar_icone_svg
     from ui.temas import cores_tema
 
     cores = cores_tema(parent)
+    try:
+        fonte = tkfont.Font(root=parent, family="Arial", size=10, weight="bold")
+        altura_icone = max(12, fonte.metrics("ascent"))
+    except tk.TclError:
+        fonte = ("Arial", 10, "bold")
+        altura_icone = 13
+
+    icone = criar_icone_svg(
+        parent,
+        "return-up-back",
+        altura=altura_icone,
+        cor=cores.titulo,
+        cortar_margens=True,
+    )
+
     btn = tk.Frame(
         parent,
         bg=cores.fundo_cartao,
@@ -866,14 +884,21 @@ def criar_botao_voltar(parent, command, bg_parent=None):
     )
     lbl = tk.Label(
         btn,
-        text="← Voltar",
-        font=("Arial", 10, "bold"),
+        text="Voltar",
+        image=icone,
+        compound="left",
+        font=fonte,
         fg=cores.titulo,
         bg=cores.fundo_cartao,
-        padx=16,
+        padx=12,
         pady=6,
+        bd=0,
+        highlightthickness=0,
+        cursor="hand2",
     )
+    lbl.image = icone  # type: ignore[attr-defined]
     lbl.pack()
+    btn._orc_img_voltar = icone  # type: ignore[attr-defined]
 
     def ao_clicar(_event=None):
         command()

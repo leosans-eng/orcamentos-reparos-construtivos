@@ -16,7 +16,7 @@ _instancia: CalculadoraFlutuante | None = None
 class CalculadoraFlutuante(tk.Toplevel):
     """Janela pequena, always-on-top, arrastável pela barra de título."""
 
-    def __init__(self, parent):
+    def __init__(self, parent, ancora=None):
         super().__init__(parent)
         self.withdraw()
         self.overrideredirect(True)
@@ -37,7 +37,7 @@ class CalculadoraFlutuante(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self._fechar())
 
         self.update_idletasks()
-        self._posicionar_junto_ao_pai(parent)
+        self._posicionar_junto_ao_pai(parent, ancora=ancora)
         self.deiconify()
         self.lift()
         try:
@@ -163,18 +163,48 @@ class CalculadoraFlutuante(tk.Toplevel):
         bg = _misturar(cores.fundo, cores.titulo, 0.18)
         return bg, cores.texto, _misturar(bg, cores.titulo, 0.12)
 
-    def _posicionar_junto_ao_pai(self, parent):
-        try:
-            px = parent.winfo_rootx()
-            py = parent.winfo_rooty()
-            pw = parent.winfo_width()
-        except tk.TclError:
-            px, py, pw = 100, 100, 400
+    def _posicionar_junto_ao_pai(self, parent, ancora=None):
         largura = max(self.winfo_reqwidth(), 220)
         altura = max(self.winfo_reqheight(), 280)
-        x = px + max(20, pw - largura - 40)
-        y = py + 80
-        self.geometry(f"{largura}x{altura}+{x}+{y}")
+        margem = 8
+        try:
+            tela_w = self.winfo_screenwidth()
+            tela_h = self.winfo_screenheight()
+        except tk.TclError:
+            tela_w, tela_h = 1920, 1080
+
+        x = y = None
+        if ancora is not None:
+            try:
+                ax = ancora.winfo_rootx()
+                ay = ancora.winfo_rooty()
+                aw = ancora.winfo_width()
+                x = ax + aw + 6
+                y = ay
+                if x + largura > tela_w - margem:
+                    x = ax - largura - 6
+            except tk.TclError:
+                x = y = None
+
+        if x is None or y is None:
+            try:
+                px = parent.winfo_rootx()
+                py = parent.winfo_rooty()
+                pw = parent.winfo_width()
+            except tk.TclError:
+                px, py, pw = 100, 100, 400
+            x = px + max(20, pw - largura - 40)
+            y = py + 80
+
+        if y + altura > tela_h - margem:
+            y = max(margem, tela_h - altura - margem)
+        if y < margem:
+            y = margem
+        if x < margem:
+            x = margem
+        if x + largura > tela_w - margem:
+            x = max(margem, tela_w - largura - margem)
+        self.geometry(f"{largura}x{altura}+{int(x)}+{int(y)}")
 
     def _iniciar_arrasto(self, event):
         self._arrasto_x = event.x_root - self.winfo_x()
@@ -280,7 +310,7 @@ class CalculadoraFlutuante(tk.Toplevel):
             pass
 
 
-def abrir_calculadora(parent) -> CalculadoraFlutuante:
+def abrir_calculadora(parent, ancora=None) -> CalculadoraFlutuante:
     """Abre a calculadora ou traz a instância existente para frente."""
     global _instancia
     if _instancia is not None:
@@ -290,7 +320,7 @@ def abrir_calculadora(parent) -> CalculadoraFlutuante:
                 return _instancia
         except tk.TclError:
             _instancia = None
-    _instancia = CalculadoraFlutuante(parent)
+    _instancia = CalculadoraFlutuante(parent, ancora=ancora)
     return _instancia
 
 

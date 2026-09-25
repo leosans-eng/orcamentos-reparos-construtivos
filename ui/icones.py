@@ -30,6 +30,7 @@ def criar_icone_svg(
     angulo: float = 0,
     escala_x: float = 1.0,
     escala_y: float = 1.0,
+    cortar_margens: bool = False,
 ) -> tk.PhotoImage:
     """Rasteriza um SVG de assets/icons/{nome}.svg na altura indicada (px)."""
     if SvgImage is None:
@@ -44,7 +45,10 @@ def criar_icone_svg(
     if escala_x != 1.0 or escala_y != 1.0:
         svg_texto = _svg_com_escala(svg_texto, escala_x, escala_y)
 
-    base = SvgImage(master=master, data=svg_texto, scaletoheight=altura)
+    altura_raster = max(int(altura), 1) * (4 if cortar_margens else 1)
+    base = SvgImage(master=master, data=svg_texto, scaletoheight=altura_raster)
+    if cortar_margens:
+        base = _photo_preencher_altura(master, base, altura)
     if not angulo:
         return base
     return _photo_rotacionado(master, base, angulo, altura)
@@ -90,6 +94,22 @@ def _photo_rotacionado(
     y = (tamanho - girado.height) // 2
     canvas.paste(girado, (x, y), girado)
     return ImageTk.PhotoImage(canvas, master=master)
+
+
+def _photo_preencher_altura(master: tk.Misc, base: tk.PhotoImage, altura: int) -> tk.PhotoImage:
+    """Recorta transparência e escala só à altura, para o traço preencher o espaço."""
+    if Image is None or ImageTk is None:
+        return base
+    pil = ImageTk.getimage(base).convert("RGBA")
+    bbox = pil.getbbox()
+    if bbox:
+        pil = pil.crop(bbox)
+    if pil.height < 1:
+        return base
+    nova_h = max(1, int(altura))
+    nova_w = max(1, round(pil.width * nova_h / pil.height))
+    pil = pil.resize((nova_w, nova_h), Image.Resampling.LANCZOS)
+    return ImageTk.PhotoImage(pil, master=master)
 
 
 def criar_label_icone(

@@ -287,6 +287,7 @@ class OrcApp:
                 self.area_conteudo,
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),
+                offline=self.offline,
             )
 
     def _ao_selecionar_modulo_hub(self, modulo):

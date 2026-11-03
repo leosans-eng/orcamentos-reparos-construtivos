@@ -81,6 +81,34 @@ def carregar_arquivo():
     return {"versao": 1, "orcamento_ativo_id": None, "orcamentos": []}
 
 
+def _detalhe_obsoleto(detalhe: dict, resumo: dict) -> bool:
+    try:
+        if int(resumo.get("versao", 1)) != int(detalhe.get("versao", 1)):
+            return True
+    except (TypeError, ValueError):
+        return True
+    return _normalizar_data(resumo.get("atualizado_em")) != _normalizar_data(
+        detalhe.get("atualizado_em")
+    )
+
+
+def _resumo_da_lista(orcamento_id: str) -> dict | None:
+    if not _lista_cache:
+        return None
+    for item in _lista_cache:
+        if str(item.get("id")) == str(orcamento_id):
+            return item
+    return None
+
+
+def _descartar_detalhes_obsoletos(resumos: list[dict]) -> None:
+    por_id = {str(item.get("id")): item for item in resumos}
+    for oid in list(_detalhe_cache):
+        resumo = por_id.get(oid)
+        if resumo is None or _detalhe_obsoleto(_detalhe_cache[oid], resumo):
+            _detalhe_cache.pop(oid, None)
+
+
 def listar_orcamentos_resumo(dados=None, *, forcar_rede: bool = False):
     del dados
     global _lista_cache
@@ -106,6 +134,7 @@ def listar_orcamentos_resumo(dados=None, *, forcar_rede: bool = False):
             }
         )
     _lista_cache = deepcopy(resumos)
+    _descartar_detalhes_obsoletos(resumos)
     return resumos
 
 
@@ -126,7 +155,11 @@ def obter_orcamento_dict(orcamento_id, dados=None, *, forcar_rede: bool = False)
     if forcar_rede:
         _detalhe_cache.pop(orcamento_id, None)
     elif orcamento_id in _detalhe_cache:
-        return deepcopy(_detalhe_cache[orcamento_id])
+        cached = _detalhe_cache[orcamento_id]
+        resumo = _resumo_da_lista(orcamento_id)
+        if resumo is None or not _detalhe_obsoleto(cached, resumo):
+            return deepcopy(cached)
+        _detalhe_cache.pop(orcamento_id, None)
     try:
         registro = get_client().obter_orcamento(orcamento_id)
     except ApiError as exc:

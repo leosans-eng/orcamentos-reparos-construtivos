@@ -1913,7 +1913,7 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self.on_voltar()
 
     def _carregar_orcamento_por_id(self, orcamento_id):
-        registro = obter_orcamento_dict(orcamento_id)
+        registro = obter_orcamento_dict(orcamento_id, forcar_rede=True)
         if registro is None:
             raise ValueError(f"Orçamento não encontrado: {orcamento_id}")
         return dict_para_orcamento(registro)
@@ -3342,4 +3342,4 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         self._atualizar_banner_depreciados()
 
     def focar(self):
-        self.recarregar_orcamento(forcar_rede=False)
+        self.recarregar_orcamento(forcar_rede=True)

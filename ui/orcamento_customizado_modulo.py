@@ -38,7 +38,7 @@ class OrcamentoCustomizadoModulo(tk.Frame):
             self._frame_editor = None
             self._orcamento_aberto_id = None
         self._frame_selecao.pack(fill="both", expand=True)
-        self._frame_selecao.recarregar()
+        self._frame_selecao.recarregar(forcar_rede=True)
 
     def _abrir_editor(self, orcamento_id):
         if self._abrindo_editor:

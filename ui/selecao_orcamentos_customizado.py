@@ -288,6 +288,7 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             (
                 resumo.get("id"),
                 resumo.get("nome"),
+                resumo.get("versao"),
                 resumo.get("atualizado_em"),
                 resumo.get("grupos"),
                 resumo.get("itens"),

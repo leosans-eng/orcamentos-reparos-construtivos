@@ -108,8 +108,7 @@ class JanelaORCCAD:
             btn_salvar.pack(fill="x")
             vincular_tooltip(
                 btn_salvar,
-                "Grava a área construída e o perímetro das fachadas "
-                "e mostra o desenho em Dados iniciais.",
+                "Grava a área construída e o perímetro das fachadas."
             )
 
         ttk.Label(lado, text="Campo da Área Comum").pack(anchor="w", pady=(12, 0))

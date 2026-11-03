@@ -22,7 +22,13 @@ from core.area_comum import (
     normalizar_rascunho,
     rascunho_tem_conteudo,
 )
-from core.area_comum_anomalias import carregar_catalogo, nomes_anomalias
+from core.area_comum_anomalias import (
+    ROTULOS_PERCENTUAIS_ABA1,
+    carregar_catalogo,
+    nomes_anomalias,
+    obter_reparo,
+    valores_considerados_reparo,
+)
 from core.area_comum_calculos import calcular_quantitativos, numero, parse_expressao
 from core.area_comum_orcamento import (
     migrar_extras_para_grupos,
@@ -222,6 +228,8 @@ class AreaComumFrame(tk.Frame):
         self._refs_icones = []
         self._sujo = False
         self._carregando = False
+        self._sincronizando_percentuais = False
+        self._pct_em_edicao = {}
         self._cursor_espera_nivel = 0
         self._cursores_anteriores = []
         self._perguntando_uf = False
@@ -864,6 +872,16 @@ class AreaComumFrame(tk.Frame):
             )
             entrada_pct.grid(row=linha, column=1, sticky="w", pady=3, padx=(0, 4))
             self._vincular_campo_numerico(entrada_pct, percentual=True)
+            entrada_pct.bind(
+                "<FocusIn>",
+                lambda _e, c=chave: self._ao_focar_percentual(c),
+                add="+",
+            )
+            entrada_pct.bind(
+                "<FocusOut>",
+                lambda _e, c=chave, w=entrada_pct: self._ao_sair_percentual(c, w),
+                add="+",
+            )
             tk.Label(
                 parent,
                 textvariable=self.var_pct_qtd[chave],
@@ -900,7 +918,7 @@ class AreaComumFrame(tk.Frame):
             topo,
             text=(
                 "Anomalias cadastradas (cada uma aponta para itens SINAPI ou para uma "
-                "etapa pré-definida). Se houver mais de um reparo, você escolhe na hora de adicionar."
+                "etapa pré-definida). Clique duas vezes na linha para alterar a porcentagem."
             ),
             bg=fundo,
             fg=cores.texto_suave,
@@ -943,31 +961,45 @@ class AreaComumFrame(tk.Frame):
         tabela.pack(fill="both", expand=True, padx=10, pady=(0, 6))
         self.tree_anomalias = ttk.Treeview(
             tabela,
-            columns=("reparo", "percentual"),
+            columns=("reparo", "percentual", "valor"),
             show="tree headings",
             selectmode="browse",
         )
         self.tree_anomalias.heading("#0", text="Anomalia")
         self.tree_anomalias.heading("reparo", text="Reparo")
         self.tree_anomalias.heading("percentual", text="% qtd.")
-        self.tree_anomalias.column("#0", width=320)
-        self.tree_anomalias.column("reparo", width=280)
+        self.tree_anomalias.heading("valor", text="Valor considerado")
+        self.tree_anomalias.column("#0", width=280)
+        self.tree_anomalias.column("reparo", width=220)
         self.tree_anomalias.column("percentual", width=80, anchor="e")
+        self.tree_anomalias.column("valor", width=220, anchor="e")
+        self.tree_anomalias.bind("<Double-1>", self._ao_duplo_clique_anomalia)
 
         scroll = ttk.Scrollbar(tabela, orient="vertical", command=self.tree_anomalias.yview)
         self.tree_anomalias.configure(yscrollcommand=scroll.set)
         self.tree_anomalias.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
+        botoes_anom = tk.Frame(aba, bg=fundo)
+        botoes_anom.pack(anchor="w", padx=10, pady=(0, 10))
         criar_botao_ttk_com_icone(
-            aba,
+            botoes_anom,
             texto="Remover selecionada",
             nome_icone="trash-outline",
             command=self._remover_anomalia_orcamento,
             estilo=self._estilos.compacto_excluir,
             cor_icone=self._estilos.icone_excluir,
             refs=self._refs_icones,
-        ).pack(anchor="w", padx=10, pady=(0, 10))
+        ).pack(side="left")
+        criar_botao_ttk_com_icone(
+            botoes_anom,
+            texto="Alterar porcentagem",
+            nome_icone="pencil",
+            command=self._alterar_percentual_anomalia,
+            estilo=self._estilos.compacto_editar,
+            cor_icone=self._estilos.icone_editar,
+            refs=self._refs_icones,
+        ).pack(side="left", padx=(6, 0))
 
     def _criar_halo(self, parent, *, padx=3, pady=2):
         return tk.Frame(parent, bg=self._cores.fundo, padx=padx, pady=pady)
@@ -1445,7 +1477,11 @@ class AreaComumFrame(tk.Frame):
             )
 
     def _ao_alterar_campo(self, *_args):
-        if self._carregando or self._aplicando_historico:
+        if (
+            self._carregando
+            or self._aplicando_historico
+            or self._sincronizando_percentuais
+        ):
             return
         self._marcar_sujo()
         self._agendar_calculo()
@@ -1576,6 +1612,7 @@ class AreaComumFrame(tk.Frame):
         self.var_esquadrias_total["area"].set(_fmt(q.get("esquadria_area_pav_m2", 0)))
 
         self._atualizar_preview_orcamento()
+        self._atualizar_valores_anomalias_orcamento()
 
     def _coletar_rascunho(self) -> dict:
         dados = novo_rascunho()
@@ -1956,6 +1993,7 @@ class AreaComumFrame(tk.Frame):
             self.campo_catalogo.definir_opcoes(nomes)
         self._carregar_etapas()
         self._recalcular()
+        self._redesenhar_anomalias_orcamento()
 
     def _abrir_config_anomalias(self):
         DialogoConfigAnomaliasAreaComum(
@@ -2046,14 +2084,19 @@ class AreaComumFrame(tk.Frame):
         percentual = self._perguntar_percentual_anomalia(nome)
         if percentual is None:
             return
-        self._anomalias_orcamento.append(
-            nova_anomalia_orcamento(
-                nome=nome,
-                reparo_id=reparo.get("id"),
-                reparo_nome=reparo.get("nome"),
-                percentual=percentual,
-            )
+        nova = nova_anomalia_orcamento(
+            nome=nome,
+            reparo_id=reparo.get("id"),
+            reparo_nome=reparo.get("nome"),
+            percentual=percentual,
         )
+        self._aplicar_percentuais_aba1(
+            list(reparo.get("percentuais_aba1") or []),
+            percentual,
+            origem_nome=nome,
+            excluir_id=nova.get("id"),
+        )
+        self._anomalias_orcamento.append(nova)
         self._redesenhar_anomalias_orcamento()
         self._marcar_sujo()
         self._registrar_historico("Adicionar anomalia")
@@ -2075,6 +2118,9 @@ class AreaComumFrame(tk.Frame):
         self._recalcular()
 
     def _redesenhar_anomalias_orcamento(self):
+        if not hasattr(self, "tree_anomalias"):
+            return
+        selecao = list(self.tree_anomalias.selection())
         for item in self.tree_anomalias.get_children():
             self.tree_anomalias.delete(item)
         for linha in self._anomalias_orcamento:
@@ -2086,15 +2132,246 @@ class AreaComumFrame(tk.Frame):
                 values=(
                     linha.get("reparo_nome") or "Reparo padrão",
                     f"{linha.get('percentual') or '100'}%",
+                    self._texto_valor_reparo(linha),
+                ),
+            )
+        for iid in selecao:
+            if self.tree_anomalias.exists(iid):
+                self.tree_anomalias.selection_set(iid)
+                self.tree_anomalias.see(iid)
+                break
+
+    def _atualizar_valores_anomalias_orcamento(self):
+        if not hasattr(self, "tree_anomalias"):
+            return
+        for iid in self.tree_anomalias.get_children():
+            linha = next(
+                (item for item in self._anomalias_orcamento if item.get("id") == iid),
+                None,
+            )
+            if linha is None:
+                continue
+            self.tree_anomalias.item(
+                iid,
+                values=(
+                    linha.get("reparo_nome") or "Reparo padrão",
+                    f"{linha.get('percentual') or '100'}%",
+                    self._texto_valor_reparo(linha),
                 ),
             )
 
-    def _perguntar_percentual_anomalia(self, nome: str):
+    def _texto_valor_reparo(self, linha) -> str:
+        reparo = self._reparo_da_linha(linha)
+        if not reparo:
+            return "—"
+        pares = valores_considerados_reparo(
+            reparo,
+            self._quantitativos or {},
+            linha.get("percentual"),
+            getattr(self, "_etapa_por_id", None),
+        )
+        if not pares:
+            return "—"
+        partes = []
+        for valor, unid in pares:
+            if abs(float(valor or 0)) < 1e-12:
+                continue
+            texto = formatar_decimal_br(valor, 2)
+            partes.append(f"{texto} {unid}".strip())
+        return " · ".join(partes) if partes else "—"
+
+    def _reparo_da_linha(self, linha) -> dict | None:
+        if not linha:
+            return None
+        return obter_reparo(
+            linha.get("nome") or "",
+            linha.get("reparo_id") or "",
+            self._catalogo,
+        )
+
+    def _chaves_percentuais_linha(self, linha) -> list[str]:
+        reparo = self._reparo_da_linha(linha) or {}
+        return list(reparo.get("percentuais_aba1") or [])
+
+    def _anomalias_que_usam_percentual(self, chave, excluir_id=None) -> list[dict]:
+        resultado = []
+        excluir = str(excluir_id or "")
+        for linha in self._anomalias_orcamento:
+            if excluir and str(linha.get("id") or "") == excluir:
+                continue
+            if chave in self._chaves_percentuais_linha(linha):
+                resultado.append(linha)
+        return resultado
+
+    def _percentuais_iguais(self, a, b) -> bool:
+        try:
+            return abs(numero(a, percentual=True) - numero(b, percentual=True)) < 1e-9
+        except (TypeError, ValueError):
+            return str(a or "").strip() == str(b or "").strip()
+
+    def _aplicar_percentuais_aba1(
+        self,
+        chaves,
+        percentual_texto,
+        *,
+        origem_nome,
+        excluir_id=None,
+    ) -> bool:
+        chaves = [c for c in (chaves or []) if c in self.var_percentuais]
+        if not chaves:
+            return False
+        novo_fmt = formatar_decimal_br(numero(percentual_texto, percentual=True))
+        conflitos = []
+        for chave in chaves:
+            atual = (self.var_percentuais[chave].get() or "").strip()
+            if not atual:
+                continue
+            if self._percentuais_iguais(atual, novo_fmt):
+                continue
+            donos = self._anomalias_que_usam_percentual(chave, excluir_id=excluir_id)
+            conflitos.append((chave, atual, donos))
+        pular = set()
+        if conflitos:
+            linhas_msg = []
+            for chave, atual, donos in conflitos:
+                rotulo = ROTULOS_PERCENTUAIS_ABA1.get(chave, chave)
+                extra = ""
+                if donos:
+                    nomes = ", ".join(
+                        str(item.get("nome") or "anomalia") for item in donos
+                    )
+                    extra = f" (anomalia: {nomes})"
+                linhas_msg.append(f"• {rotulo}: {atual}%{extra}")
+            if not messagebox.askyesno(
+                "Porcentagem já definida",
+                "Algumas porcentagens da aba 1 já estão preenchidas:\n\n"
+                + "\n".join(linhas_msg)
+                + f"\n\nSubstituí-las por {novo_fmt}% de «{origem_nome}»?",
+                parent=self.winfo_toplevel(),
+            ):
+                pular = {chave for chave, _atual, _donos in conflitos}
+        mudou = False
+        self._sincronizando_percentuais = True
+        try:
+            for chave in chaves:
+                if chave in pular:
+                    continue
+                atual = (self.var_percentuais[chave].get() or "").strip()
+                if atual and self._percentuais_iguais(atual, novo_fmt):
+                    continue
+                self.var_percentuais[chave].set(novo_fmt)
+                mudou = True
+        finally:
+            self._sincronizando_percentuais = False
+        return mudou
+
+    def _ao_duplo_clique_anomalia(self, _event=None):
+        selecao = self.tree_anomalias.selection()
+        if not selecao:
+            return
+        self._alterar_percentual_anomalia(selecao[0])
+
+    def _alterar_percentual_anomalia(self, item_id=None):
+        if item_id is None:
+            selecao = self.tree_anomalias.selection() if hasattr(self, "tree_anomalias") else ()
+            if not selecao:
+                self._mostrar_feedback("Selecione uma anomalia na lista.", "orange")
+                return
+            item_id = selecao[0]
+        linha = next(
+            (item for item in self._anomalias_orcamento if item.get("id") == item_id),
+            None,
+        )
+        if linha is None:
+            return
+        novo = self._perguntar_percentual_anomalia(
+            linha.get("nome") or "anomalia",
+            valor_inicial=linha.get("percentual") or "100",
+        )
+        if novo is None:
+            return
+        if self._percentuais_iguais(novo, linha.get("percentual") or "100"):
+            return
+        chaves = self._chaves_percentuais_linha(linha)
+        if chaves:
+            rotulos = ", ".join(
+                ROTULOS_PERCENTUAIS_ABA1.get(chave, chave) for chave in chaves
+            )
+            if messagebox.askyesno(
+                "Alterar na aba 1",
+                f"Deseja também alterar na aba 1 ({rotulos}) para {novo}%?\n"
+                "Isso atualiza o orçamento automaticamente.",
+                parent=self.winfo_toplevel(),
+            ):
+                self._aplicar_percentuais_aba1(
+                    chaves,
+                    novo,
+                    origem_nome=linha.get("nome") or "",
+                    excluir_id=linha.get("id"),
+                )
+        linha["percentual"] = novo
+        self._marcar_sujo()
+        self._registrar_historico("Alterar percentual da anomalia")
+        self._recalcular()
+        self._redesenhar_anomalias_orcamento()
+        if hasattr(self, "tree_anomalias") and self.tree_anomalias.exists(item_id):
+            self.tree_anomalias.selection_set(item_id)
+            self.tree_anomalias.see(item_id)
+
+    def _ao_focar_percentual(self, chave):
+        self._pct_em_edicao[chave] = self.var_percentuais[chave].get()
+
+    def _ao_sair_percentual(self, chave, widget):
+        self._resolver_formula(widget, percentual=True)
+        if (
+            self._carregando
+            or self._aplicando_historico
+            or self._sincronizando_percentuais
+        ):
+            return
+        atual = self.var_percentuais[chave].get()
+        anterior = self._pct_em_edicao.get(chave)
+        if str(atual or "").strip() == str(anterior or "").strip():
+            return
+        if (
+            str(atual or "").strip()
+            and str(anterior or "").strip()
+            and self._percentuais_iguais(atual, anterior)
+        ):
+            return
+        ligadas = self._anomalias_que_usam_percentual(chave)
+        if not ligadas:
+            return
+        bruto = str(atual or "").strip()
+        if not bruto:
+            return
+        novo_fmt = formatar_decimal_br(numero(bruto, percentual=True))
+        mudou = False
+        for linha in ligadas:
+            atual_an = linha.get("percentual") or "100"
+            if self._percentuais_iguais(atual_an, novo_fmt):
+                continue
+            if messagebox.askyesno(
+                "Alterar na aba 2",
+                f"Deseja também alterar a porcentagem da anomalia "
+                f"«{linha.get('nome') or 'anomalia'}» na aba 2 de {atual_an}% "
+                f"para {novo_fmt}%?\nIsso atualiza o orçamento automaticamente.",
+                parent=self.winfo_toplevel(),
+            ):
+                linha["percentual"] = novo_fmt
+                mudou = True
+        if mudou:
+            self._redesenhar_anomalias_orcamento()
+            self._marcar_sujo()
+            self._registrar_historico("Sincronizar percentual da anomalia")
+            self._recalcular()
+
+    def _perguntar_percentual_anomalia(self, nome: str, valor_inicial: str = "100"):
         texto = perguntar_texto(
             self.winfo_toplevel(),
             "Percentual da anomalia",
             f"Qual percentual de quantitativo aplicar em '{nome}'?",
-            valor_inicial="100",
+            valor_inicial=str(valor_inicial or "100"),
             texto_ok="Usar",
             largura_entrada=12,
         )

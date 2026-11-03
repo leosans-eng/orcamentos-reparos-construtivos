@@ -28,7 +28,11 @@ class OrcApiClient:
             self.username = sessao.get("username")
 
     def _headers(self) -> dict[str, str]:
-        headers = {"Accept": "application/json"}
+        headers = {
+            "Accept": "application/json",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
         return headers

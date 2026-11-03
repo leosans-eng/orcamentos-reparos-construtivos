@@ -117,9 +117,19 @@ class DialogoLogin:
             mostrar="•",
         )
         entrada_senha.bind("<Return>", lambda _e: self._entrar())
+        self._entrada_senha = entrada_senha
+        self.var_mostrar_senha = tk.BooleanVar(master=root, value=False)
+
+        ttk.Checkbutton(
+            inner,
+            text="Mostrar senha",
+            variable=self.var_mostrar_senha,
+            command=self._ao_mostrar_senha,
+            style="Cartao.TCheckbutton",
+        ).grid(row=4, column=0, sticky="w", pady=(6, 0))
 
         opcoes = tk.Frame(inner, bg=cores.fundo_cartao)
-        opcoes.grid(row=4, column=0, sticky="w", pady=(12, 0))
+        opcoes.grid(row=5, column=0, sticky="w", pady=(12, 0))
 
         ttk.Checkbutton(
             opcoes,
@@ -259,6 +269,15 @@ class DialogoLogin:
         entrada = ttk.Entry(parent, **kwargs)
         entrada.grid(row=linha + 1, column=0, sticky="ew")
         return entrada
+
+    def _ao_mostrar_senha(self):
+        entrada = getattr(self, "_entrada_senha", None)
+        if entrada is None:
+            return
+        try:
+            entrada.configure(show="" if self.var_mostrar_senha.get() else "•")
+        except tk.TclError:
+            pass
 
     def _ao_alterar_salvar_usuario(self):
         if not self.var_salvar_usuario.get():

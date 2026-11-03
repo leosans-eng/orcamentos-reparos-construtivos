@@ -5,9 +5,10 @@ from __future__ import annotations
 from copy import deepcopy
 
 from core.area_comum_anomalias import (
-    ORIGEM_ETAPA,
+    itens_efetivos_reparo,
     obter_anomalia,
     quantidade_item,
+    titulo_grupo_orcamento,
 )
 from core.area_comum_calculos import numero
 from core.etapas_predefinidas import aplicar_etapa_no_orcamento
@@ -33,25 +34,8 @@ def _fator_percentual(texto) -> float:
     return valor / 100.0
 
 
-def _qtd_anomalia(reparo: dict, quantitativos: dict, percentual) -> float:
-    fator = _fator_percentual(percentual)
-    origem = reparo.get("origem") or ORIGEM_ETAPA
-    if origem == ORIGEM_ETAPA:
-        base = quantidade_item(
-            reparo.get("tipo_calculo_etapa") or "fixo",
-            1.0,
-            quantitativos or {},
-        )
-        return base * fator
-    return fator
-
-
 def _titulo_grupo_anomalia(anomalia: dict, reparo: dict) -> str:
-    nome = str(anomalia.get("nome") or "").strip()
-    reparo_nome = str(anomalia.get("reparo_nome") or reparo.get("nome") or "").strip()
-    if reparo_nome and reparo_nome != "Reparo padrão":
-        return f"{nome} — {reparo_nome}"
-    return nome
+    return titulo_grupo_orcamento(anomalia, reparo)
 
 
 def _custo_sinapi(sinapi, codigo: str, uf: str) -> tuple[float, str, str, str, str]:
@@ -277,32 +261,14 @@ def sincronizar_grupos_anomalias(
         if reparo is None:
             continue
         titulo = _titulo_grupo_anomalia(anomalia, reparo)
-        origem = reparo.get("origem") or ORIGEM_ETAPA
-        if origem == ORIGEM_ETAPA:
-            etapa_id = str(reparo.get("etapa_predefinida_id") or "")
-            etapa = etapas_por_id.get(etapa_id) or {
-                "id": etapa_id,
-                "nome": reparo.get("etapa_nome") or titulo,
-                "itens": [],
-            }
-            qtd = _qtd_anomalia(reparo, quantitativos, anomalia.get("percentual"))
-            grupo = _montar_grupo_etapa(
-                etapa=etapa,
-                nome=titulo,
-                quantidade=qtd,
-                sinapi=sinapi,
-                uf=uf,
-                catalogo_composicoes=catalogo_composicoes,
-            )
-        else:
-            grupo = _montar_grupo_itens_sinapi(
-                nome=titulo,
-                itens=list(reparo.get("itens") or []),
-                quantitativos=quantitativos,
-                percentual=anomalia.get("percentual"),
-                sinapi=sinapi,
-                uf=uf,
-            )
+        grupo = _montar_grupo_itens_sinapi(
+            nome=titulo,
+            itens=itens_efetivos_reparo(reparo, etapas_por_id),
+            quantitativos=quantitativos,
+            percentual=anomalia.get("percentual"),
+            sinapi=sinapi,
+            uf=uf,
+        )
         grupo["origem"] = "anomalia"
         grupo["anomalia_id"] = str(anomalia.get("id") or "")
         grupo["etapa_predefinida_id"] = str(reparo.get("etapa_predefinida_id") or "")

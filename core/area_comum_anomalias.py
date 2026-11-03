@@ -11,12 +11,33 @@ from app_paths import (
     anomalias_area_comum_path,
     anomalias_area_comum_path_gravacao,
 )
-from core.area_comum import novo_id
+from core.area_comum import PERCENTUAIS_MODELO, novo_id
+from core.area_comum_calculos import numero
+from core.etapas_predefinidas import TIPO_ITEM_SINAPI
 
 VERSAO_CATALOGO = 1
 
 ORIGEM_ITENS = "itens"
 ORIGEM_ETAPA = "etapa_predefinida"
+
+TITULO_ANOMALIA = "anomalia"
+TITULO_REPARO = "reparo"
+TITULO_ANOMALIA_REPARO = "anomalia_reparo"
+TITULO_ETAPA = "etapa"
+TITULO_PERSONALIZADO = "personalizado"
+
+ROTULOS_TITULO_ORCAMENTO = (
+    (TITULO_ANOMALIA, "Nome da anomalia"),
+    (TITULO_REPARO, "Nome do reparo"),
+    (TITULO_ANOMALIA_REPARO, "Anomalia — reparo"),
+    (TITULO_ETAPA, "Nome da etapa pré-definida"),
+    (TITULO_PERSONALIZADO, "Texto personalizado"),
+)
+
+CHAVES_TITULO_ORCAMENTO = tuple(chave for chave, _rotulo in ROTULOS_TITULO_ORCAMENTO)
+CHAVES_PERCENTUAIS_ABA1 = tuple(item[0] for item in PERCENTUAIS_MODELO)
+ROTULOS_PERCENTUAIS_ABA1 = {item[0]: item[1] for item in PERCENTUAIS_MODELO}
+QTD_PERCENTUAIS_ABA1 = {item[0]: (item[3], item[4]) for item in PERCENTUAIS_MODELO}
 
 TIPOS_CALCULO = (
     "area_fachada_total",
@@ -114,27 +135,33 @@ def catalogo_vazio() -> dict[str, Any]:
     return {"versao": VERSAO_CATALOGO, "anomalias": {}}
 
 
+def _coeficiente_item(coeficiente) -> float:
+    try:
+        if isinstance(coeficiente, str):
+            texto = coeficiente.strip()
+            if "," in texto:
+                texto = texto.replace(".", "").replace(",", ".")
+            return float(texto)
+        return float(coeficiente)
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def novo_item_sinapi(
     *,
     codigo_sinapi: str = "",
     unidade: str = "m²",
     tipo_calculo: str = "area_fachada_total",
     coeficiente: float = 1.0,
+    da_etapa: bool = False,
 ) -> dict[str, Any]:
-    try:
-        if isinstance(coeficiente, str):
-            texto = coeficiente.strip().replace(".", "").replace(",", ".") if "," in str(coeficiente) else coeficiente
-            coef = float(texto)
-        else:
-            coef = float(coeficiente)
-    except (TypeError, ValueError):
-        coef = 1.0
     return {
         "id": novo_id(),
         "codigo_sinapi": str(codigo_sinapi).strip(),
         "unidade": str(unidade or "m²").strip(),
         "tipo_calculo": tipo_calculo if tipo_calculo in TIPOS_CALCULO else "fixo",
-        "coeficiente": coef,
+        "coeficiente": _coeficiente_item(coeficiente),
+        "da_etapa": bool(da_etapa),
     }
 
 
@@ -146,6 +173,9 @@ def novo_reparo(*, nome: str = "Reparo padrão", origem: str = ORIGEM_ITENS) -> 
         "etapa_predefinida_id": "",
         "etapa_nome": "",
         "tipo_calculo_etapa": "fixo",
+        "titulo_orcamento": TITULO_ANOMALIA_REPARO,
+        "titulo_personalizado": "",
+        "percentuais_aba1": [],
         "itens": [],
     }
 
@@ -223,6 +253,18 @@ def normalizar_catalogo(dados) -> dict[str, Any]:
                 reparo["tipo_calculo_etapa"] = (
                     tipo_et if tipo_et in TIPOS_CALCULO else "fixo"
                 )
+                fonte_titulo = str(item.get("titulo_orcamento") or TITULO_ANOMALIA_REPARO)
+                reparo["titulo_orcamento"] = (
+                    fonte_titulo
+                    if fonte_titulo in CHAVES_TITULO_ORCAMENTO
+                    else TITULO_ANOMALIA_REPARO
+                )
+                reparo["titulo_personalizado"] = str(
+                    item.get("titulo_personalizado") or ""
+                ).strip()
+                reparo["percentuais_aba1"] = percentuais_aba1_validos(
+                    item.get("percentuais_aba1")
+                )
                 itens = []
                 for etapa in item.get("itens") or []:
                     if not isinstance(etapa, dict):
@@ -232,6 +274,7 @@ def normalizar_catalogo(dados) -> dict[str, Any]:
                         unidade=etapa.get("unidade") or "m²",
                         tipo_calculo=etapa.get("tipo_calculo") or "fixo",
                         coeficiente=etapa.get("coeficiente") or 1,
+                        da_etapa=bool(etapa.get("da_etapa")),
                     )
                     if etapa.get("id"):
                         novo["id"] = str(etapa.get("id"))
@@ -252,6 +295,193 @@ def nomes_anomalias(dados: dict | None = None) -> list[str]:
 def obter_anomalia(nome: str, dados: dict | None = None) -> dict | None:
     origem = dados if dados is not None else carregar_catalogo()
     return deepcopy((origem.get("anomalias") or {}).get(nome))
+
+
+def obter_reparo(
+    nome: str,
+    reparo_id: str = "",
+    dados: dict | None = None,
+) -> dict | None:
+    cadastro = obter_anomalia(nome, dados) or {}
+    reparos = [r for r in (cadastro.get("reparos") or []) if isinstance(r, dict)]
+    rid = str(reparo_id or "")
+    if rid:
+        for reparo in reparos:
+            if str(reparo.get("id") or "") == rid:
+                return reparo
+    return reparos[0] if reparos else None
+
+
+def rotulo_titulo_orcamento(chave: str) -> str:
+    for ident, rotulo in ROTULOS_TITULO_ORCAMENTO:
+        if ident == chave:
+            return rotulo
+    return dict(ROTULOS_TITULO_ORCAMENTO)[TITULO_ANOMALIA_REPARO]
+
+
+def chave_titulo_orcamento(rotulo: str) -> str:
+    for ident, texto in ROTULOS_TITULO_ORCAMENTO:
+        if texto == rotulo or ident == rotulo:
+            return ident
+    return TITULO_ANOMALIA_REPARO
+
+
+def percentuais_aba1_validos(valores) -> list[str]:
+    if not isinstance(valores, (list, tuple)):
+        return []
+    vistos = set()
+    resultado = []
+    conhecidas = set(CHAVES_PERCENTUAIS_ABA1)
+    for chave in valores:
+        ident = str(chave or "").strip()
+        if ident not in conhecidas or ident in vistos:
+            continue
+        vistos.add(ident)
+        resultado.append(ident)
+    return resultado
+
+
+def titulo_grupo_orcamento(anomalia: dict, reparo: dict | None = None) -> str:
+    reparo = reparo or {}
+    fonte = str(reparo.get("titulo_orcamento") or TITULO_ANOMALIA_REPARO)
+    if fonte not in CHAVES_TITULO_ORCAMENTO:
+        fonte = TITULO_ANOMALIA_REPARO
+    nome = str(anomalia.get("nome") or "").strip()
+    reparo_nome = str(
+        anomalia.get("reparo_nome") or reparo.get("nome") or ""
+    ).strip()
+    etapa_nome = str(reparo.get("etapa_nome") or "").strip()
+    personalizado = str(reparo.get("titulo_personalizado") or "").strip()
+    if fonte == TITULO_REPARO:
+        return reparo_nome or nome
+    if fonte == TITULO_ETAPA:
+        return etapa_nome or nome
+    if fonte == TITULO_PERSONALIZADO:
+        return personalizado or nome
+    if fonte == TITULO_ANOMALIA:
+        return nome
+    if reparo_nome and reparo_nome != "Reparo padrão":
+        return f"{nome} — {reparo_nome}" if nome else reparo_nome
+    return nome
+
+
+def itens_sinapi_da_etapa(
+    etapa: dict | None,
+    itens_atuais: list | None = None,
+    *,
+    tipo_calculo_padrao: str = "fixo",
+) -> list[dict[str, Any]]:
+    """Copia só os códigos SINAPI da etapa; preserva cálculo/coeficiente já definidos."""
+    padrao = tipo_calculo_padrao if tipo_calculo_padrao in TIPOS_CALCULO else "fixo"
+    atuais = [i for i in (itens_atuais or []) if isinstance(i, dict)]
+    novos: list[dict[str, Any]] = []
+    usados_ids: set[str] = set()
+    vistos_codigos: set[str] = set()
+    for ref in (etapa or {}).get("itens") or []:
+        if not isinstance(ref, dict):
+            continue
+        if str(ref.get("tipo") or "") != TIPO_ITEM_SINAPI:
+            continue
+        codigo = str(ref.get("codigo") or "").strip()
+        if not codigo or codigo in vistos_codigos:
+            continue
+        vistos_codigos.add(codigo)
+        anterior = next(
+            (
+                item
+                for item in atuais
+                if str(item.get("codigo_sinapi") or "").strip() == codigo
+            ),
+            None,
+        )
+        tipo = str((anterior or {}).get("tipo_calculo") or padrao)
+        novo = novo_item_sinapi(
+            codigo_sinapi=codigo,
+            unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
+            tipo_calculo=tipo,
+            coeficiente=(anterior or {}).get("coeficiente", 1),
+            da_etapa=True,
+        )
+        if anterior and anterior.get("id"):
+            novo["id"] = str(anterior.get("id"))
+            usados_ids.add(novo["id"])
+        novos.append(novo)
+    for item in atuais:
+        ident = str(item.get("id") or "")
+        if ident and ident in usados_ids:
+            continue
+        if item.get("da_etapa"):
+            continue
+        codigo = str(item.get("codigo_sinapi") or "").strip()
+        if codigo and codigo in vistos_codigos:
+            continue
+        extra = deepcopy(item)
+        extra["da_etapa"] = False
+        novos.append(extra)
+    return novos
+
+
+def itens_efetivos_reparo(
+    reparo: dict | None,
+    etapas_por_id: dict | None = None,
+) -> list[dict[str, Any]]:
+    reparo = reparo or {}
+    itens = [i for i in (reparo.get("itens") or []) if isinstance(i, dict)]
+    if itens:
+        return itens
+    if (reparo.get("origem") or ORIGEM_ITENS) != ORIGEM_ETAPA:
+        return []
+    etapa_id = str(reparo.get("etapa_predefinida_id") or "")
+    etapa = (etapas_por_id or {}).get(etapa_id)
+    if not etapa:
+        return []
+    return itens_sinapi_da_etapa(
+        etapa,
+        tipo_calculo_padrao=reparo.get("tipo_calculo_etapa") or "fixo",
+    )
+
+
+def fator_percentual_anomalia(percentual) -> float:
+    valor = numero(percentual if percentual not in (None, "") else "100", percentual=True)
+    if valor < 0:
+        return 0.0
+    return valor / 100.0
+
+
+def valores_considerados_reparo(
+    reparo: dict | None,
+    quantitativos: dict | None,
+    percentual,
+    etapas_por_id: dict | None = None,
+) -> list[tuple[float, str]]:
+    """Quantidades efetivas do reparo (únicas por tipo/coeficiente/unidade)."""
+    reparo = reparo or {}
+    quantitativos = quantitativos or {}
+    fator = fator_percentual_anomalia(percentual)
+    resultado: list[tuple[float, str]] = []
+    vistos: set[tuple] = set()
+    for item in itens_efetivos_reparo(reparo, etapas_por_id):
+        tipo = str(item.get("tipo_calculo") or "fixo")
+        coef = _coeficiente_item(item.get("coeficiente") or 1)
+        qtd = quantidade_item(tipo, coef, quantitativos) * fator
+        unid = str(item.get("unidade") or "").strip() or "un"
+        marca = (tipo, round(coef, 6), unid)
+        if marca in vistos:
+            continue
+        vistos.add(marca)
+        resultado.append((qtd, unid))
+    if resultado:
+        return resultado
+    for chave in percentuais_aba1_validos(reparo.get("percentuais_aba1")):
+        modelo = QTD_PERCENTUAIS_ABA1.get(chave)
+        if not modelo:
+            continue
+        qtd_chave, unidade = modelo
+        if qtd_chave in vistos:
+            continue
+        vistos.add(qtd_chave)
+        resultado.append((float(quantitativos.get(qtd_chave) or 0), unidade))
+    return resultado
 
 
 def quantidade_item(tipo_calculo: str, coeficiente: float, quantitativos: dict) -> float:

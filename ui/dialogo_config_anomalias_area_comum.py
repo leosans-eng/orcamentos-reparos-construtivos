@@ -21,12 +21,15 @@ from core.area_comum_anomalias import (
     chave_titulo_orcamento,
     itens_servicos_da_etapa,
     itens_sinapi_da_etapa,
+    normalizar_fatores,
     normalizar_servicos_preliminares,
     nova_anomalia,
+    novo_fator,
     novo_item_composicao_propria,
     novo_item_sinapi,
     novo_reparo,
     novos_servicos_preliminares,
+    rotulo_fatores,
     rotulo_titulo_orcamento,
     salvar_catalogo,
 )
@@ -63,6 +66,205 @@ def _listar_etapas() -> list[dict]:
         return []
 
 
+def _rotulos_tipo_calculo() -> list[str]:
+    return [f"{k} — {ROTULOS_TIPO_CALCULO.get(k, k)}" for k in TIPOS_CALCULO]
+
+
+def _chave_tipo_calculo(texto: str) -> str:
+    chave = str(texto or "").split(" — ", 1)[0].strip()
+    return chave if chave in TIPOS_CALCULO else "fixo"
+
+
+def _ajustar_janela_ao_conteudo(janela: tk.Toplevel) -> None:
+    """Recalcula a altura da janela para caber o conteúdo (até o limite da tela)."""
+    try:
+        if not janela.winfo_exists():
+            return
+    except tk.TclError:
+        return
+    try:
+        x = int(janela.winfo_rootx())
+        y = int(janela.winfo_rooty())
+        largura_atual = max(int(janela.winfo_width()), 520)
+        # Libera o tamanho fixo para o Tk recalcular a altura natural.
+        janela.geometry("")
+        janela.update_idletasks()
+        largura = max(int(janela.winfo_reqwidth()), largura_atual, 520)
+        altura_req = max(int(janela.winfo_reqheight()), 1)
+        tela_h = int(janela.winfo_screenheight())
+        altura = min(altura_req, max(280, tela_h - 80))
+        if y + altura > tela_h - 20:
+            y = max(20, tela_h - altura - 20)
+        janela.geometry(f"{largura}x{altura}+{x}+{y}")
+        janela.update_idletasks()
+    except tk.TclError:
+        pass
+
+
+class EditorFatoresCalculo(tk.Frame):
+    """Lista de fatores multiplicados (tipo × coeficiente)."""
+
+    def __init__(
+        self,
+        parent,
+        *,
+        fatores=None,
+        bg=None,
+        estilos=None,
+        refs=None,
+        on_mudou=None,
+    ):
+        from ui.temas import cores_tema
+
+        cores = cores_tema(parent)
+        if bg is None:
+            bg = cores.fundo
+        super().__init__(parent, bg=bg)
+        self._cores = cores
+        self._estilos = estilos
+        self._refs = refs if refs is not None else []
+        self._on_mudou = on_mudou
+        self._linhas: list[dict] = []
+        self._opcoes = _rotulos_tipo_calculo()
+        self._silencioso = False
+
+        cab = tk.Frame(self, bg=bg)
+        cab.pack(fill="x")
+        tk.Label(
+            cab,
+            text="Fatores (multiplicados entre si)",
+            bg=bg,
+            fg=cores.texto,
+            anchor="w",
+        ).pack(side="left")
+        criar_botao_ttk_com_icone(
+            cab,
+            texto="Adicionar fator",
+            nome_icone="add-circle-outline",
+            command=lambda: self._adicionar(),
+            estilo=(estilos.compacto_adicionar if estilos else "Add.Compact.TButton"),
+            cor_icone=(estilos.icone_adicionar if estilos else cores.titulo),
+            refs=self._refs,
+        ).pack(side="right")
+
+        self._lista = tk.Frame(self, bg=bg)
+        self._lista.pack(fill="x", pady=(6, 0))
+        self.var_resumo = tk.StringVar(value="")
+        tk.Label(
+            self,
+            textvariable=self.var_resumo,
+            bg=bg,
+            fg=cores.texto_suave,
+            anchor="w",
+            font=("Segoe UI", 8),
+        ).pack(fill="x", pady=(4, 0))
+
+        iniciais = normalizar_fatores(fatores if fatores is not None else [novo_fator()])
+        if not iniciais:
+            iniciais = [novo_fator()]
+        self._silencioso = True
+        try:
+            for fator in iniciais:
+                self._adicionar(fator)
+        finally:
+            self._silencioso = False
+        self._atualizar_resumo()
+        self._avisar_mudanca()
+
+    def _avisar_mudanca(self):
+        if self._silencioso or self._on_mudou is None:
+            return
+        self.after_idle(self._on_mudou)
+
+    def _adicionar(self, fator=None):
+        fator = fator or novo_fator()
+        fundo = self.cget("bg")
+        linha = tk.Frame(self._lista, bg=fundo)
+        linha.pack(fill="x", pady=2)
+
+        tipo = str(fator.get("tipo_calculo") or "fixo")
+        rotulo = f"{tipo} — {ROTULOS_TIPO_CALCULO.get(tipo, tipo)}"
+        var_tipo = tk.StringVar(
+            value=rotulo if rotulo in self._opcoes else self._opcoes[-1]
+        )
+        var_coef = tk.StringVar(
+            value=str(fator.get("coeficiente", 1)).replace(".", ",")
+        )
+        campo = CampoListaPesquisavel(
+            linha,
+            textvariable=var_tipo,
+            on_escolher=lambda _v: self._atualizar_resumo(),
+            largura_minima_lista=420,
+            altura_lista=10,
+            bg=fundo,
+        )
+        campo.definir_opcoes(self._opcoes)
+        campo.pack(side="left", fill="x", expand=True)
+        tk.Label(linha, text="×", bg=fundo, fg=self._cores.texto).pack(
+            side="left", padx=4
+        )
+        entrada = ttk.Entry(linha, textvariable=var_coef, width=8)
+        entrada.pack(side="left")
+        var_coef.trace_add("write", lambda *_a: self._atualizar_resumo())
+        criar_botao_ttk_com_icone(
+            linha,
+            texto="",
+            nome_icone="remove-circle-outline",
+            command=lambda: self._remover(registro),
+            estilo=(
+                self._estilos.compacto_excluir
+                if self._estilos
+                else "Delete.Compact.TButton"
+            ),
+            cor_icone=(
+                self._estilos.icone_excluir if self._estilos else self._cores.titulo
+            ),
+            refs=self._refs,
+        ).pack(side="left", padx=(4, 0))
+
+        registro = {
+            "frame": linha,
+            "var_tipo": var_tipo,
+            "var_coef": var_coef,
+            "campo": campo,
+        }
+        self._linhas.append(registro)
+        self._atualizar_resumo()
+        self._avisar_mudanca()
+
+    def _remover(self, registro):
+        if len(self._linhas) <= 1:
+            messagebox.showinfo(
+                "Fatores",
+                "Mantenha ao menos um fator.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        self._linhas.remove(registro)
+        registro["frame"].destroy()
+        self._atualizar_resumo()
+        self._avisar_mudanca()
+
+    def _atualizar_resumo(self):
+        try:
+            fatores = self.obter()
+        except ValueError:
+            self.var_resumo.set("")
+            return
+        self.var_resumo.set(f"Fórmula: {rotulo_fatores(fatores)}")
+
+    def obter(self) -> list[dict]:
+        fatores = []
+        for registro in self._linhas:
+            tipo = _chave_tipo_calculo(registro["var_tipo"].get())
+            try:
+                coef = _float_br(registro["var_coef"].get())
+            except ValueError as exc:
+                raise ValueError("Coeficiente inválido.") from exc
+            fatores.append(novo_fator(tipo_calculo=tipo, coeficiente=coef))
+        return normalizar_fatores(fatores)
+
+
 class DialogoItemSinapiAreaComum(tk.Toplevel):
     def __init__(self, parent, item=None, on_confirmar=None, ctx=None):
         super().__init__(parent)
@@ -76,17 +278,14 @@ class DialogoItemSinapiAreaComum(tk.Toplevel):
         aplicar_icone_janela(self)
         self.transient(parent)
         self.grab_set()
-        self.resizable(False, False)
+        self.resizable(True, True)
 
         item = item or {}
         painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
-        painel.pack(fill="x")
+        painel.pack(fill="both", expand=True)
 
         self.var_codigo = tk.StringVar(value=str(item.get("codigo_sinapi", "")))
         self.var_unidade = tk.StringVar(value=str(item.get("unidade", "m²")))
-        self.var_coef = tk.StringVar(
-            value=str(item.get("coeficiente", 1)).replace(".", ",")
-        )
 
         linha_codigo = tk.Frame(painel, bg=fundo)
         linha_codigo.pack(fill="x", pady=3)
@@ -112,32 +311,28 @@ class DialogoItemSinapiAreaComum(tk.Toplevel):
             ).pack(side="left", padx=(8, 0))
 
         self._campo(painel, "Unidade:", self.var_unidade, valores=UNIDADES_COMUNS)
-        valores_tipo = [f"{k} — {ROTULOS_TIPO_CALCULO.get(k, k)}" for k in TIPOS_CALCULO]
-        atual_tipo = str(item.get("tipo_calculo", "area_fachada_total"))
-        rotulo_tipo = f"{atual_tipo} — {ROTULOS_TIPO_CALCULO.get(atual_tipo, atual_tipo)}"
-        self.var_tipo_exibicao = tk.StringVar(
-            value=rotulo_tipo if rotulo_tipo in valores_tipo else valores_tipo[0]
-        )
-        linha_tipo = tk.Frame(painel, bg=fundo)
-        linha_tipo.pack(fill="x", pady=3)
+
         tk.Label(
-            linha_tipo,
-            text="Tipo de cálculo:",
-            width=22,
+            painel,
+            text=(
+                "Use vários fatores para fórmulas compostas, por exemplo "
+                "fachada/bloco × blocos × número fixo."
+            ),
+            bg=fundo,
+            fg=cores.texto_suave,
+            wraplength=520,
+            justify="left",
             anchor="w",
+        ).pack(fill="x", pady=(8, 2))
+        self.editor_fatores = EditorFatoresCalculo(
+            painel,
+            fatores=normalizar_fatores(item),
             bg=fundo,
-            fg=cores.texto,
-        ).pack(side="left")
-        self.campo_tipo = CampoListaPesquisavel(
-            linha_tipo,
-            textvariable=self.var_tipo_exibicao,
-            largura_minima_lista=420,
-            altura_lista=12,
-            bg=fundo,
+            estilos=estilos,
+            refs=self._refs_icones,
+            on_mudou=lambda: _ajustar_janela_ao_conteudo(self),
         )
-        self.campo_tipo.definir_opcoes(valores_tipo)
-        self.campo_tipo.pack(side="left", fill="x", expand=True)
-        self._campo(painel, "Coeficiente:", self.var_coef)
+        self.editor_fatores.pack(fill="x", pady=(0, 4))
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(12, 0))
@@ -155,6 +350,7 @@ class DialogoItemSinapiAreaComum(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
+        self.after_idle(lambda: _ajustar_janela_ao_conteudo(self))
         focar_entrada_apos_exibir(entrada_codigo)
 
     def _campo(self, parent, rotulo, var, valores=None):
@@ -202,19 +398,14 @@ class DialogoItemSinapiAreaComum(tk.Toplevel):
             messagebox.showwarning("Item", "Informe o código SINAPI.", parent=self)
             return
         try:
-            coeficiente = _float_br(self.var_coef.get())
+            fatores = self.editor_fatores.obter()
         except ValueError:
             messagebox.showwarning("Item", "Coeficiente inválido.", parent=self)
             return
-        tipo_exib = self.var_tipo_exibicao.get().strip()
-        tipo = tipo_exib.split(" — ", 1)[0].strip() or "fixo"
-        if tipo not in TIPOS_CALCULO:
-            tipo = "fixo"
         item = novo_item_sinapi(
             codigo_sinapi=codigo,
             unidade=self.var_unidade.get().strip() or "un",
-            tipo_calculo=tipo,
-            coeficiente=coeficiente,
+            fatores=fatores,
         )
         if self.on_confirmar:
             self.on_confirmar(item)
@@ -222,7 +413,7 @@ class DialogoItemSinapiAreaComum(tk.Toplevel):
 
 
 class DialogoCoefCalculoItem(tk.Toplevel):
-    """Edita tipo de cálculo e coeficiente de um item (SINAPI ou composição)."""
+    """Edita os fatores de cálculo de um item (SINAPI ou composição)."""
 
     def __init__(self, parent, item=None, on_confirmar=None, *, titulo="Editar quantitativo"):
         super().__init__(parent)
@@ -230,15 +421,16 @@ class DialogoCoefCalculoItem(tk.Toplevel):
         cores, estilos = aplicar_chrome_dialogo(self)
         fundo = cores.fundo
         self.on_confirmar = on_confirmar
+        self._refs_icones: list = []
         item = item or {}
         self.title(titulo)
         aplicar_icone_janela(self)
         self.transient(parent)
         self.grab_set()
-        self.resizable(False, False)
+        self.resizable(True, True)
 
         painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
-        painel.pack(fill="x")
+        painel.pack(fill="both", expand=True)
         nome = (
             item.get("nome")
             or item.get("codigo_sinapi")
@@ -251,42 +443,19 @@ class DialogoCoefCalculoItem(tk.Toplevel):
             bg=fundo,
             fg=cores.texto,
             anchor="w",
-            wraplength=420,
+            wraplength=520,
             justify="left",
         ).pack(fill="x", pady=(0, 8))
 
-        self.var_coef = tk.StringVar(
-            value=str(item.get("coeficiente", 1)).replace(".", ",")
-        )
-        valores_tipo = [f"{k} — {ROTULOS_TIPO_CALCULO.get(k, k)}" for k in TIPOS_CALCULO]
-        atual_tipo = str(item.get("tipo_calculo", "fixo"))
-        rotulo_tipo = f"{atual_tipo} — {ROTULOS_TIPO_CALCULO.get(atual_tipo, atual_tipo)}"
-        self.var_tipo_exibicao = tk.StringVar(
-            value=rotulo_tipo if rotulo_tipo in valores_tipo else valores_tipo[-1]
-        )
-
-        linha_tipo = tk.Frame(painel, bg=fundo)
-        linha_tipo.pack(fill="x", pady=3)
-        tk.Label(
-            linha_tipo, text="Tipo de cálculo:", width=18, anchor="w", bg=fundo, fg=cores.texto
-        ).pack(side="left")
-        self.campo_tipo = CampoListaPesquisavel(
-            linha_tipo,
-            textvariable=self.var_tipo_exibicao,
-            largura_minima_lista=420,
-            altura_lista=10,
+        self.editor_fatores = EditorFatoresCalculo(
+            painel,
+            fatores=normalizar_fatores(item),
             bg=fundo,
+            estilos=estilos,
+            refs=self._refs_icones,
+            on_mudou=lambda: _ajustar_janela_ao_conteudo(self),
         )
-        self.campo_tipo.definir_opcoes(valores_tipo)
-        self.campo_tipo.pack(side="left", fill="x", expand=True)
-
-        linha_coef = tk.Frame(painel, bg=fundo)
-        linha_coef.pack(fill="x", pady=3)
-        tk.Label(
-            linha_coef, text="Coeficiente:", width=18, anchor="w", bg=fundo, fg=cores.texto
-        ).pack(side="left")
-        entrada_coef = ttk.Entry(linha_coef, textvariable=self.var_coef, width=18)
-        entrada_coef.pack(side="left")
+        self.editor_fatores.pack(fill="x")
 
         botoes = ttk.Frame(painel)
         botoes.pack(fill="x", pady=(12, 0))
@@ -298,24 +467,21 @@ class DialogoCoefCalculoItem(tk.Toplevel):
             command=self._confirmar,
             estilo=estilos.salvar,
             cor_icone=estilos.icone_salvar,
-            refs=[],
+            refs=self._refs_icones,
         ).pack(side="right", padx=(0, 8))
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
-        focar_entrada_apos_exibir(entrada_coef)
+        self.after_idle(lambda: _ajustar_janela_ao_conteudo(self))
 
     def _confirmar(self):
         try:
-            coeficiente = _float_br(self.var_coef.get())
+            fatores = self.editor_fatores.obter()
         except ValueError:
             messagebox.showwarning("Item", "Coeficiente inválido.", parent=self)
             return
-        tipo = self.var_tipo_exibicao.get().split(" — ", 1)[0].strip() or "fixo"
-        if tipo not in TIPOS_CALCULO:
-            tipo = "fixo"
         if self.on_confirmar:
-            self.on_confirmar({"tipo_calculo": tipo, "coeficiente": coeficiente})
+            self.on_confirmar({"fatores": fatores})
         self.destroy()
 
 
@@ -665,16 +831,14 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
                 pady=0,
             )
 
-        colunas = ("codigo", "unidade", "tipo", "coef")
+        colunas = ("codigo", "unidade", "formula")
         self.tree = ttk.Treeview(direita, columns=colunas, show="headings", height=6)
         self.tree.heading("codigo", text="Código")
         self.tree.heading("unidade", text="Unid.")
-        self.tree.heading("tipo", text="Cálculo")
-        self.tree.heading("coef", text="Coef.")
+        self.tree.heading("formula", text="Fórmula (fatores)")
         self.tree.column("codigo", width=100, anchor="center")
         self.tree.column("unidade", width=60, anchor="center")
-        self.tree.column("tipo", width=280, anchor="w")
-        self.tree.column("coef", width=70, anchor="e")
+        self.tree.column("formula", width=380, anchor="w")
         self.tree.grid(row=3, column=0, columnspan=2, sticky="nsew")
         self.tree.bind("<Double-1>", lambda _e: self._editar_item())
 
@@ -745,20 +909,18 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             refs=self._refs_icones,
         ).pack(side="left", padx=(8, 0))
 
-        colunas = ("tipo", "codigo", "descricao", "unidade", "calculo", "coef")
+        colunas = ("tipo", "codigo", "descricao", "unidade", "formula")
         self.tree_sp = ttk.Treeview(aba, columns=colunas, show="headings", height=10)
         self.tree_sp.heading("tipo", text="Tipo")
         self.tree_sp.heading("codigo", text="Código")
         self.tree_sp.heading("descricao", text="Descrição")
         self.tree_sp.heading("unidade", text="Unid.")
-        self.tree_sp.heading("calculo", text="Cálculo")
-        self.tree_sp.heading("coef", text="Coef.")
+        self.tree_sp.heading("formula", text="Fórmula (fatores)")
         self.tree_sp.column("tipo", width=110, anchor="w")
         self.tree_sp.column("codigo", width=90, anchor="center")
-        self.tree_sp.column("descricao", width=360, anchor="w")
+        self.tree_sp.column("descricao", width=280, anchor="w")
         self.tree_sp.column("unidade", width=70, anchor="center")
-        self.tree_sp.column("calculo", width=220, anchor="w")
-        self.tree_sp.column("coef", width=70, anchor="e")
+        self.tree_sp.column("formula", width=280, anchor="w")
         self.tree_sp.grid(row=2, column=0, sticky="nsew", padx=10)
         self.tree_sp.bind("<Double-1>", lambda _e: self._editar_item_sp())
 
@@ -895,8 +1057,8 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             for chave, var in self.var_pct_aba1.items():
                 var.set(chave in selecionados)
             for item in reparo.get("itens") or []:
-                tipo_i = str(item.get("tipo_calculo", ""))
                 codigo = item.get("codigo_sinapi") or item.get("codigo") or ""
+                formula = rotulo_fatores(item)
                 self.tree.insert(
                     "",
                     "end",
@@ -904,8 +1066,7 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
                     values=(
                         codigo,
                         item.get("unidade", ""),
-                        ROTULOS_TIPO_CALCULO.get(tipo_i, tipo_i),
-                        str(item.get("coeficiente", "")).replace(".", ","),
+                        formula,
                     ),
                 )
             self._mostrar_origem()
@@ -1157,7 +1318,6 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             self.tree_sp.delete(*self.tree_sp.get_children())
             for item in sp.get("itens") or []:
                 tipo = str(item.get("tipo") or TIPO_ITEM_CATALOGO_SINAPI)
-                tipo_calc = str(item.get("tipo_calculo") or "")
                 if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
                     rotulo_tipo = "Composição"
                     codigo = item.get("codigo") or ""
@@ -1175,8 +1335,7 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
                         codigo,
                         descricao,
                         item.get("unidade") or "",
-                        ROTULOS_TIPO_CALCULO.get(tipo_calc, tipo_calc),
-                        str(item.get("coeficiente", "")).replace(".", ","),
+                        rotulo_fatores(item),
                     ),
                 )
         finally:
@@ -1265,8 +1424,10 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
 
             def ao_confirmar_calc(valores):
-                atual["tipo_calculo"] = valores.get("tipo_calculo") or "fixo"
-                atual["coeficiente"] = valores.get("coeficiente", 1)
+                fatores = normalizar_fatores(valores.get("fatores") or valores)
+                atual["fatores"] = fatores
+                atual["tipo_calculo"] = fatores[0]["tipo_calculo"]
+                atual["coeficiente"] = fatores[0]["coeficiente"]
                 for i, existente in enumerate(sp["itens"]):
                     if existente.get("id") == item_id:
                         sp["itens"][i] = atual

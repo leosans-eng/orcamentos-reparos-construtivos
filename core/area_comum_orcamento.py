@@ -11,7 +11,7 @@ from core.area_comum_anomalias import (
     itens_efetivos_reparo,
     normalizar_servicos_preliminares,
     obter_anomalia,
-    quantidade_item,
+    quantidade_de_item,
     titulo_grupo_orcamento,
 )
 from core.area_comum_calculos import numero
@@ -217,11 +217,7 @@ def _montar_grupo_itens_sinapi(
     catalogo_composicoes = _catalogo_composicoes(catalogo_composicoes)
     for item in itens or []:
         tipo = str(item.get("tipo") or "")
-        qtd = quantidade_item(
-            item.get("tipo_calculo") or "fixo",
-            item.get("coeficiente") or 1,
-            quantitativos or {},
-        ) * fator
+        qtd = quantidade_de_item(item, quantitativos) * fator
         if qtd <= 0:
             continue
         if tipo == TIPO_ITEM_CATALOGO_PROPRIA:

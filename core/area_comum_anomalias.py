@@ -46,6 +46,7 @@ ROTULOS_PERCENTUAIS_ABA1 = {item[0]: item[1] for item in PERCENTUAIS_MODELO}
 QTD_PERCENTUAIS_ABA1 = {item[0]: (item[3], item[4]) for item in PERCENTUAIS_MODELO}
 
 TIPOS_CALCULO = (
+    "area_fachada_bloco",
     "area_fachada_total",
     "area_alvenaria_hall_total",
     "area_laje_hall_total",
@@ -76,6 +77,7 @@ TIPOS_CALCULO = (
 )
 
 ROTULOS_TIPO_CALCULO = {
+    "area_fachada_bloco": "Área de fachada (um bloco, sem esquadrias)",
     "area_fachada_total": "Área de fachada (total, sem esquadrias)",
     "area_alvenaria_hall_total": "Área de alvenaria do hall (total)",
     "area_laje_hall_total": "Área da laje do hall (total)",
@@ -105,7 +107,39 @@ ROTULOS_TIPO_CALCULO = {
     "fixo": "Quantidade fixa",
 }
 
+ROTULOS_CURTOS_TIPO_CALCULO = {
+    "area_fachada_bloco": "fachada/bloco",
+    "area_fachada_total": "fachada total",
+    "area_alvenaria_hall_total": "alvenaria hall",
+    "area_laje_hall_total": "laje hall",
+    "area_piso_hall_total": "piso hall",
+    "perimetro_hall_rodape_total": "rodapé hall",
+    "area_cobertura_total": "cobertura",
+    "perimetro_paredes_externas_total": "perím. paredes",
+    "perimetro_platibanda_total": "platibanda",
+    "perimetro_beiral": "beiral",
+    "pingadeira_total": "pingadeira",
+    "esquadria_area_total": "esquadrias",
+    "pct_troca_revestimento_fachada": "% revest. fachada",
+    "pct_troca_revestimento_paredes_hall": "% revest. paredes",
+    "pct_troca_revestimento_tetos_hall": "% revest. tetos",
+    "pct_troca_pisos_hall": "% pisos hall",
+    "pct_troca_rodape_hall": "% rodapé",
+    "pct_troca_estrutura_cobertura": "% estrutura cob.",
+    "pct_instalacao_tabeira_beiral": "% tabeira",
+    "pct_troca_telhas_cobertura": "% telhas",
+    "pct_troca_rufos_pingadeira": "% rufos",
+    "pct_pintura_fachada": "% pintura fachada",
+    "pct_pintura_paredes_hall": "% pintura paredes",
+    "pct_pintura_teto_hall": "% pintura teto",
+    "por_bloco": "blocos",
+    "por_pavimento": "pavimentos",
+    "por_apartamento": "apartamentos",
+    "fixo": "fixo",
+}
+
 MAPA_TIPO_QUANTITATIVO = {
+    "area_fachada_bloco": "area_fachada_bloco_m2",
     "area_fachada_total": "area_fachada_total_m2",
     "area_alvenaria_hall_total": "area_alvenaria_hall_total_m2",
     "area_laje_hall_total": "area_laje_hall_total_m2",
@@ -164,23 +198,88 @@ def _coeficiente_item(coeficiente) -> float:
         return 1.0
 
 
+def novo_fator(
+    *,
+    tipo_calculo: str = "fixo",
+    coeficiente: float = 1.0,
+) -> dict[str, Any]:
+    tipo = str(tipo_calculo or "fixo")
+    return {
+        "tipo_calculo": tipo if tipo in TIPOS_CALCULO else "fixo",
+        "coeficiente": _coeficiente_item(coeficiente),
+    }
+
+
+def normalizar_fatores(bruto) -> list[dict[str, Any]]:
+    """Aceita lista `fatores` ou o par legado tipo_calculo/coeficiente."""
+    if isinstance(bruto, dict):
+        origem = bruto.get("fatores")
+        if isinstance(origem, list) and origem:
+            fatores = []
+            for item in origem:
+                if not isinstance(item, dict):
+                    continue
+                fatores.append(
+                    novo_fator(
+                        tipo_calculo=item.get("tipo_calculo") or "fixo",
+                        coeficiente=item.get("coeficiente", 1),
+                    )
+                )
+            if fatores:
+                return fatores
+        return [
+            novo_fator(
+                tipo_calculo=bruto.get("tipo_calculo") or "fixo",
+                coeficiente=bruto.get("coeficiente", 1),
+            )
+        ]
+    if isinstance(bruto, list) and bruto:
+        fatores = []
+        for item in bruto:
+            if not isinstance(item, dict):
+                continue
+            fatores.append(
+                novo_fator(
+                    tipo_calculo=item.get("tipo_calculo") or "fixo",
+                    coeficiente=item.get("coeficiente", 1),
+                )
+            )
+        if fatores:
+            return fatores
+    return [novo_fator()]
+
+
+def _aplicar_fatores_no_item(item: dict[str, Any], fatores: list[dict[str, Any]]) -> dict[str, Any]:
+    fatores = normalizar_fatores(fatores)
+    item["fatores"] = fatores
+    # Campos legados: primeiro fator (compatível com catálogos/UI antigos).
+    item["tipo_calculo"] = fatores[0]["tipo_calculo"]
+    item["coeficiente"] = fatores[0]["coeficiente"]
+    return item
+
+
 def novo_item_sinapi(
     *,
     codigo_sinapi: str = "",
     unidade: str = "m²",
     tipo_calculo: str = "area_fachada_total",
     coeficiente: float = 1.0,
+    fatores: list | None = None,
     da_etapa: bool = False,
 ) -> dict[str, Any]:
-    return {
+    item = {
         "id": novo_id(),
         "tipo": TIPO_ITEM_CATALOGO_SINAPI,
         "codigo_sinapi": str(codigo_sinapi).strip(),
         "unidade": str(unidade or "m²").strip(),
-        "tipo_calculo": tipo_calculo if tipo_calculo in TIPOS_CALCULO else "fixo",
-        "coeficiente": _coeficiente_item(coeficiente),
         "da_etapa": bool(da_etapa),
     }
+    return _aplicar_fatores_no_item(
+        item,
+        fatores
+        if fatores is not None
+        else [novo_fator(tipo_calculo=tipo_calculo, coeficiente=coeficiente)],
+    )
 
 
 def novo_item_composicao_propria(
@@ -191,19 +290,24 @@ def novo_item_composicao_propria(
     unidade: str = "un",
     tipo_calculo: str = "fixo",
     coeficiente: float = 1.0,
+    fatores: list | None = None,
     da_etapa: bool = False,
 ) -> dict[str, Any]:
-    return {
+    item = {
         "id": novo_id(),
         "tipo": TIPO_ITEM_CATALOGO_PROPRIA,
         "composicao_catalogo_id": str(composicao_catalogo_id or "").strip(),
         "codigo": str(codigo or "").strip(),
         "nome": str(nome or "").strip(),
         "unidade": str(unidade or "un").strip(),
-        "tipo_calculo": tipo_calculo if tipo_calculo in TIPOS_CALCULO else "fixo",
-        "coeficiente": _coeficiente_item(coeficiente),
         "da_etapa": bool(da_etapa),
     }
+    return _aplicar_fatores_no_item(
+        item,
+        fatores
+        if fatores is not None
+        else [novo_fator(tipo_calculo=tipo_calculo, coeficiente=coeficiente)],
+    )
 
 
 def _normalizar_item_catalogo(bruto: dict) -> dict[str, Any] | None:
@@ -217,22 +321,21 @@ def _normalizar_item_catalogo(bruto: dict) -> dict[str, Any] | None:
             tipo = TIPO_ITEM_CATALOGO_PROPRIA
         else:
             tipo = TIPO_ITEM_CATALOGO_SINAPI
+    fatores = normalizar_fatores(bruto)
     if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
         novo = novo_item_composicao_propria(
             composicao_catalogo_id=bruto.get("composicao_catalogo_id"),
             codigo=bruto.get("codigo"),
             nome=bruto.get("nome") or bruto.get("descricao"),
             unidade=bruto.get("unidade") or "un",
-            tipo_calculo=bruto.get("tipo_calculo") or "fixo",
-            coeficiente=bruto.get("coeficiente") or 1,
+            fatores=fatores,
             da_etapa=bool(bruto.get("da_etapa")),
         )
     else:
         novo = novo_item_sinapi(
             codigo_sinapi=bruto.get("codigo_sinapi") or bruto.get("codigo"),
             unidade=bruto.get("unidade") or "m²",
-            tipo_calculo=bruto.get("tipo_calculo") or "fixo",
-            coeficiente=bruto.get("coeficiente") or 1,
+            fatores=fatores,
             da_etapa=bool(bruto.get("da_etapa")),
         )
     if bruto.get("id"):
@@ -292,11 +395,15 @@ def itens_servicos_da_etapa(
             if not codigo:
                 continue
             anterior = _achar_anterior(("S", codigo, ""))
+            fatores = (
+                normalizar_fatores(anterior)
+                if anterior
+                else [novo_fator(tipo_calculo=padrao, coeficiente=1)]
+            )
             novo = novo_item_sinapi(
                 codigo_sinapi=codigo,
                 unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
-                tipo_calculo=(anterior or {}).get("tipo_calculo") or padrao,
-                coeficiente=(anterior or {}).get("coeficiente", 1),
+                fatores=fatores,
                 da_etapa=True,
             )
             if anterior and anterior.get("id"):
@@ -307,13 +414,17 @@ def itens_servicos_da_etapa(
             catalogo_id = str(ref.get("composicao_catalogo_id") or "").strip()
             codigo = str(ref.get("codigo") or "").strip()
             anterior = _achar_anterior(("P", catalogo_id, codigo))
+            fatores = (
+                normalizar_fatores(anterior)
+                if anterior
+                else [novo_fator(tipo_calculo=padrao, coeficiente=1)]
+            )
             novo = novo_item_composicao_propria(
                 composicao_catalogo_id=catalogo_id,
                 codigo=codigo,
                 nome=(anterior or {}).get("nome") or ref.get("nome") or codigo,
                 unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
-                tipo_calculo=(anterior or {}).get("tipo_calculo") or padrao,
-                coeficiente=(anterior or {}).get("coeficiente", 1),
+                fatores=fatores,
                 da_etapa=True,
             )
             if anterior and anterior.get("id"):
@@ -327,7 +438,7 @@ def itens_servicos_da_etapa(
             continue
         if item.get("da_etapa"):
             continue
-        extra = deepcopy(item)
+        extra = _normalizar_item_catalogo(deepcopy(item)) or deepcopy(item)
         if not extra.get("tipo"):
             extra["tipo"] = TIPO_ITEM_CATALOGO_SINAPI
         novos.append(extra)
@@ -563,12 +674,14 @@ def itens_sinapi_da_etapa(
             ),
             None,
         )
-        tipo = str((anterior or {}).get("tipo_calculo") or padrao)
+        if anterior:
+            fatores = normalizar_fatores(anterior)
+        else:
+            fatores = [novo_fator(tipo_calculo=padrao, coeficiente=1)]
         novo = novo_item_sinapi(
             codigo_sinapi=codigo,
             unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
-            tipo_calculo=tipo,
-            coeficiente=(anterior or {}).get("coeficiente", 1),
+            fatores=fatores,
             da_etapa=True,
         )
         if anterior and anterior.get("id"):
@@ -584,7 +697,7 @@ def itens_sinapi_da_etapa(
         codigo = str(item.get("codigo_sinapi") or "").strip()
         if codigo and codigo in vistos_codigos:
             continue
-        extra = deepcopy(item)
+        extra = _normalizar_item_catalogo(deepcopy(item)) or deepcopy(item)
         extra["da_etapa"] = False
         novos.append(extra)
     return novos
@@ -623,18 +736,22 @@ def valores_considerados_reparo(
     percentual,
     etapas_por_id: dict | None = None,
 ) -> list[tuple[float, str]]:
-    """Quantidades efetivas do reparo (únicas por tipo/coeficiente/unidade)."""
+    """Quantidades efetivas do reparo (únicas por fórmula/unidade)."""
     reparo = reparo or {}
     quantitativos = quantitativos or {}
     fator = fator_percentual_anomalia(percentual)
     resultado: list[tuple[float, str]] = []
     vistos: set[tuple] = set()
     for item in itens_efetivos_reparo(reparo, etapas_por_id):
-        tipo = str(item.get("tipo_calculo") or "fixo")
-        coef = _coeficiente_item(item.get("coeficiente") or 1)
-        qtd = quantidade_item(tipo, coef, quantitativos) * fator
+        fatores = normalizar_fatores(item)
+        qtd = quantidade_de_item(item, quantitativos) * fator
         unid = str(item.get("unidade") or "").strip() or "un"
-        marca = (tipo, round(coef, 6), unid)
+        marca = (
+            tuple(
+                (f["tipo_calculo"], round(float(f["coeficiente"]), 6)) for f in fatores
+            ),
+            unid,
+        )
         if marca in vistos:
             continue
         vistos.add(marca)
@@ -662,3 +779,44 @@ def quantidade_item(tipo_calculo: str, coeficiente: float, quantitativos: dict) 
         return coef
     base = float(quantitativos.get(chave) or 0)
     return base * coef
+
+
+def quantidade_de_item(item: dict | None, quantitativos: dict | None) -> float:
+    """Produto dos fatores do item (ex.: fachada/bloco × blocos × 2)."""
+    total = 1.0
+    for fator in normalizar_fatores(item or {}):
+        total *= quantidade_item(
+            fator.get("tipo_calculo") or "fixo",
+            fator.get("coeficiente") or 1,
+            quantitativos or {},
+        )
+    return total
+
+
+def _fmt_coef_curto(valor: float) -> str:
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return str(valor)
+    if abs(numero - round(numero)) < 1e-9:
+        return str(int(round(numero)))
+    texto = f"{numero:.4f}".rstrip("0").rstrip(".")
+    return texto.replace(".", ",")
+
+
+def rotulo_fatores(item_ou_fatores) -> str:
+    """Resumo curto da fórmula, ex.: «fachada/bloco × blocos × 2»."""
+    fatores = normalizar_fatores(item_ou_fatores)
+    partes = []
+    for fator in fatores:
+        tipo = fator.get("tipo_calculo") or "fixo"
+        coef = _coeficiente_item(fator.get("coeficiente") or 1)
+        if tipo == "fixo":
+            partes.append(_fmt_coef_curto(coef))
+            continue
+        base = ROTULOS_CURTOS_TIPO_CALCULO.get(tipo) or tipo
+        if abs(coef - 1.0) < 1e-9:
+            partes.append(base)
+        else:
+            partes.append(f"{base}×{_fmt_coef_curto(coef)}")
+    return " × ".join(partes) if partes else "—"

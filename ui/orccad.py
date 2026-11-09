@@ -20,8 +20,15 @@ from ui.widgets import (
     vincular_tooltip,
 )
 
-CHAVE_AREA_PLANTA = "area_construida_m2"
-CHAVE_PERIMETRO_FACHADA = "perimetro_paredes_externas_bloco_m"
+
+def valores_campos_desenho(resultado: ResultadoDesenho | None) -> dict[str, str]:
+    """Área ou perímetro do desenho para cada campo da Área Comum."""
+    saida = {}
+    for chave, _rotulo, tipo in CAMPOS_DESENHO_AREA_COMUM:
+        texto = valor_para_campo(resultado, tipo)
+        if texto:
+            saida[chave] = texto
+    return saida
 
 
 class JanelaORCCAD:
@@ -33,15 +40,12 @@ class JanelaORCCAD:
         *,
         standalone: bool = False,
         on_salvar_principal=None,
-        on_aplicar_campo=None,
         on_fechar=None,
         desenho_inicial=None,
     ):
         self.on_salvar_principal = on_salvar_principal
-        self.on_aplicar_campo = on_aplicar_campo
         self.on_fechar = on_fechar
         self._resultado: ResultadoDesenho | None = None
-        self._valores = {chave: "" for chave, _rotulo, _tipo in CAMPOS_DESENHO_AREA_COMUM}
 
         if standalone:
             self.janela = parent
@@ -108,40 +112,37 @@ class JanelaORCCAD:
             btn_salvar.pack(fill="x")
             vincular_tooltip(
                 btn_salvar,
-                "Grava a área construída e o perímetro das fachadas."
+                "Grava a planta e preenche os campos de área e perímetro "
+                "da Área Comum com os valores do desenho.",
             )
 
-        ttk.Label(lado, text="Campo da Área Comum").pack(anchor="w", pady=(12, 0))
-        self._rotulo_por_chave = {
-            chave: rotulo for chave, rotulo, _tipo in CAMPOS_DESENHO_AREA_COMUM
-        }
-        self._tipo_por_chave = {
-            chave: tipo for chave, _rotulo, tipo in CAMPOS_DESENHO_AREA_COMUM
-        }
-        self.var_campo = tk.StringVar(value=CAMPOS_DESENHO_AREA_COMUM[0][1])
-        self.combo_campo = ttk.Combobox(
+        ttk.Separator(lado).pack(fill="x", pady=(12, 8))
+        ttk.Label(
             lado,
-            textvariable=self.var_campo,
-            values=[rotulo for _chave, rotulo, _tipo in CAMPOS_DESENHO_AREA_COMUM],
-            state="readonly",
-            width=38,
-        )
-        self.combo_campo.pack(fill="x", pady=(2, 8))
+            text="Campos da Área Comum",
+            font=("Segoe UI", 9, "bold"),
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            lado,
+            text=(
+                "Valores calculados pelo desenho. Ao salvar, todos "
+                "preenchem o orçamento."
+                if self.on_salvar_principal is not None
+                else "Valores calculados pelo desenho (prévia)."
+            ),
+            wraplength=280,
+        ).pack(anchor="w", pady=(0, 6))
 
-        texto_usar = (
-            "Usar metragem neste campo"
-            if self.on_aplicar_campo is None
-            else "Preencher este campo no orçamento"
-        )
-        btn_usar = ttk.Button(lado, text=texto_usar, command=self._aplicar_campo)
-        btn_usar.pack(fill="x")
-        vincular_tooltip(
-            btn_usar,
-            "Copia área ou perímetro do desenho para o campo escolhido.",
-        )
-        btn_copiar = ttk.Button(lado, text="Copiar valor", command=self._copiar_valor)
-        btn_copiar.pack(fill="x", pady=(4, 8))
-        vincular_tooltip(btn_copiar, "Copia o número para a área de transferência.")
+        self._vars_campos = {}
+        for chave, rotulo, tipo in CAMPOS_DESENHO_AREA_COMUM:
+            linha = ttk.Frame(lado)
+            linha.pack(fill="x", pady=2)
+            ttk.Label(linha, text=rotulo + ":", wraplength=190).pack(
+                side="left", anchor="w"
+            )
+            var = tk.StringVar(value="—")
+            ttk.Label(linha, textvariable=var, width=12, anchor="e").pack(side="right")
+            self._vars_campos[chave] = (var, tipo)
 
         self.var_feedback = tk.StringVar(value="")
         ttk.Label(
@@ -149,27 +150,7 @@ class JanelaORCCAD:
             textvariable=self.var_feedback,
             wraplength=280,
             foreground=cores.titulo,
-        ).pack(anchor="w", pady=(0, 10))
-
-        if self.on_aplicar_campo is None:
-            ttk.Separator(lado).pack(fill="x", pady=4)
-            ttk.Label(
-                lado,
-                text="Campos preenchidos (simulação)",
-                font=("Segoe UI", 9, "bold"),
-            ).pack(anchor="w", pady=(6, 4))
-            self._vars_campos = {}
-            for chave, rotulo, _tipo in CAMPOS_DESENHO_AREA_COMUM:
-                linha = ttk.Frame(lado)
-                linha.pack(fill="x", pady=1)
-                ttk.Label(linha, text=rotulo + ":", wraplength=190).pack(
-                    side="left", anchor="w"
-                )
-                var = tk.StringVar(value="—")
-                ttk.Label(linha, textvariable=var, width=10, anchor="e").pack(side="right")
-                self._vars_campos[chave] = var
-        else:
-            self._vars_campos = {}
+        ).pack(anchor="w", pady=(10, 0))
 
         self.painel.vincular_atalhos(self.janela)
         if not standalone:
@@ -180,19 +161,15 @@ class JanelaORCCAD:
         self.janela.after_idle(self.painel.enquadrar_quando_visivel)
         self.janela.after(120, self.painel.enquadrar_quando_visivel)
 
-    def _chave_campo(self) -> str:
-        rotulo = self.var_campo.get()
-        for chave, nome, _tipo in CAMPOS_DESENHO_AREA_COMUM:
-            if nome == rotulo:
-                return chave
-        return CAMPOS_DESENHO_AREA_COMUM[0][0]
-
     def _ao_resultado(self, resultado: ResultadoDesenho | None):
         self._resultado = resultado
         if resultado is None:
             self.var_area.set("Área: —")
             self.var_perim.set("Perímetro: —")
+            for var, _tipo in self._vars_campos.values():
+                var.set("—")
             return
+
         if resultado.fechado:
             self.var_area.set(f"Área: {formatar_decimal_br(resultado.area_m2, 2)} m²")
         else:
@@ -201,29 +178,13 @@ class JanelaORCCAD:
             f"Perímetro: {formatar_decimal_br(resultado.perimetro_m, 2)} m"
         )
 
-    def _aplicar_campo(self):
-        chave = self._chave_campo()
-        tipo = self._tipo_por_chave[chave]
-        texto = valor_para_campo(self._resultado, tipo)
-        if not texto:
-            if tipo == "area":
-                self.var_feedback.set("Complete o polígono para obter a área.")
-            else:
-                self.var_feedback.set("Desenhe pelo menos um segmento.")
-            return
-        self._valores[chave] = texto
-        unidade = "m²" if tipo == "area" else "m"
-        if chave in self._vars_campos:
-            self._vars_campos[chave].set(f"{texto} {unidade}")
-        if self.on_aplicar_campo is not None:
-            self.on_aplicar_campo(chave, texto)
-            self.var_feedback.set(
-                f"Preenchido «{self._rotulo_por_chave[chave]}» com {texto} {unidade}."
-            )
-        else:
-            self.var_feedback.set(
-                f"Preencheria «{self._rotulo_por_chave[chave]}» com {texto} {unidade}."
-            )
+        for chave, (var, tipo) in self._vars_campos.items():
+            texto = valor_para_campo(resultado, tipo)
+            if not texto:
+                var.set("—")
+                continue
+            unidade = "m²" if tipo == "area" else "m"
+            var.set(f"{texto} {unidade}")
 
     def _salvar_principal(self):
         if self.on_salvar_principal is None:
@@ -240,35 +201,20 @@ class JanelaORCCAD:
             messagebox.showinfo(
                 "Desenho",
                 "Complete o polígono (Completar ou clique no primeiro ponto) "
-                "para obter a área e o perímetro das fachadas.",
+                "para obter a área e o perímetro.",
                 parent=self.janela,
             )
             return
-        area = valor_para_campo(resultado, "area")
-        peri = valor_para_campo(resultado, "perimetro")
-        if not area or not peri:
+        valores = valores_campos_desenho(resultado)
+        if not valores:
             messagebox.showinfo(
                 "Desenho",
                 "Não foi possível calcular área e perímetro deste polígono.",
                 parent=self.janela,
             )
             return
-        self.on_salvar_principal(
-            self.painel.exportar(),
-            {CHAVE_AREA_PLANTA: area, CHAVE_PERIMETRO_FACHADA: peri},
-        )
+        self.on_salvar_principal(self.painel.exportar(), valores)
         self._fechar()
-
-    def _copiar_valor(self):
-        chave = self._chave_campo()
-        tipo = self._tipo_por_chave[chave]
-        texto = valor_para_campo(self._resultado, tipo) or self._valores.get(chave, "")
-        if not texto:
-            self.var_feedback.set("Nada para copiar ainda.")
-            return
-        self.janela.clipboard_clear()
-        self.janela.clipboard_append(texto)
-        self.var_feedback.set(f"Copiado: {texto}")
 
     def _fechar(self):
         callback = self.on_fechar

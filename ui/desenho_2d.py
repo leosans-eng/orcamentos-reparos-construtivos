@@ -48,6 +48,8 @@ CAMPOS_DESENHO_AREA_COMUM = (
     ("area_piso_hall_pav_m2", "Área de piso do hall (pavimento)", "area"),
 )
 
+CHAVES_MEDIDA_ORCCAD = frozenset(chave for chave, _rotulo, _tipo in CAMPOS_DESENHO_AREA_COMUM)
+
 _ZOOM_MIN = 8.0
 _ZOOM_MAX = 400.0
 _ABERTURA_PX = 16.0

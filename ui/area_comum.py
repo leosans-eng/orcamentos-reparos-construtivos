@@ -71,7 +71,7 @@ from ui.calculadora import abrir_calculadora
 from ui.dialogo_admin_usuarios import usuario_atual_eh_admin
 from ui.dialogo_previa_composicao import DialogoPreviaComposicao
 from ui.dialogo_config_anomalias_area_comum import DialogoConfigAnomaliasAreaComum
-from ui.desenho_2d import PreviaDesenho2D
+from ui.desenho_2d import CHAVES_MEDIDA_ORCCAD, PreviaDesenho2D
 from ui.grade_orcamento import GradeOrcamento
 from ui.icones import (
     criar_botao_inserir_prominente,
@@ -152,16 +152,16 @@ def _largura_combo_para_opcoes(combo, textos) -> int:
     return max(1, (px + zero - 1) // zero)
 
 
-def _combo_fechar_e_rolar(combo, event):
-    """Fecha o popdown do combo e rola a aba, sem trocar o item selecionado."""
+def _combo_popdown_aberto(combo) -> bool:
     try:
-        combo.tk.call("ttk::combobox::Unpost", combo)
-    except tk.TclError:
-        try:
-            combo.event_generate("<Escape>")
-        except tk.TclError:
-            pass
-    atual = combo
+        nome = combo.tk.call("ttk::combobox::PopdownWindow", combo)
+        return bool(int(combo.tk.call("winfo", "ismapped", nome)))
+    except (tk.TclError, ValueError, TypeError):
+        return False
+
+
+def _rolar_canvas_ancestral(widget, event):
+    atual = widget
     while atual is not None:
         if isinstance(atual, tk.Canvas):
             delta = int(getattr(event, "delta", 0) or 0)
@@ -171,14 +171,28 @@ def _combo_fechar_e_rolar(combo, event):
                 atual.yview_scroll(-1, "units")
             elif getattr(event, "num", None) == 5:
                 atual.yview_scroll(1, "units")
-            break
+            return True
         atual = getattr(atual, "master", None)
+    return False
+
+
+def _combo_ao_rolar(combo, event):
+    """Impede trocar o valor com a roda; com lista aberta, não rola a página."""
+    if _combo_popdown_aberto(combo):
+        return "break"
+    _rolar_canvas_ancestral(combo, event)
     return "break"
 
 
 def _vincular_combo_fecha_ao_rolar(combo):
     def _ao_roda(event, c=combo):
-        return _combo_fechar_e_rolar(c, event)
+        return _combo_ao_rolar(c, event)
+
+    def _ao_roda_popdown(event, c=combo):
+        # Lista aberta: deixa o Listbox rolar; bloqueia a página.
+        if event.widget.winfo_class() == "Listbox":
+            return None
+        return "break"
 
     def _ligar_popdown(_event=None, c=combo):
         try:
@@ -198,7 +212,11 @@ def _vincular_combo_fecha_ao_rolar(combo):
             fila.extend(filhos)
         for alvo in alvos:
             for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
-                alvo.bind(seq, _ao_roda)
+                if alvo.winfo_class() == "Listbox":
+                    # Consome o evento depois do Listbox nativo? Bind sem break
+                    # no ancestral já impede a página; no Listbox não interferimos.
+                    continue
+                alvo.bind(seq, _ao_roda_popdown)
 
     for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
         combo.bind(seq, _ao_roda)
@@ -480,6 +498,7 @@ class AreaComumFrame(tk.Frame):
         )
         self.combo_uf_dados.grid(row=0, column=5, sticky="w", padx=(6, 0))
         self.combo_uf_dados.bind("<<ComboboxSelected>>", lambda _e: self._ao_alterar_campo())
+        _vincular_combo_fecha_ao_rolar(self.combo_uf_dados)
         self.combo_uf = self.combo_uf_dados
         self.var_nome.trace_add("write", self._forcar_maiusculo_nome)
         self.var_municipio.trace_add("write", self._ao_digitar_municipio)
@@ -672,7 +691,24 @@ class AreaComumFrame(tk.Frame):
             tk.Label(campos, text=rotulo + ":", bg=fundo, fg=cores.texto, anchor="w").grid(
                 row=linha, column=col, sticky="w", pady=2, padx=(0, 6)
             )
-            entrada = ttk.Entry(campos, textvariable=self.var_medidas[chave], width=12)
+            # Mesmo widget em todos (tk.Entry): no Windows o ttk ignora
+            # fieldbackground, e misturar ttk/tk desalinha a coluna.
+            fundo_campo = (
+                cores.fundo_cartao_off
+                if chave in CHAVES_MEDIDA_ORCCAD
+                else cores.fundo_cartao
+            )
+            entrada = tk.Entry(
+                campos,
+                textvariable=self.var_medidas[chave],
+                width=12,
+                bg=fundo_campo,
+                fg=cores.texto,
+                insertbackground=cores.texto,
+                relief="solid",
+                bd=1,
+                highlightthickness=0,
+            )
             entrada.grid(row=linha, column=col + 1, sticky="w", pady=2, padx=(0, 18))
             self._vincular_campo_numerico(entrada)
 
@@ -1237,10 +1273,9 @@ class AreaComumFrame(tk.Frame):
             while fila:
                 widget = fila.pop()
                 if isinstance(widget, ttk.Combobox):
-                    try:
-                        widget.tk.call("ttk::combobox::Unpost", widget)
-                    except tk.TclError:
-                        pass
+                    if _combo_popdown_aberto(widget):
+                        # Lista aberta: não rola a página por baixo.
+                        return "break"
                 try:
                     fila.extend(widget.winfo_children())
                 except tk.TclError:
@@ -1371,22 +1406,12 @@ class AreaComumFrame(tk.Frame):
         self._janela_orccad = JanelaORCCAD(
             self.winfo_toplevel(),
             on_salvar_principal=self._ao_salvar_desenho_principal,
-            on_aplicar_campo=self._ao_aplicar_campo_desenho,
             on_fechar=self._ao_fechar_orccad,
             desenho_inicial=self._desenho_principal,
         )
 
     def _ao_fechar_orccad(self):
         self._janela_orccad = None
-
-    def _ao_aplicar_campo_desenho(self, chave, texto):
-        if chave not in self.var_medidas:
-            return
-        self.var_medidas[chave].set(texto)
-        self._marcar_sujo()
-        self._registrar_historico("Medida do desenho")
-        self._recalcular()
-        self._mostrar_feedback("Medida preenchida a partir do desenho.", "green")
 
     def _ao_salvar_desenho_principal(self, desenho, valores):
         self._desenho_principal = dict(desenho or {"pontos": [], "fechado": False})
@@ -1398,7 +1423,7 @@ class AreaComumFrame(tk.Frame):
         self._registrar_historico("Planta do condomínio")
         self._recalcular()
         self._mostrar_feedback(
-            "Planta salva: área construída e perímetro das fachadas.",
+            "Planta salva: campos de área e perímetro preenchidos.",
             "green",
         )
 

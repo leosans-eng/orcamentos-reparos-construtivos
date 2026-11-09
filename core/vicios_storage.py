@@ -1,4 +1,4 @@
-"""Leitura e gravação de vicios_construtivos.json."""
+"""Leitura e gravação de anomalias_area_privativa.json."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from app_paths import vicios_construtivos_path, vicios_construtivos_path_gravacao
+from app_paths import anomalias_area_privativa_path, anomalias_area_privativa_path_gravacao
 
 TIPOS_CALCULO = (
     "area_piso",
@@ -56,20 +56,20 @@ def comodos_permitidos_anomalia(dados_anomalia: dict[str, Any] | None, todos=Non
 
 
 def carregar_vicios(caminho: Path | None = None) -> dict[str, Any]:
-    origem = caminho or vicios_construtivos_path()
+    origem = caminho or anomalias_area_privativa_path()
     with open(origem, "r", encoding="utf-8") as f:
         dados = json.load(f)
     if isinstance(dados, list):
         dados = dados[0]
     if not isinstance(dados, dict):
-        raise ValueError("vicios_construtivos.json inválido.")
+        raise ValueError("anomalias_area_privativa.json inválido.")
     dados.setdefault("anomalias", {})
     dados.setdefault("itens_gerais", {})
     return dados
 
 
 def salvar_vicios(dados: dict[str, Any], caminho: Path | None = None) -> Path:
-    destino = caminho or vicios_construtivos_path_gravacao()
+    destino = caminho or anomalias_area_privativa_path_gravacao()
     destino.parent.mkdir(parents=True, exist_ok=True)
     payload = deepcopy(dados)
     with open(destino, "w", encoding="utf-8") as f:

@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 
 from core.api_client import get_client
-from ui.dialogo_configuracoes import abrir_dialogo_configuracoes
 from ui.icones import criar_icone_svg
 from ui.temas import cores_tema, tema_usa_imagens
 from ui.area_comum import acesso_area_comum_liberado
@@ -213,70 +212,50 @@ class HubFrame(tk.Frame):
         return secao
 
     def _montar_botoes_rodape(self, cores):
-        icone_cfg = criar_icone_svg(
+        if self.on_logout is None:
+            return
+
+        rodape_usuario = tk.Frame(self, bg=cores.fundo)
+        rodape_usuario.place(relx=0.0, rely=1.0, anchor="sw", x=14, y=-10)
+
+        icone_logout = criar_icone_svg(
             self,
-            "settings-outline",
+            "log-out-outline",
             altura=16,
-            cor=cores.titulo,
+            cor=cores.perigo,
         )
-        self._refs_icones.append(icone_cfg)
-
-        btn_cfg = ttk.Button(
-            self,
-            text="Configurações",
-            image=icone_cfg,
+        self._refs_icones.append(icone_logout)
+        pixmap = tema_usa_imagens(
+            getattr(self.winfo_toplevel(), "_orc_tema_atual", None)
+        )
+        btn_logout = ttk.Button(
+            rodape_usuario,
+            text="Logout",
+            image=icone_logout,
             compound="left",
-            command=self._abrir_configuracoes,
-            style="Compact.TButton",
+            command=self._logout,
+            style="Compact.TButton" if pixmap else "Delete.Compact.TButton",
         )
-        btn_cfg.place(relx=1.0, rely=1.0, anchor="se", x=-14, y=-10)
+        btn_logout.pack(side="left")
 
-        if self.on_logout is not None:
-            rodape_usuario = tk.Frame(self, bg=cores.fundo)
-            rodape_usuario.place(relx=0.0, rely=1.0, anchor="sw", x=14, y=-10)
-
-            icone_logout = criar_icone_svg(
-                self,
-                "log-out-outline",
-                altura=16,
-                cor=cores.perigo,
-            )
-            self._refs_icones.append(icone_logout)
-            pixmap = tema_usa_imagens(
-                getattr(self.winfo_toplevel(), "_orc_tema_atual", None)
-            )
-            btn_logout = ttk.Button(
-                rodape_usuario,
-                text="Logout",
-                image=icone_logout,
-                compound="left",
-                command=self._logout,
-                style="Compact.TButton" if pixmap else "Delete.Compact.TButton",
-            )
-            btn_logout.pack(side="left")
-
-            icone_person = criar_icone_svg(
-                self,
-                "person",
-                altura=16,
-                cor=cores.texto_suave,
-            )
-            self._refs_icones.append(icone_person)
-            tk.Label(rodape_usuario, image=icone_person, bg=cores.fundo).pack(
-                side="left", padx=(10, 4)
-            )
-            usuario = get_client().username or "—"
-            tk.Label(
-                rodape_usuario,
-                text=usuario,
-                font=("Segoe UI", 9),
-                fg=cores.texto_suave,
-                bg=cores.fundo,
-            ).pack(side="left")
-
-    def _abrir_configuracoes(self):
-        janela = self.winfo_toplevel()
-        abrir_dialogo_configuracoes(janela, self.ctx)
+        icone_person = criar_icone_svg(
+            self,
+            "person",
+            altura=16,
+            cor=cores.texto_suave,
+        )
+        self._refs_icones.append(icone_person)
+        tk.Label(rodape_usuario, image=icone_person, bg=cores.fundo).pack(
+            side="left", padx=(10, 4)
+        )
+        usuario = get_client().username or "—"
+        tk.Label(
+            rodape_usuario,
+            text=usuario,
+            font=("Segoe UI", 9),
+            fg=cores.texto_suave,
+            bg=cores.fundo,
+        ).pack(side="left")
 
     def _logout(self):
         if self.on_logout is not None:

@@ -13,12 +13,18 @@ from app_paths import (
 )
 from core.area_comum import PERCENTUAIS_MODELO, novo_id
 from core.area_comum_calculos import numero
-from core.etapas_predefinidas import TIPO_ITEM_SINAPI
+from core.etapas_predefinidas import TIPO_ITEM_PROPRIA, TIPO_ITEM_SINAPI
 
 VERSAO_CATALOGO = 1
 
 ORIGEM_ITENS = "itens"
 ORIGEM_ETAPA = "etapa_predefinida"
+ORIGEM_SERVICOS_PRELIMINARES = "servicos_preliminares"
+
+TIPO_ITEM_CATALOGO_SINAPI = TIPO_ITEM_SINAPI
+TIPO_ITEM_CATALOGO_PROPRIA = TIPO_ITEM_PROPRIA
+
+NOME_SERVICOS_PRELIMINARES = "SERVIÇOS PRELIMINARES"
 
 TITULO_ANOMALIA = "anomalia"
 TITULO_REPARO = "reparo"
@@ -131,8 +137,19 @@ MAPA_TIPO_QUANTITATIVO = {
 UNIDADES_COMUNS = ("m²", "m", "m³", "H", "Un", "un", "KG", "L")
 
 
+def novos_servicos_preliminares() -> dict[str, Any]:
+    return {
+        "nome": NOME_SERVICOS_PRELIMINARES,
+        "itens": [],
+    }
+
+
 def catalogo_vazio() -> dict[str, Any]:
-    return {"versao": VERSAO_CATALOGO, "anomalias": {}}
+    return {
+        "versao": VERSAO_CATALOGO,
+        "anomalias": {},
+        "servicos_preliminares": novos_servicos_preliminares(),
+    }
 
 
 def _coeficiente_item(coeficiente) -> float:
@@ -157,12 +174,164 @@ def novo_item_sinapi(
 ) -> dict[str, Any]:
     return {
         "id": novo_id(),
+        "tipo": TIPO_ITEM_CATALOGO_SINAPI,
         "codigo_sinapi": str(codigo_sinapi).strip(),
         "unidade": str(unidade or "m²").strip(),
         "tipo_calculo": tipo_calculo if tipo_calculo in TIPOS_CALCULO else "fixo",
         "coeficiente": _coeficiente_item(coeficiente),
         "da_etapa": bool(da_etapa),
     }
+
+
+def novo_item_composicao_propria(
+    *,
+    composicao_catalogo_id: str = "",
+    codigo: str = "",
+    nome: str = "",
+    unidade: str = "un",
+    tipo_calculo: str = "fixo",
+    coeficiente: float = 1.0,
+    da_etapa: bool = False,
+) -> dict[str, Any]:
+    return {
+        "id": novo_id(),
+        "tipo": TIPO_ITEM_CATALOGO_PROPRIA,
+        "composicao_catalogo_id": str(composicao_catalogo_id or "").strip(),
+        "codigo": str(codigo or "").strip(),
+        "nome": str(nome or "").strip(),
+        "unidade": str(unidade or "un").strip(),
+        "tipo_calculo": tipo_calculo if tipo_calculo in TIPOS_CALCULO else "fixo",
+        "coeficiente": _coeficiente_item(coeficiente),
+        "da_etapa": bool(da_etapa),
+    }
+
+
+def _normalizar_item_catalogo(bruto: dict) -> dict[str, Any] | None:
+    if not isinstance(bruto, dict):
+        return None
+    tipo = str(bruto.get("tipo") or "").strip()
+    if not tipo:
+        if bruto.get("composicao_catalogo_id") or (
+            bruto.get("codigo") and not bruto.get("codigo_sinapi")
+        ):
+            tipo = TIPO_ITEM_CATALOGO_PROPRIA
+        else:
+            tipo = TIPO_ITEM_CATALOGO_SINAPI
+    if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
+        novo = novo_item_composicao_propria(
+            composicao_catalogo_id=bruto.get("composicao_catalogo_id"),
+            codigo=bruto.get("codigo"),
+            nome=bruto.get("nome") or bruto.get("descricao"),
+            unidade=bruto.get("unidade") or "un",
+            tipo_calculo=bruto.get("tipo_calculo") or "fixo",
+            coeficiente=bruto.get("coeficiente") or 1,
+            da_etapa=bool(bruto.get("da_etapa")),
+        )
+    else:
+        novo = novo_item_sinapi(
+            codigo_sinapi=bruto.get("codigo_sinapi") or bruto.get("codigo"),
+            unidade=bruto.get("unidade") or "m²",
+            tipo_calculo=bruto.get("tipo_calculo") or "fixo",
+            coeficiente=bruto.get("coeficiente") or 1,
+            da_etapa=bool(bruto.get("da_etapa")),
+        )
+    if bruto.get("id"):
+        novo["id"] = str(bruto.get("id"))
+    return novo
+
+
+def normalizar_servicos_preliminares(bruto) -> dict[str, Any]:
+    base = novos_servicos_preliminares()
+    if not isinstance(bruto, dict):
+        return base
+    nome = str(bruto.get("nome") or "").strip()
+    if nome:
+        base["nome"] = nome
+    itens = []
+    for item in bruto.get("itens") or []:
+        normalizado = _normalizar_item_catalogo(item)
+        if normalizado is not None:
+            itens.append(normalizado)
+    base["itens"] = itens
+    return base
+
+
+def itens_servicos_da_etapa(
+    etapa: dict | None,
+    itens_atuais: list | None = None,
+    *,
+    tipo_calculo_padrao: str = "fixo",
+) -> list[dict[str, Any]]:
+    """Copia SINAPI e composições próprias da etapa, preservando cálculo já definido."""
+    padrao = tipo_calculo_padrao if tipo_calculo_padrao in TIPOS_CALCULO else "fixo"
+    atuais = [i for i in (itens_atuais or []) if isinstance(i, dict)]
+    novos: list[dict[str, Any]] = []
+    usados_ids: set[str] = set()
+
+    def _achar_anterior(chave: tuple) -> dict | None:
+        for item in atuais:
+            tipo = str(item.get("tipo") or TIPO_ITEM_CATALOGO_SINAPI)
+            if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
+                marca = (
+                    "P",
+                    str(item.get("composicao_catalogo_id") or ""),
+                    str(item.get("codigo") or ""),
+                )
+            else:
+                marca = ("S", str(item.get("codigo_sinapi") or item.get("codigo") or ""), "")
+            if marca == chave:
+                return item
+        return None
+
+    for ref in (etapa or {}).get("itens") or []:
+        if not isinstance(ref, dict):
+            continue
+        tipo = str(ref.get("tipo") or "")
+        if tipo == TIPO_ITEM_SINAPI:
+            codigo = str(ref.get("codigo") or "").strip()
+            if not codigo:
+                continue
+            anterior = _achar_anterior(("S", codigo, ""))
+            novo = novo_item_sinapi(
+                codigo_sinapi=codigo,
+                unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
+                tipo_calculo=(anterior or {}).get("tipo_calculo") or padrao,
+                coeficiente=(anterior or {}).get("coeficiente", 1),
+                da_etapa=True,
+            )
+            if anterior and anterior.get("id"):
+                novo["id"] = str(anterior.get("id"))
+                usados_ids.add(novo["id"])
+            novos.append(novo)
+        elif tipo == TIPO_ITEM_PROPRIA:
+            catalogo_id = str(ref.get("composicao_catalogo_id") or "").strip()
+            codigo = str(ref.get("codigo") or "").strip()
+            anterior = _achar_anterior(("P", catalogo_id, codigo))
+            novo = novo_item_composicao_propria(
+                composicao_catalogo_id=catalogo_id,
+                codigo=codigo,
+                nome=(anterior or {}).get("nome") or ref.get("nome") or codigo,
+                unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
+                tipo_calculo=(anterior or {}).get("tipo_calculo") or padrao,
+                coeficiente=(anterior or {}).get("coeficiente", 1),
+                da_etapa=True,
+            )
+            if anterior and anterior.get("id"):
+                novo["id"] = str(anterior.get("id"))
+                usados_ids.add(novo["id"])
+            novos.append(novo)
+
+    for item in atuais:
+        ident = str(item.get("id") or "")
+        if ident and ident in usados_ids:
+            continue
+        if item.get("da_etapa"):
+            continue
+        extra = deepcopy(item)
+        if not extra.get("tipo"):
+            extra["tipo"] = TIPO_ITEM_CATALOGO_SINAPI
+        novos.append(extra)
+    return novos
 
 
 def novo_reparo(*, nome: str = "Reparo padrão", origem: str = ORIGEM_ITENS) -> dict[str, Any]:
@@ -213,6 +382,9 @@ def normalizar_catalogo(dados) -> dict[str, Any]:
     base = catalogo_vazio()
     if not isinstance(dados, dict):
         return base
+    base["servicos_preliminares"] = normalizar_servicos_preliminares(
+        dados.get("servicos_preliminares")
+    )
     anomalias = dados.get("anomalias")
     if not isinstance(anomalias, dict):
         return base
@@ -227,14 +399,13 @@ def normalizar_catalogo(dados) -> dict[str, Any]:
         if not origem_reparos and bruto.get("etapas"):
             reparo = novo_reparo(nome="Reparo padrão", origem=ORIGEM_ITENS)
             reparo["itens"] = [
-                novo_item_sinapi(
-                    codigo_sinapi=item.get("codigo_sinapi"),
-                    unidade=item.get("unidade") or "m²",
-                    tipo_calculo=item.get("tipo_calculo") or "fixo",
-                    coeficiente=item.get("coeficiente") or 1,
+                item
+                for item in (
+                    _normalizar_item_catalogo(etapa)
+                    for etapa in bruto.get("etapas") or []
+                    if isinstance(etapa, dict)
                 )
-                for item in bruto.get("etapas") or []
-                if isinstance(item, dict)
+                if item is not None
             ]
             reparos.append(reparo)
         else:
@@ -267,24 +438,22 @@ def normalizar_catalogo(dados) -> dict[str, Any]:
                 )
                 itens = []
                 for etapa in item.get("itens") or []:
-                    if not isinstance(etapa, dict):
-                        continue
-                    novo = novo_item_sinapi(
-                        codigo_sinapi=etapa.get("codigo_sinapi"),
-                        unidade=etapa.get("unidade") or "m²",
-                        tipo_calculo=etapa.get("tipo_calculo") or "fixo",
-                        coeficiente=etapa.get("coeficiente") or 1,
-                        da_etapa=bool(etapa.get("da_etapa")),
-                    )
-                    if etapa.get("id"):
-                        novo["id"] = str(etapa.get("id"))
-                    itens.append(novo)
+                    normalizado = _normalizar_item_catalogo(etapa)
+                    if normalizado is not None:
+                        itens.append(normalizado)
                 reparo["itens"] = itens
                 reparos.append(reparo)
         if not reparos:
             reparos = [novo_reparo(nome="Reparo padrão")]
         base["anomalias"][titulo] = {"reparos": reparos}
     return base
+
+
+def obter_servicos_preliminares(dados: dict | None = None) -> dict[str, Any]:
+    origem = dados if dados is not None else carregar_catalogo()
+    return deepcopy(
+        normalizar_servicos_preliminares((origem or {}).get("servicos_preliminares"))
+    )
 
 
 def nomes_anomalias(dados: dict | None = None) -> list[str]:

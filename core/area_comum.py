@@ -6,7 +6,7 @@ import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 
-VERSAO_RASCUNHO = 4
+VERSAO_RASCUNHO = 5
 BDI_PADRAO = "30,62"
 
 TIPOS_ESTRUTURA = (
@@ -182,7 +182,7 @@ def _texto(valor) -> str:
     return str(valor).strip()
 
 
-def _desenho_normalizado(origem) -> dict:
+def _camada_desenho_normalizada(origem) -> dict:
     pontos = []
     if isinstance(origem, dict):
         for item in origem.get("pontos") or []:
@@ -196,6 +196,26 @@ def _desenho_normalizado(origem) -> dict:
     else:
         fechado = False
     return {"pontos": pontos, "fechado": fechado and len(pontos) >= 3}
+
+
+def _desenho_normalizado(origem) -> dict:
+    """Aceita formato legado (um polígono) e o novo (externa + hall)."""
+    vazio = {
+        "externa": {"pontos": [], "fechado": False},
+        "hall": {"pontos": [], "fechado": False},
+    }
+    if not isinstance(origem, dict):
+        return vazio
+    if isinstance(origem.get("externa"), dict) or isinstance(origem.get("hall"), dict):
+        return {
+            "externa": _camada_desenho_normalizada(origem.get("externa") or {}),
+            "hall": _camada_desenho_normalizada(origem.get("hall") or {}),
+        }
+    # Legado: um único polígono vira a camada externa.
+    return {
+        "externa": _camada_desenho_normalizada(origem),
+        "hall": {"pontos": [], "fechado": False},
+    }
 
 
 def esquadria_vazia(modelo: dict) -> dict:
@@ -284,12 +304,16 @@ def novo_rascunho() -> dict:
                 **MEDIDAS_PADRAO,
             },
             "percentuais": percentuais_padrao(),
-            "desenho_principal": {"pontos": [], "fechado": False},
+            "desenho_principal": {
+                "externa": {"pontos": [], "fechado": False},
+                "hall": {"pontos": [], "fechado": False},
+            },
             "tipo_estrutura": "",
             "tipo_cobertura": "",
         },
         "esquadrias": [esquadria_vazia(item) for item in ESQUADRIAS_MODELO],
         "anomalias_orcamento": [],
+        "considerar_servicos_preliminares": True,
         "extras_orcamento": [],
         "orcamento": {"grupos": []},
         "observacoes": "",
@@ -413,6 +437,12 @@ def normalizar_rascunho(dados) -> dict:
             linha["id"] = _texto(item.get("id"))
         orcamento.append(linha)
     base["anomalias_orcamento"] = orcamento
+    if "considerar_servicos_preliminares" in dados:
+        base["considerar_servicos_preliminares"] = bool(
+            dados.get("considerar_servicos_preliminares")
+        )
+    else:
+        base["considerar_servicos_preliminares"] = True
 
     extras = []
     origem_extras = dados.get("extras_orcamento")
@@ -497,6 +527,12 @@ def rascunho_tem_conteudo(dados: dict) -> bool:
     grupos = (dados.get("orcamento") or {}).get("grupos") or []
     if grupos:
         return True
-    if (iniciais.get("desenho_principal") or {}).get("pontos"):
+    desenho = iniciais.get("desenho_principal") or {}
+    if isinstance(desenho.get("externa"), dict) or isinstance(desenho.get("hall"), dict):
+        if (desenho.get("externa") or {}).get("pontos") or (desenho.get("hall") or {}).get(
+            "pontos"
+        ):
+            return True
+    elif desenho.get("pontos"):
         return True
     return bool(dados["observacoes"])

@@ -70,21 +70,90 @@ def env_paths() -> tuple[Path, ...]:
     return tuple(vistos)
 
 
-def vicios_construtivos_path() -> Path:
-    gravacao = app_dir() / "vicios_construtivos.json"
-    bundle = bundle_dir() / "vicios_construtivos.json"
-    for candidate in (gravacao, bundle):
+_NOME_ANOMALIAS_AREA_PRIVATIVA = "anomalias_area_privativa.json"
+_NOME_ANOMALIAS_AREA_PRIVATIVA_LEGADO = "vicios_construtivos.json"
+
+
+def _migrar_anomalias_area_privativa_legado(destino: Path) -> None:
+    """Renomeia o JSON antigo se a instalação ainda só tiver o nome legado."""
+    if destino.is_file():
+        return
+    for base in (destino.parent, app_dir(), bundle_dir()):
+        antigo = base / _NOME_ANOMALIAS_AREA_PRIVATIVA_LEGADO
+        if not antigo.is_file() or antigo.resolve() == destino.resolve():
+            continue
+        try:
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            antigo.replace(destino)
+            return
+        except OSError:
+            try:
+                destino.write_bytes(antigo.read_bytes())
+                return
+            except OSError:
+                continue
+
+
+def anomalias_area_privativa_path_gravacao() -> Path:
+    """
+    Caminho gravável do catálogo de anomalias da área privativa.
+
+    No executável usa a pasta empacotada (_internal), o mesmo arquivo que o
+    instalador sobrescreve a cada atualização (ignoreversion). Em desenvolvimento
+    usa a raiz do projeto.
+    """
+    if is_frozen():
+        return bundle_dir() / _NOME_ANOMALIAS_AREA_PRIVATIVA
+    return app_dir() / _NOME_ANOMALIAS_AREA_PRIVATIVA
+
+
+def anomalias_area_privativa_path() -> Path:
+    """Localiza o catálogo empacotado/atualizado; migra o nome legado se preciso."""
+    destino = anomalias_area_privativa_path_gravacao()
+    _migrar_anomalias_area_privativa_legado(destino)
+    candidatos: list[Path] = [destino]
+    if is_frozen():
+        # Pacote primeiro (substituído na atualização); pasta do .exe só como legado.
+        candidatos.extend(
+            [
+                bundle_dir() / _NOME_ANOMALIAS_AREA_PRIVATIVA,
+                app_dir() / _NOME_ANOMALIAS_AREA_PRIVATIVA,
+                bundle_dir() / _NOME_ANOMALIAS_AREA_PRIVATIVA_LEGADO,
+                app_dir() / _NOME_ANOMALIAS_AREA_PRIVATIVA_LEGADO,
+            ]
+        )
+    else:
+        candidatos.extend(
+            [
+                app_dir() / _NOME_ANOMALIAS_AREA_PRIVATIVA,
+                app_dir() / _NOME_ANOMALIAS_AREA_PRIVATIVA_LEGADO,
+            ]
+        )
+    vistos: set[Path] = set()
+    for candidate in candidatos:
+        try:
+            chave = candidate.resolve()
+        except OSError:
+            chave = candidate
+        if chave in vistos:
+            continue
+        vistos.add(chave)
         if candidate.is_file():
             return candidate
     raise FileNotFoundError(
-        "vicios_construtivos.json não encontrado. "
+        f"{_NOME_ANOMALIAS_AREA_PRIVATIVA} não encontrado. "
         f"Procurado em {bundle_dir()} e {app_dir()}."
     )
 
 
+def vicios_construtivos_path() -> Path:
+    """Compatibilidade: nome antigo do catálogo de área privativa."""
+    return anomalias_area_privativa_path()
+
+
 def vicios_construtivos_path_gravacao() -> Path:
-    """Caminho gravável do JSON de vícios (pasta do programa, não o bundle)."""
-    return app_dir() / "vicios_construtivos.json"
+    """Compatibilidade: gravação do catálogo de área privativa."""
+    return anomalias_area_privativa_path_gravacao()
 
 
 def anomalias_area_comum_path() -> Path:

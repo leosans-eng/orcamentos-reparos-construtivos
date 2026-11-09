@@ -10,7 +10,47 @@
           "etapa_predefinida_id": "95a7b460-ebbe-4b34-a22d-18e3597327be",
           "etapa_nome": "SUBSTITUIÇÃO DOS PISOS CERÂMICOS (DESPLACAMENTO/HALL)",
           "tipo_calculo_etapa": "area_piso_hall_total",
-          "itens": []
+          "titulo_orcamento": "anomalia_reparo",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "09780deb-0618-4420-8767-1b2a6a7780d4",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97633",
+              "unidade": "M2",
+              "tipo_calculo": "area_piso_hall_total",
+              "coeficiente": 1.0,
+              "da_etapa": true
+            },
+            {
+              "id": "e19c8abe-592b-4410-9080-9568baed8f11",
+              "tipo": "sinapi",
+              "codigo_sinapi": "87256",
+              "unidade": "M2",
+              "tipo_calculo": "area_piso_hall_total",
+              "coeficiente": 1.0,
+              "da_etapa": true
+            },
+            {
+              "id": "f03099ce-1e64-4a37-a71a-05944c7fb0d1",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97632",
+              "unidade": "M",
+              "tipo_calculo": "area_piso_hall_total",
+              "coeficiente": 1.0,
+              "da_etapa": true
+            },
+            {
+              "id": "d7c96205-efcf-4fe4-ae77-72f720c8c5e3",
+              "tipo": "sinapi",
+              "codigo_sinapi": "88650",
+              "unidade": "M",
+              "tipo_calculo": "area_piso_hall_total",
+              "coeficiente": 1.0,
+              "da_etapa": true
+            }
+          ]
         }
       ]
     },
@@ -23,6 +63,9 @@
           "etapa_predefinida_id": "",
           "etapa_nome": "",
           "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "anomalia_reparo",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
           "itens": []
         },
         {
@@ -32,9 +75,59 @@
           "etapa_predefinida_id": "",
           "etapa_nome": "",
           "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "anomalia_reparo",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
           "itens": []
         }
       ]
     }
+  },
+  "servicos_preliminares": {
+    "nome": "SERVIÇOS PRELIMINARES",
+    "itens": [
+      {
+        "id": "11e2e834-74b0-43b5-8f2d-90bfbe49e19d",
+        "tipo": "propria",
+        "composicao_catalogo_id": "6a5cb243-8b73-4315-8621-42bb25948511",
+        "codigo": "47",
+        "nome": "PROJETOS E LAUDOS DE REFORMA",
+        "unidade": "H",
+        "tipo_calculo": "por_bloco",
+        "coeficiente": 2.0,
+        "da_etapa": true
+      },
+      {
+        "id": "62b2128b-eed6-47d2-aba4-f5e4d7fab36c",
+        "tipo": "propria",
+        "composicao_catalogo_id": "7d259e2e-e56b-43f0-8e71-861a8f7bfdc1",
+        "codigo": "48",
+        "nome": "ADMINISTRAÇÃO LOCAL",
+        "unidade": "H",
+        "tipo_calculo": "fixo",
+        "coeficiente": 1.0,
+        "da_etapa": true
+      },
+      {
+        "id": "7c3055ce-60ca-49dd-b41d-8928888f4c98",
+        "tipo": "propria",
+        "composicao_catalogo_id": "9515419c-470f-4ba4-b197-d0dbf02a1dd4",
+        "codigo": "49",
+        "nome": "ALUGUEL DE ANDAIME FACHADEIRO",
+        "unidade": "M²xMês",
+        "tipo_calculo": "fixo",
+        "coeficiente": 1.0,
+        "da_etapa": true
+      },
+      {
+        "id": "42d42d98-5601-45d3-b1c4-ea544aec1b35",
+        "tipo": "sinapi",
+        "codigo_sinapi": "10775",
+        "unidade": "MES",
+        "tipo_calculo": "fixo",
+        "coeficiente": 1.0,
+        "da_etapa": true
+      }
+    ]
   }
 }

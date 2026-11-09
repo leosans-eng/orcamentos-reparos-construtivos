@@ -17,8 +17,10 @@ from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.etapas_predefinidas import EtapasPredefinidasFrame
 from ui.hub import HubFrame
 from ui.orcamento_customizado_modulo import OrcamentoCustomizadoModulo
+from ui.dialogo_configuracoes import abrir_dialogo_configuracoes
 from ui.dialogo_login import garantir_login
-from ui.widgets import centralizar_janela_principal
+from ui.icones import criar_icone_svg
+from ui.widgets import centralizar_janela_principal, vincular_tooltip
 from ui.temas import aplicar_tema, cores_tema, limpar_listeners_tema, registrar_listener_tema
 from tkinter import messagebox
 
@@ -115,6 +117,7 @@ class OrcApp:
             pass
 
     def _montar_rodape(self):
+        cores = cores_tema(self.janela)
         frame_rodape = tk.Frame(self.janela)
         self.ctx.frame_rodape = frame_rodape
         frame_rodape.pack(side="bottom", fill="x", padx=10, pady=(0, 6))
@@ -123,11 +126,23 @@ class OrcApp:
             frame_rodape,
             text=self.ctx.texto_rodape_interface(),
             font=("Arial", 8),
-            fg="#555555",
+            fg=cores.texto_suave,
+            bg=cores.fundo,
             anchor="w",
         )
         self.ctx.label_rodape = label_rodape
         label_rodape.pack(side="left", anchor="w")
+
+        # Engrenagem num slot próprio à direita — o aviso CSV nunca ocupa essa faixa.
+        self._refs_rodape: list = []
+        slot_config = tk.Frame(frame_rodape, bg=cores.fundo)
+        self.ctx.slot_configuracoes_rodape = slot_config
+        slot_config.pack(side="right", anchor="e")
+        self._montar_botao_configuracoes(slot_config, cores)
+
+        area_aviso = tk.Frame(frame_rodape, bg=cores.fundo)
+        self.ctx.area_aviso_csv_rodape = area_aviso
+        area_aviso.pack(side="right", anchor="e", padx=(0, 6))
 
         if self.ctx.caminho_sinapi_carregado:
             nome_csv = (
@@ -138,16 +153,69 @@ class OrcApp:
             nome_csv = "Nenhum arquivo SINAPI carregado"
 
         self.ctx.label_nome_csv_rodape = tk.Label(
-            frame_rodape,
+            area_aviso,
             text=nome_csv,
             font=("Arial", 8, "bold"),
-            fg="#C62828",
+            fg=cores.perigo,
+            bg=cores.fundo,
             anchor="e",
         )
         self.ctx.label_nome_csv_rodape.pack(side="right", anchor="e")
         self.ctx.agendar_sumico_nome_csv_deslize_direita(
             self.ctx.label_nome_csv_rodape
         )
+
+    def _montar_botao_configuracoes(self, parent, cores):
+        icone = criar_icone_svg(
+            parent,
+            "settings-outline",
+            altura=16,
+            cor=cores.texto_suave,
+        )
+        self._refs_rodape.append(icone)
+        btn = tk.Label(
+            parent,
+            image=icone,
+            bg=cores.fundo,
+            cursor="hand2",
+            padx=4,
+            pady=1,
+        )
+        btn.image = icone  # type: ignore[attr-defined]
+        btn.pack(side="right", anchor="e")
+        btn.bind("<Button-1>", lambda _e: self._abrir_configuracoes())
+        vincular_tooltip(btn, "Configurações")
+        self.ctx.btn_configuracoes_rodape = btn
+        try:
+            parent.lift()
+        except tk.TclError:
+            pass
+
+    def _abrir_configuracoes(self):
+        abrir_dialogo_configuracoes(self.janela, self.ctx)
+
+    def _atualizar_botao_configuracoes(self, cores):
+        btn = getattr(self.ctx, "btn_configuracoes_rodape", None)
+        if btn is None:
+            return
+        try:
+            if not btn.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        self._refs_rodape.clear()
+        icone = criar_icone_svg(
+            btn,
+            "settings-outline",
+            altura=16,
+            cor=cores.texto_suave,
+        )
+        self._refs_rodape.append(icone)
+        try:
+            btn.configure(image=icone, bg=cores.fundo)
+            btn.image = icone  # type: ignore[attr-defined]
+        except tk.TclError:
+            pass
 
     def _ao_mudar_tema(self, _tema_id):
         from ui.calculadora import fechar_calculadora
@@ -187,6 +255,13 @@ class OrcApp:
                 rodape.configure(bg=cores.fundo)
             except tk.TclError:
                 pass
+        for atr in ("slot_configuracoes_rodape", "area_aviso_csv_rodape"):
+            quadro = getattr(self.ctx, atr, None)
+            if quadro is not None:
+                try:
+                    quadro.configure(bg=cores.fundo)
+                except tk.TclError:
+                    pass
         label_rodape = getattr(self.ctx, "label_rodape", None)
         if label_rodape is not None:
             try:
@@ -197,6 +272,13 @@ class OrcApp:
         if label_csv is not None:
             try:
                 label_csv.configure(bg=cores.fundo, fg=cores.perigo)
+            except tk.TclError:
+                pass
+        self._atualizar_botao_configuracoes(cores)
+        slot = getattr(self.ctx, "slot_configuracoes_rodape", None)
+        if slot is not None:
+            try:
+                slot.lift()
             except tk.TclError:
                 pass
 

@@ -1,4 +1,4 @@
-"""Janela para cadastrar e editar anomalias de vicios_construtivos.json."""
+"""Janela para cadastrar e editar anomalias de anomalias_area_privativa.json."""
 
 from __future__ import annotations
 

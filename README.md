@@ -36,7 +36,7 @@ Tela inicial com acesso aos módulos:
 - Integração com o **Idebras**: seleção pesquisável de conjunto e planta, visualização dos ambientes e preenchimento das metragens
 - Importação do **autor** a partir de pareceres finalizados (nome do cliente e/ou conjunto); o conjunto, a planta e o estado são carregados em seguida
 - **Estado** preenchido pela cidade do conjunto, com aviso se o município for ambíguo ou não reconhecido
-- Seleção de anomalias mapeadas em `vicios_construtivos.json`, com cômodos permitidos por anomalia
+- Seleção de anomalias mapeadas em `anomalias_area_privativa.json`, com cômodos permitidos por anomalia
 - Prévia das composições SINAPI de cada anomalia adicionada
 - Cálculo automático de quantidades e valores com base nas composições SINAPI
 - Agrupamento por tipo de reparo (pisos cerâmicos, azulejos, trincas, esquadrias, umidade, DR etc.)
@@ -146,7 +146,7 @@ python app.py
 | Composições próprias | Banco via API | Sim |
 | Etapas pré-definidas | Banco via API | Sim |
 | Base SINAPI processada | `sinapi/` na pasta do programa | Não (por máquina) |
-| Mapeamento de anomalias (`vicios_construtivos.json`) | Pasta do programa | Não (por máquina) |
+| Mapeamento de anomalias (`anomalias_area_privativa.json`) | Pasta do programa (substituído na atualização) | Não (por máquina) |
 | Credenciais do Idebras | Criptografadas no pacote (não há `.env` na pasta instalada) | — |
 | Preferências de login (URL / usuário / senha salvos) | Configuração local do desktop | Não (por máquina) |
 
@@ -160,7 +160,8 @@ orcamento-reparos-construtivos/
 ├── app_offline.py                  # Modo offline (testes, sem API)
 ├── app_paths.py                    # Caminhos (dev, executável e dados locais)
 ├── atualizacao.py                  # Verificação de atualização do app via GitHub
-├── vicios_construtivos.json        # Mapeamento anomalia → composições SINAPI
+├── anomalias_area_privativa.json   # Mapeamento anomalia → composições SINAPI (área privativa)
+├── anomalias_area_comum.json       # Catálogo de anomalias da área comum
 ├── version.json                    # Versão e link do instalador (publicado no GitHub)
 ├── dados/
 │   └── municipios_uf.json          # Município → UF (IBGE), para o estado do conjunto

@@ -14,7 +14,7 @@ from sinapi.atualizador_sinapi import (
 )
 from sinapi.extrair_sinapi import processar_arquivo
 
-from app_paths import vicios_construtivos_path
+from app_paths import anomalias_area_privativa_path
 
 from core.sinapi_loader import (
     carregar_sinapi_inicial,
@@ -57,6 +57,9 @@ class AppContext:
         self.frame_rodape: tk.Frame | None = None
         self.label_rodape: tk.Label | None = None
         self.label_nome_csv_rodape: tk.Label | None = None
+        self.area_aviso_csv_rodape: tk.Frame | None = None
+        self.slot_configuracoes_rodape: tk.Frame | None = None
+        self.btn_configuracoes_rodape: tk.Label | None = None
         self.status_sinapi: tk.StringVar | None = None
         self.status_servidor_sinapi: tk.StringVar | None = None
         self.http_servidor_sinapi: tk.StringVar | None = None
@@ -163,6 +166,9 @@ class AppContext:
         self.frame_rodape = None
         self.label_rodape = None
         self.label_nome_csv_rodape = None
+        self.area_aviso_csv_rodape = None
+        self.slot_configuracoes_rodape = None
+        self.btn_configuracoes_rodape = None
         self.status_sinapi = None
         self.status_servidor_sinapi = None
         self.http_servidor_sinapi = None
@@ -197,7 +203,7 @@ class AppContext:
         self._agendar_na_janela(aplicar)
 
     def _carregar_dados_json(self):
-        with open(vicios_construtivos_path(), "r", encoding="utf-8") as f:
+        with open(anomalias_area_privativa_path(), "r", encoding="utf-8") as f:
             dados = json.load(f)
         if isinstance(dados, list):
             dados = dados[0]
@@ -236,36 +242,52 @@ class AppContext:
         if self.label_rodape and self.label_rodape.winfo_exists():
             self.label_rodape.config(text=self.texto_rodape_interface())
 
-    def agendar_sumico_nome_csv_deslize_direita(self, label_csv):
-        frame_rodape = self.frame_rodape
-        if frame_rodape is None:
+    def _manter_engrenagem_acima(self) -> None:
+        slot = self.slot_configuracoes_rodape
+        if slot is None:
             return
+        try:
+            if slot.winfo_exists():
+                slot.lift()
+        except tk.TclError:
+            pass
+
+    def agendar_sumico_nome_csv_deslize_direita(self, label_csv):
+        """Some o aviso CSV deslizando à direita, sem cobrir a engrenagem."""
+        area = self.area_aviso_csv_rodape
+        if area is None:
+            area = self.frame_rodape
+        if area is None:
+            return
+        self._manter_engrenagem_acima()
 
         def executar():
             if self.frame_rodape is None:
                 return
-            if frame_rodape is None or not frame_rodape.winfo_exists():
+            if area is None or not area.winfo_exists():
                 return
             if not label_csv.winfo_exists():
                 return
             if label_csv.winfo_manager() != "pack":
                 return
             label_csv.pack_forget()
-            label_csv.place(relx=1.0, rely=0.5, anchor="e", x=-6, in_=frame_rodape)
+            label_csv.place(relx=1.0, rely=0.5, anchor="e", x=0, in_=area)
+            self._manter_engrenagem_acima()
 
             def deslizar():
                 if self.frame_rodape is None:
                     return
-                if frame_rodape is None or not frame_rodape.winfo_exists():
+                if area is None or not area.winfo_exists():
                     return
                 if not label_csv.winfo_exists():
                     return
                 try:
-                    frame_rodape.update_idletasks()
+                    area.update_idletasks()
                     label_csv.update_idletasks()
-                    limite = frame_rodape.winfo_width()
-                    if label_csv.winfo_x() - frame_rodape.winfo_x() > limite + 8:
+                    # Saiu pela direita da área de aviso (antes da engrenagem).
+                    if label_csv.winfo_x() >= area.winfo_width() + 8:
                         label_csv.destroy()
+                        self._manter_engrenagem_acima()
                         return
                     info = label_csv.place_info()
                     cur_x = int(float(info.get("x", 0)))
@@ -274,25 +296,28 @@ class AppContext:
                         rely=0.5,
                         anchor="e",
                         x=cur_x + RODAPE_CSV_DESLIZE_PASSO_PX,
-                        in_=frame_rodape,
+                        in_=area,
                     )
+                    self._manter_engrenagem_acima()
                     self._agendar_after(
-                        frame_rodape, RODAPE_CSV_DESLIZE_INTERVALO_MS, deslizar
+                        area, RODAPE_CSV_DESLIZE_INTERVALO_MS, deslizar
                     )
                 except tk.TclError:
                     return
 
-            self._agendar_after(frame_rodape, 25, deslizar)
+            self._agendar_after(area, 25, deslizar)
 
         try:
-            if frame_rodape is not None and frame_rodape.winfo_exists():
-                self._agendar_after(frame_rodape, RODAPE_CSV_SUMIR_APOS_MS, executar)
+            if area is not None and area.winfo_exists():
+                self._agendar_after(area, RODAPE_CSV_SUMIR_APOS_MS, executar)
         except tk.TclError:
             pass
 
     def atualizar_label_csv_rodape(self):
-        frame_rodape = self.frame_rodape
-        if frame_rodape is None:
+        area = self.area_aviso_csv_rodape
+        if area is None:
+            area = self.frame_rodape
+        if area is None:
             return
 
         if self.caminho_sinapi_carregado:
@@ -308,7 +333,7 @@ class AppContext:
             or not self.label_nome_csv_rodape.winfo_exists()
         ):
             self.label_nome_csv_rodape = tk.Label(
-                frame_rodape,
+                area,
                 text=texto,
                 font=("Arial", 8, "bold"),
                 fg="#C62828",
@@ -320,6 +345,8 @@ class AppContext:
             )
         else:
             self.label_nome_csv_rodape.config(text=texto)
+
+        self._manter_engrenagem_acima()
 
     def recarregar_sinapi_em_memoria(self):
         self.sinapi, self.caminho_sinapi_carregado, self.sinapi_referencia_rotulo = (

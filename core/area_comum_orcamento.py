@@ -5,12 +5,17 @@ from __future__ import annotations
 from copy import deepcopy
 
 from core.area_comum_anomalias import (
+    NOME_SERVICOS_PRELIMINARES,
+    ORIGEM_SERVICOS_PRELIMINARES,
+    TIPO_ITEM_CATALOGO_PROPRIA,
     itens_efetivos_reparo,
+    normalizar_servicos_preliminares,
     obter_anomalia,
     quantidade_item,
     titulo_grupo_orcamento,
 )
 from core.area_comum_calculos import numero
+from core.composicoes_proprias import obter_composicao_por_id
 from core.etapas_predefinidas import aplicar_etapa_no_orcamento
 from core.orcamento_customizado import TIPO_COMPOSICAO_PROPRIA, OrcamentoCustomizado
 from core.sinapi_busca import escolher_estado_fallback_sinapi, obter_item_sinapi
@@ -41,7 +46,7 @@ def _titulo_grupo_anomalia(anomalia: dict, reparo: dict) -> str:
 def _custo_sinapi(sinapi, codigo: str, uf: str) -> tuple[float, str, str, str, str]:
     codigo = str(codigo or "").strip()
     uf = str(uf or "").strip()
-    if not codigo:
+    if not codigo or sinapi is None:
         return 0.0, "", "", uf, ""
     linha = obter_item_sinapi(sinapi, codigo, uf) if uf else None
     estado = uf
@@ -204,20 +209,42 @@ def _montar_grupo_itens_sinapi(
     percentual,
     sinapi,
     uf: str,
+    catalogo_composicoes=None,
 ) -> dict:
     tmp = OrcamentoCustomizado()
     grupo_id = tmp.adicionar_grupo(nome)
     fator = _fator_percentual(percentual)
+    catalogo_composicoes = _catalogo_composicoes(catalogo_composicoes)
     for item in itens or []:
-        codigo = str(item.get("codigo_sinapi") or "").strip()
-        if not codigo:
-            continue
+        tipo = str(item.get("tipo") or "")
         qtd = quantidade_item(
             item.get("tipo_calculo") or "fixo",
             item.get("coeficiente") or 1,
             quantitativos or {},
         ) * fator
         if qtd <= 0:
+            continue
+        if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
+            catalogo_id = str(item.get("composicao_catalogo_id") or "").strip()
+            composicao = (
+                obter_composicao_por_id(catalogo_composicoes, catalogo_id)
+                if catalogo_id
+                else None
+            )
+            tmp.adicionar_composicao_propria(
+                grupo_id,
+                (composicao or {}).get("id", catalogo_id),
+                (composicao or {}).get("codigo") or item.get("codigo") or "",
+                (composicao or {}).get("nome")
+                or item.get("nome")
+                or item.get("codigo")
+                or "Composição",
+                (composicao or {}).get("unidade") or item.get("unidade") or "un",
+                qtd,
+            )
+            continue
+        codigo = str(item.get("codigo_sinapi") or item.get("codigo") or "").strip()
+        if not codigo:
             continue
         custo, desc, unid, estado, tipo_ic = _custo_sinapi(sinapi, codigo, uf)
         unid = unid or str(item.get("unidade") or "")
@@ -234,6 +261,37 @@ def _montar_grupo_itens_sinapi(
     return deepcopy(tmp.obter_grupo(grupo_id))
 
 
+def _montar_grupo_servicos_preliminares(
+    *,
+    catalogo: dict,
+    quantitativos: dict,
+    sinapi,
+    uf: str,
+    catalogo_composicoes,
+) -> dict | None:
+    sp = normalizar_servicos_preliminares(
+        (catalogo or {}).get("servicos_preliminares")
+    )
+    itens = list(sp.get("itens") or [])
+    if not itens:
+        return None
+    nome = str(sp.get("nome") or "").strip() or NOME_SERVICOS_PRELIMINARES
+    grupo = _montar_grupo_itens_sinapi(
+        nome=nome,
+        itens=itens,
+        quantitativos=quantitativos,
+        percentual="100",
+        sinapi=sinapi,
+        uf=uf,
+        catalogo_composicoes=catalogo_composicoes,
+    )
+    grupo["origem"] = ORIGEM_SERVICOS_PRELIMINARES
+    grupo["anomalia_id"] = ""
+    grupo["etapa_predefinida_id"] = ""
+    _marcar_itens_origem_anomalia(grupo)
+    return grupo
+
+
 def sincronizar_grupos_anomalias(
     orcamento: OrcamentoCustomizado,
     *,
@@ -244,10 +302,23 @@ def sincronizar_grupos_anomalias(
     sinapi,
     uf: str,
     catalogo_composicoes=None,
+    considerar_servicos_preliminares: bool = True,
 ) -> None:
-    """Reconstrói grupos gerados por anomalias e preserva etapas manuais."""
+    """Reconstrói grupos gerados por anomalias/SP e preserva etapas manuais."""
     catalogo_composicoes = _catalogo_composicoes(catalogo_composicoes)
     auto = []
+    grupo_sp = None
+    if considerar_servicos_preliminares:
+        grupo_sp = _montar_grupo_servicos_preliminares(
+            catalogo=catalogo,
+            quantitativos=quantitativos,
+            sinapi=sinapi,
+            uf=uf,
+            catalogo_composicoes=catalogo_composicoes,
+        )
+        if grupo_sp is not None:
+            auto.append(grupo_sp)
+
     for anomalia in anomalias or []:
         nome = str(anomalia.get("nome") or "").strip()
         if not nome:
@@ -268,6 +339,7 @@ def sincronizar_grupos_anomalias(
             percentual=anomalia.get("percentual"),
             sinapi=sinapi,
             uf=uf,
+            catalogo_composicoes=catalogo_composicoes,
         )
         grupo["origem"] = "anomalia"
         grupo["anomalia_id"] = str(anomalia.get("id") or "")
@@ -275,12 +347,27 @@ def sincronizar_grupos_anomalias(
         _marcar_itens_origem_anomalia(grupo)
         auto.append(grupo)
 
-    manuais = [g for g in (orcamento.grupos or []) if g.get("origem") != "anomalia"]
-    por_anomalia = {str(g.get("anomalia_id") or ""): g for g in auto}
+    origens_auto = {"anomalia", ORIGEM_SERVICOS_PRELIMINARES}
+    manuais = [
+        g for g in (orcamento.grupos or []) if g.get("origem") not in origens_auto
+    ]
+    por_anomalia = {
+        str(g.get("anomalia_id") or ""): g
+        for g in auto
+        if g.get("origem") == "anomalia"
+    }
     usados = set()
     resultado = []
+    sp_inserido = False
     for antigo in orcamento.grupos or []:
-        if antigo.get("origem") == "anomalia":
+        origem = antigo.get("origem")
+        if origem == ORIGEM_SERVICOS_PRELIMINARES:
+            if grupo_sp is None:
+                continue
+            resultado.append(_mesclar_grupo_anomalia(antigo, grupo_sp))
+            sp_inserido = True
+            continue
+        if origem == "anomalia":
             aid = str(antigo.get("anomalia_id") or "")
             novo = por_anomalia.get(aid)
             if novo is None:
@@ -289,11 +376,15 @@ def sincronizar_grupos_anomalias(
             usados.add(aid)
             continue
         resultado.append(antigo)
+
+    if grupo_sp is not None and not sp_inserido:
+        resultado.insert(0, grupo_sp)
     for grupo in auto:
+        if grupo.get("origem") != "anomalia":
+            continue
         aid = str(grupo.get("anomalia_id") or "")
         if aid not in usados:
             resultado.append(grupo)
-    # Etapas manuais que não estavam na lista antiga (não deve ocorrer).
     ids_resultado = {g.get("id") for g in resultado}
     for grupo in manuais:
         if grupo.get("id") not in ids_resultado:

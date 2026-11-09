@@ -273,7 +273,10 @@ class AreaComumFrame(tk.Frame):
         self.entrada_municipio = None
         self.combo_uf = None
         self.combo_uf_dados = None
-        self._desenho_principal = {"pontos": [], "fechado": False}
+        self._desenho_principal = {
+            "externa": {"pontos": [], "fechado": False},
+            "hall": {"pontos": [], "fechado": False},
+        }
         self._janela_orccad = None
 
         self.var_nome = tk.StringVar()
@@ -315,6 +318,7 @@ class AreaComumFrame(tk.Frame):
         self.var_feedback = tk.StringVar(value="")
         self.var_total = tk.StringVar(value="Total geral: R$ 0,00")
         self.var_catalogo_anomalia = tk.StringVar()
+        self.var_considerar_sp = tk.BooleanVar(value=True)
         self.var_rotulo_condominio = tk.StringVar(value="")
         self.var_legenda_desenho = tk.StringVar(value="Ainda não há planta salva.")
 
@@ -755,9 +759,46 @@ class AreaComumFrame(tk.Frame):
             colunas=5,
         )
 
+        titulo_esq = tk.Frame(interior, bg=fundo)
+        tk.Label(
+            titulo_esq,
+            text="Medidas das esquadrias",
+            bg=fundo,
+            fg=cores.texto,
+        ).pack(side="left")
+        caixa_info_esq = tk.Frame(
+            titulo_esq,
+            bg=fundo,
+            highlightbackground=cores.borda_suave,
+            highlightthickness=1,
+            bd=0,
+            cursor="hand2",
+        )
+        caixa_info_esq.pack(side="left", padx=(4, 0))
+        info_esq = tk.Label(
+            caixa_info_esq,
+            text="?",
+            bg=fundo,
+            fg=cores.texto_suave,
+            font=("Segoe UI", 8),
+            cursor="hand2",
+            relief="flat",
+            bd=0,
+            padx=3,
+            pady=0,
+        )
+        info_esq.pack()
+        texto_dica_esq = (
+            "Perímetro, pingadeira e área são por pavimento.\n"
+            "A área total de esquadrias é descontada da fachada "
+            "(pintura só de paredes).\n"
+            "A porta do hall não entra no perímetro."
+        )
+        vincular_tooltip(caixa_info_esq, texto_dica_esq)
+        vincular_tooltip(info_esq, texto_dica_esq)
         bloco_esq = tk.LabelFrame(
             interior,
-            text="Medidas das esquadrias",
+            labelwidget=titulo_esq,
             bg=fundo,
             fg=cores.texto,
             padx=10,
@@ -835,20 +876,6 @@ class AreaComumFrame(tk.Frame):
                 relief="solid",
                 bd=1,
             ).grid(row=linha_total, column=col, padx=4, pady=(6, 2))
-
-        tk.Label(
-            bloco_esq,
-            text=(
-                "Perímetro, pingadeira e área são por pavimento. "
-                "A área total de esquadrias é descontada da fachada (pintura só de paredes). "
-                "A porta do hall não entra no perímetro."
-            ),
-            bg=fundo,
-            fg=cores.texto_suave,
-            wraplength=980,
-            justify="left",
-            anchor="w",
-        ).grid(row=linha_total + 1, column=0, columnspan=8, sticky="w", pady=(8, 0))
 
         bloco_res = tk.LabelFrame(
             interior,
@@ -954,7 +981,7 @@ class AreaComumFrame(tk.Frame):
             topo,
             text=(
                 "Anomalias cadastradas (cada uma aponta para itens SINAPI ou para uma "
-                "etapa pré-definida). Clique duas vezes na linha para alterar a porcentagem."
+                "etapa pré-definida). Passe o mouse sobre a porcentagem para editá-la."
             ),
             bg=fundo,
             fg=cores.texto_suave,
@@ -1009,15 +1036,20 @@ class AreaComumFrame(tk.Frame):
         self.tree_anomalias.column("reparo", width=220)
         self.tree_anomalias.column("percentual", width=80, anchor="e")
         self.tree_anomalias.column("valor", width=220, anchor="e")
+        self.tree_anomalias.bind("<Button-1>", self._ao_clique_percentual_anomalia, add="+")
         self.tree_anomalias.bind("<Double-1>", self._ao_duplo_clique_anomalia)
+        self.tree_anomalias.bind("<Motion>", self._ao_mover_tree_anomalias)
+        self.tree_anomalias.bind("<Leave>", lambda _e: self.tree_anomalias.configure(cursor=""))
 
         scroll = ttk.Scrollbar(tabela, orient="vertical", command=self.tree_anomalias.yview)
         self.tree_anomalias.configure(yscrollcommand=scroll.set)
         self.tree_anomalias.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
-        botoes_anom = tk.Frame(aba, bg=fundo)
-        botoes_anom.pack(anchor="w", padx=10, pady=(0, 10))
+        rodape_anom = tk.Frame(aba, bg=fundo)
+        rodape_anom.pack(fill="x", padx=10, pady=(0, 10))
+        botoes_anom = tk.Frame(rodape_anom, bg=fundo)
+        botoes_anom.pack(side="left")
         criar_botao_ttk_com_icone(
             botoes_anom,
             texto="Remover selecionada",
@@ -1036,6 +1068,22 @@ class AreaComumFrame(tk.Frame):
             cor_icone=self._estilos.icone_editar,
             refs=self._refs_icones,
         ).pack(side="left", padx=(6, 0))
+
+        caixa_sp = tk.LabelFrame(
+            rodape_anom,
+            text="Serviços preliminares",
+            bg=fundo,
+            fg=cores.texto,
+            padx=8,
+            pady=4,
+        )
+        caixa_sp.pack(side="right")
+        ttk.Checkbutton(
+            caixa_sp,
+            text="Considerar Serviços Preliminares",
+            variable=self.var_considerar_sp,
+            command=self._ao_trocar_considerar_sp,
+        ).pack(anchor="w")
 
     def _criar_halo(self, parent, *, padx=3, pady=2):
         return tk.Frame(parent, bg=self._cores.fundo, padx=padx, pady=pady)
@@ -1414,7 +1462,13 @@ class AreaComumFrame(tk.Frame):
         self._janela_orccad = None
 
     def _ao_salvar_desenho_principal(self, desenho, valores):
-        self._desenho_principal = dict(desenho or {"pontos": [], "fechado": False})
+        self._desenho_principal = deepcopy(
+            desenho
+            or {
+                "externa": {"pontos": [], "fechado": False},
+                "hall": {"pontos": [], "fechado": False},
+            }
+        )
         for chave, texto in (valores or {}).items():
             if chave in self.var_medidas and texto:
                 self.var_medidas[chave].set(texto)
@@ -1422,31 +1476,49 @@ class AreaComumFrame(tk.Frame):
         self._marcar_sujo()
         self._registrar_historico("Planta do condomínio")
         self._recalcular()
+        n = len(valores or {})
         self._mostrar_feedback(
-            "Planta salva: campos de área e perímetro preenchidos.",
+            f"Planta salva: {n} campo(s) de metragem preenchido(s).",
             "green",
         )
 
     def _atualizar_previa_desenho(self):
         if hasattr(self, "previa_desenho"):
             self.previa_desenho.definir(self._desenho_principal)
-        pontos = (self._desenho_principal or {}).get("pontos") or []
-        if len(pontos) < 2:
+        from core.desenho_geometria import dict_para_camadas, resultado_desenho
+
+        camadas = dict_para_camadas(self._desenho_principal)
+        ext_pts, ext_fech = camadas["externa"]
+        hall_pts, hall_fech = camadas["hall"]
+        if len(ext_pts) < 2 and len(hall_pts) < 2:
             self.var_legenda_desenho.set("Ainda não há planta salva.")
             return
-        from core.desenho_geometria import dict_para_pontos, resultado_desenho
-
-        pts, fechado = dict_para_pontos(self._desenho_principal)
-        res = resultado_desenho(pts, fechado=fechado)
-        if res.fechado:
-            self.var_legenda_desenho.set(
-                f"Área: {formatar_decimal_br(res.area_m2, 2)} m²  ·  "
-                f"Perímetro das fachadas: {formatar_decimal_br(res.perimetro_m, 2)} m"
-            )
-        else:
-            self.var_legenda_desenho.set(
-                f"Perímetro: {formatar_decimal_br(res.perimetro_m, 2)} m (polígono aberto)"
-            )
+        partes = []
+        if len(ext_pts) >= 2:
+            res = resultado_desenho(ext_pts, fechado=ext_fech)
+            if res.fechado:
+                partes.append(
+                    f"Externa — Área: {formatar_decimal_br(res.area_m2, 2)} m² · "
+                    f"Perímetro: {formatar_decimal_br(res.perimetro_m, 2)} m"
+                )
+            else:
+                partes.append(
+                    f"Externa (aberta) — Perímetro: "
+                    f"{formatar_decimal_br(res.perimetro_m, 2)} m"
+                )
+        if len(hall_pts) >= 2:
+            res_h = resultado_desenho(hall_pts, fechado=hall_fech)
+            if res_h.fechado:
+                partes.append(
+                    f"Hall — Área: {formatar_decimal_br(res_h.area_m2, 2)} m² · "
+                    f"Perímetro: {formatar_decimal_br(res_h.perimetro_m, 2)} m"
+                )
+            else:
+                partes.append(
+                    f"Hall (aberto) — Perímetro: "
+                    f"{formatar_decimal_br(res_h.perimetro_m, 2)} m"
+                )
+        self.var_legenda_desenho.set("\n".join(partes))
 
     def _ao_sair_municipio(self, _event=None):
         self._resolver_uf_municipio()
@@ -1656,8 +1728,12 @@ class AreaComumFrame(tk.Frame):
         dados["dados_iniciais"]["percentuais"] = {
             chave: var.get().strip() for chave, var in self.var_percentuais.items()
         }
-        dados["dados_iniciais"]["desenho_principal"] = dict(
-            self._desenho_principal or {"pontos": [], "fechado": False}
+        dados["dados_iniciais"]["desenho_principal"] = deepcopy(
+            self._desenho_principal
+            or {
+                "externa": {"pontos": [], "fechado": False},
+                "hall": {"pontos": [], "fechado": False},
+            }
         )
         esquadrias = []
         for modelo in ESQUADRIAS_MODELO:
@@ -1675,6 +1751,7 @@ class AreaComumFrame(tk.Frame):
             )
         dados["esquadrias"] = esquadrias
         dados["anomalias_orcamento"] = list(self._anomalias_orcamento)
+        dados["considerar_servicos_preliminares"] = bool(self.var_considerar_sp.get())
         dados["extras_orcamento"] = []
         dados["orcamento"] = self._orcamento_para_rascunho()
         dados["observacoes"] = self.texto_obs.get("1.0", "end").strip()
@@ -1776,8 +1853,15 @@ class AreaComumFrame(tk.Frame):
             percentuais = iniciais.get("percentuais") or {}
             for chave, var in self.var_percentuais.items():
                 var.set(percentuais.get(chave, ""))
-            self._desenho_principal = dict(
-                (iniciais.get("desenho_principal") or {"pontos": [], "fechado": False})
+            from core.desenho_geometria import dict_para_camadas, desenho_camadas_para_dict
+
+            brutos = iniciais.get("desenho_principal") or {}
+            camadas = dict_para_camadas(brutos)
+            self._desenho_principal = desenho_camadas_para_dict(
+                externa_pontos=camadas["externa"][0],
+                externa_fechado=camadas["externa"][1],
+                hall_pontos=camadas["hall"][0],
+                hall_fechado=camadas["hall"][1],
             )
             self._atualizar_previa_desenho()
             self._atualizar_rotulo_condominio()
@@ -1790,6 +1874,12 @@ class AreaComumFrame(tk.Frame):
                 self.var_esquadrias[ident]["h_peitoril"].set(item.get("h_peitoril", ""))
                 self.var_esquadrias[ident]["qtd_por_pav"].set(item.get("qtd_por_pav", ""))
             self._anomalias_orcamento = list(dados.get("anomalias_orcamento") or [])
+            if "considerar_servicos_preliminares" in dados:
+                self.var_considerar_sp.set(
+                    bool(dados.get("considerar_servicos_preliminares"))
+                )
+            else:
+                self.var_considerar_sp.set(True)
             self._carregar_orcamento_rascunho(dados)
             self._redesenhar_anomalias_orcamento()
             self.texto_obs.delete("1.0", "end")
@@ -2290,11 +2380,53 @@ class AreaComumFrame(tk.Frame):
             self._sincronizando_percentuais = False
         return mudou
 
-    def _ao_duplo_clique_anomalia(self, _event=None):
+    def _coluna_percentual_tree(self, event) -> bool:
+        try:
+            coluna = self.tree_anomalias.identify_column(event.x)
+            linha = self.tree_anomalias.identify_row(event.y)
+        except tk.TclError:
+            return False
+        return bool(linha) and coluna == "#2"
+
+    def _ao_mover_tree_anomalias(self, event):
+        if self._coluna_percentual_tree(event):
+            self.tree_anomalias.configure(cursor="hand2")
+        else:
+            self.tree_anomalias.configure(cursor="")
+
+    def _ao_clique_percentual_anomalia(self, event):
+        if not self._coluna_percentual_tree(event):
+            return
+        row = self.tree_anomalias.identify_row(event.y)
+        if not row:
+            return
+        self.tree_anomalias.selection_set(row)
+        self.after_idle(lambda: self._alterar_percentual_anomalia(row))
+        return "break"
+
+    def _ao_duplo_clique_anomalia(self, event=None):
+        if event is not None and not self._coluna_percentual_tree(event):
+            return
         selecao = self.tree_anomalias.selection()
         if not selecao:
-            return
+            row = self.tree_anomalias.identify_row(event.y) if event is not None else ""
+            if not row:
+                return
+            selecao = (row,)
         self._alterar_percentual_anomalia(selecao[0])
+
+    def _ao_trocar_considerar_sp(self):
+        if self._carregando or self._aplicando_historico:
+            return
+        self._marcar_sujo()
+        self._registrar_historico("Serviços preliminares")
+        self._recalcular()
+        ativo = bool(self.var_considerar_sp.get())
+        self._mostrar_feedback(
+            "Serviços preliminares "
+            + ("incluídos no orçamento." if ativo else "removidos do orçamento."),
+            "green",
+        )
 
     def _alterar_percentual_anomalia(self, item_id=None):
         if item_id is None:
@@ -3348,6 +3480,7 @@ class AreaComumFrame(tk.Frame):
             etapas_por_id=self._etapa_por_id,
             sinapi=self.ctx.sinapi,
             uf=uf,
+            considerar_servicos_preliminares=bool(self.var_considerar_sp.get()),
         )
         itens_uf_fixada = {
             item["id"]: {

@@ -256,6 +256,106 @@ def retangulo_eixos(a: Ponto, b: Ponto) -> tuple[Ponto, ...]:
     )
 
 
+def normal_esquerda(a: Ponto, b: Ponto) -> Ponto:
+    """Normal unitária à esquerda de a→b (Y para cima)."""
+    dx, dy = b.x - a.x, b.y - a.y
+    d = hypot(dx, dy)
+    if d < EPSILON:
+        return Ponto(0.0, 0.0)
+    return Ponto(-dy / d, dx / d)
+
+
+def lado_do_ponto(cursor: Ponto, a: Ponto, b: Ponto) -> float:
+    """Sinal do lado de a→b onde está o cursor (+1 esquerda, -1 direita)."""
+    cruz = (b.x - a.x) * (cursor.y - a.y) - (b.y - a.y) * (cursor.x - a.x)
+    if abs(cruz) < EPSILON:
+        return 1.0
+    return 1.0 if cruz > 0 else -1.0
+
+
+def unidade_direcao(a: Ponto, b: Ponto) -> Ponto:
+    """Vetor unitário de a→b; se coincidentes, eixo X."""
+    dx, dy = b.x - a.x, b.y - a.y
+    d = hypot(dx, dy)
+    if d < EPSILON:
+        return Ponto(1.0, 0.0)
+    return Ponto(dx / d, dy / d)
+
+
+def ponto_deslocado(origem: Ponto, direcao: Ponto, metros: float) -> Ponto:
+    return Ponto(origem.x + direcao.x * metros, origem.y + direcao.y * metros)
+
+
+def segmento_com_comprimento(
+    a: Ponto, b: Ponto, comprimento: float
+) -> tuple[Ponto, Ponto]:
+    """Novo segmento a partir de `a` na direção a→b, com o comprimento dado."""
+    if comprimento < 0:
+        comprimento = abs(comprimento)
+    u = unidade_direcao(a, b)
+    return a, ponto_deslocado(a, u, max(comprimento, EPSILON * 10))
+
+
+def comprimento_ao_longo(a: Ponto, b: Ponto, cursor: Ponto) -> float:
+    """Projeção do cursor na direção a→b (mínimo ~0,1 m), a partir de a."""
+    u = unidade_direcao(a, b)
+    proj = (cursor.x - a.x) * u.x + (cursor.y - a.y) * u.y
+    return max(0.1, abs(proj))
+
+
+def offset_segmento(
+    a: Ponto, b: Ponto, distancia: float, lado: float
+) -> tuple[Ponto, Ponto]:
+    """Segmento paralelo a a→b, deslocado `distancia` no sentido de `lado` (+1/-1)."""
+    if distancia < 0:
+        distancia = abs(distancia)
+        lado = -lado
+    n = normal_esquerda(a, b)
+    sx, sy = n.x * distancia * lado, n.y * distancia * lado
+    return Ponto(a.x + sx, a.y + sy), Ponto(b.x + sx, b.y + sy)
+
+
+def offset_segmento_comprimento(
+    a: Ponto, b: Ponto, distancia: float, lado: float, comprimento: float
+) -> tuple[Ponto, Ponto]:
+    """Parede paralela com comprimento editável (ancorado em a)."""
+    base_a, base_b = segmento_com_comprimento(a, b, comprimento)
+    return offset_segmento(base_a, base_b, distancia, lado)
+
+
+def offset_retangulo(
+    a: Ponto, b: Ponto, profundidade: float, lado: float
+) -> tuple[Ponto, ...]:
+    """Retângulo: lado a–b da externa + profundidade para o lado indicado."""
+    a2, b2 = offset_segmento(a, b, profundidade, lado)
+    return (a, b, b2, a2)
+
+
+def offset_retangulo_comprimento(
+    a: Ponto, b: Ponto, profundidade: float, lado: float, comprimento: float
+) -> tuple[Ponto, ...]:
+    """Retângulo de profundidade fixa e comprimento editável ao longo da parede."""
+    base_a, base_b = segmento_com_comprimento(a, b, comprimento)
+    return offset_retangulo(base_a, base_b, profundidade, lado)
+
+
+def segmento_mais_proximo(
+    cursor: Ponto,
+    segmentos: Sequence[tuple[Ponto, Ponto]],
+    *,
+    max_dist: float | None = None,
+) -> tuple[int, Ponto, Ponto, float] | None:
+    melhor: tuple[int, Ponto, Ponto, float] | None = None
+    for i, (a, b) in enumerate(segmentos):
+        pe = ponto_no_segmento(cursor, a, b)
+        d = distancia(cursor, pe)
+        if max_dist is not None and d > max_dist:
+            continue
+        if melhor is None or d < melhor[3]:
+            melhor = (i, a, b, d)
+    return melhor
+
+
 def _considerar(
     candidatos: list,
     ponto: Ponto,
@@ -441,7 +541,7 @@ def resolver_snap(
     return ResultadoSnap(ponto, tipo)
 
 
-def desenho_para_dict(pontos: Sequence[Ponto], *, fechado: bool) -> dict:
+def camada_para_dict(pontos: Sequence[Ponto], *, fechado: bool) -> dict:
     pts = list(pontos or [])
     return {
         "pontos": [{"x": float(p.x), "y": float(p.y)} for p in pts],
@@ -449,9 +549,33 @@ def desenho_para_dict(pontos: Sequence[Ponto], *, fechado: bool) -> dict:
     }
 
 
+def desenho_para_dict(pontos: Sequence[Ponto], *, fechado: bool) -> dict:
+    """Compatível: um polígono vira a camada externa."""
+    return {
+        "externa": camada_para_dict(pontos, fechado=fechado),
+        "hall": camada_para_dict([], fechado=False),
+    }
+
+
+def desenho_camadas_para_dict(
+    *,
+    externa_pontos: Sequence[Ponto],
+    externa_fechado: bool,
+    hall_pontos: Sequence[Ponto],
+    hall_fechado: bool,
+) -> dict:
+    return {
+        "externa": camada_para_dict(externa_pontos, fechado=externa_fechado),
+        "hall": camada_para_dict(hall_pontos, fechado=hall_fechado),
+    }
+
+
 def dict_para_pontos(dados) -> tuple[list[Ponto], bool]:
+    """Lê uma camada; se vier o formato antigo, usa a raiz."""
     if not isinstance(dados, dict):
         return [], False
+    if "pontos" not in dados and isinstance(dados.get("externa"), dict):
+        dados = dados["externa"]
     pontos: list[Ponto] = []
     for item in dados.get("pontos") or []:
         if not isinstance(item, dict):
@@ -462,3 +586,22 @@ def dict_para_pontos(dados) -> tuple[list[Ponto], bool]:
             continue
     fechado = bool(dados.get("fechado")) and len(pontos) >= 3
     return pontos, fechado
+
+
+def dict_para_camadas(dados) -> dict[str, tuple[list[Ponto], bool]]:
+    """Normaliza formato antigo e novo para {externa, hall}."""
+    if not isinstance(dados, dict):
+        return {
+            "externa": ([], False),
+            "hall": ([], False),
+        }
+    if isinstance(dados.get("externa"), dict) or isinstance(dados.get("hall"), dict):
+        return {
+            "externa": dict_para_pontos(dados.get("externa") or {}),
+            "hall": dict_para_pontos(dados.get("hall") or {}),
+        }
+    # Formato legado: um único polígono = externa.
+    return {
+        "externa": dict_para_pontos(dados),
+        "hall": ([], False),
+    }

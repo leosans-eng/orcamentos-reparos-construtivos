@@ -21,11 +21,17 @@ from ui.widgets import (
 )
 
 
-def valores_campos_desenho(resultado: ResultadoDesenho | None) -> dict[str, str]:
-    """Área ou perímetro do desenho para cada campo da Área Comum."""
+def valores_campos_desenho(
+    resultados: dict[str, ResultadoDesenho | None] | ResultadoDesenho | None,
+) -> dict[str, str]:
+    """Preenche campos conforme a camada (externa / hall)."""
+    if resultados is None:
+        return {}
+    if isinstance(resultados, ResultadoDesenho):
+        resultados = {"externa": resultados, "hall": None}
     saida = {}
-    for chave, _rotulo, tipo in CAMPOS_DESENHO_AREA_COMUM:
-        texto = valor_para_campo(resultado, tipo)
+    for chave, _rotulo, tipo, camada in CAMPOS_DESENHO_AREA_COMUM:
+        texto = valor_para_campo(resultados.get(camada), tipo)
         if texto:
             saida[chave] = texto
     return saida
@@ -45,7 +51,10 @@ class JanelaORCCAD:
     ):
         self.on_salvar_principal = on_salvar_principal
         self.on_fechar = on_fechar
-        self._resultado: ResultadoDesenho | None = None
+        self._resultados: dict[str, ResultadoDesenho | None] = {
+            "externa": None,
+            "hall": None,
+        }
 
         if standalone:
             self.janela = parent
@@ -89,19 +98,25 @@ class JanelaORCCAD:
         ttk.Label(
             lado,
             text=(
-                "Desenhe a planta do condomínio para obter as medidas para cálculos."
+                "Desenhe a EXTERNA e o HALL (Offset ou do zero) "
+                "para obter as medidas."
             ),
             wraplength=280,
         ).pack(anchor="w", pady=(4, 10))
 
-        self.var_area = tk.StringVar(value="Área: —")
-        self.var_perim = tk.StringVar(value="Perímetro: —")
-        ttk.Label(lado, textvariable=self.var_area, font=("Segoe UI", 10, "bold")).pack(
-            anchor="w"
-        )
-        ttk.Label(lado, textvariable=self.var_perim, font=("Segoe UI", 10, "bold")).pack(
-            anchor="w", pady=(0, 12)
-        )
+        self.var_area_ext = tk.StringVar(value="Externa · Área: —")
+        self.var_perim_ext = tk.StringVar(value="Externa · Perímetro: —")
+        self.var_area_hall = tk.StringVar(value="Hall · Área: —")
+        self.var_perim_hall = tk.StringVar(value="Hall · Perímetro: —")
+        for var in (
+            self.var_area_ext,
+            self.var_perim_ext,
+            self.var_area_hall,
+            self.var_perim_hall,
+        ):
+            ttk.Label(lado, textvariable=var, font=("Segoe UI", 9, "bold")).pack(
+                anchor="w"
+            )
 
         if self.on_salvar_principal is not None:
             btn_salvar = ttk.Button(
@@ -109,11 +124,11 @@ class JanelaORCCAD:
                 text="Salvar planta no orçamento",
                 command=self._salvar_principal,
             )
-            btn_salvar.pack(fill="x")
+            btn_salvar.pack(fill="x", pady=(12, 0))
             vincular_tooltip(
                 btn_salvar,
-                "Grava a planta e preenche os campos de área e perímetro "
-                "da Área Comum com os valores do desenho.",
+                "Grava a planta e preenche os campos da Área Comum:\n"
+                "externa → fachada/cobertura; hall → laje/piso/perímetros do hall.",
             )
 
         ttk.Separator(lado).pack(fill="x", pady=(12, 8))
@@ -124,17 +139,20 @@ class JanelaORCCAD:
         ).pack(anchor="w", pady=(0, 4))
         ttk.Label(
             lado,
-            text=(
-                "Valores calculados pelo desenho. Ao salvar, todos "
-                "preenchem o orçamento."
-                if self.on_salvar_principal is not None
-                else "Valores calculados pelo desenho (prévia)."
-            ),
+            text="Externa (azul) e Hall (verde) alimentam grupos diferentes.",
             wraplength=280,
         ).pack(anchor="w", pady=(0, 6))
 
         self._vars_campos = {}
-        for chave, rotulo, tipo in CAMPOS_DESENHO_AREA_COMUM:
+        camada_atual = None
+        for chave, rotulo, tipo, camada in CAMPOS_DESENHO_AREA_COMUM:
+            if camada != camada_atual:
+                camada_atual = camada
+                ttk.Label(
+                    lado,
+                    text="Externa" if camada == "externa" else "Hall",
+                    font=("Segoe UI", 8, "bold"),
+                ).pack(anchor="w", pady=(8 if camada == "hall" else 0, 2))
             linha = ttk.Frame(lado)
             linha.pack(fill="x", pady=2)
             ttk.Label(linha, text=rotulo + ":", wraplength=190).pack(
@@ -142,7 +160,7 @@ class JanelaORCCAD:
             )
             var = tk.StringVar(value="—")
             ttk.Label(linha, textvariable=var, width=12, anchor="e").pack(side="right")
-            self._vars_campos[chave] = (var, tipo)
+            self._vars_campos[chave] = (var, tipo, camada)
 
         self.var_feedback = tk.StringVar(value="")
         ttk.Label(
@@ -161,25 +179,32 @@ class JanelaORCCAD:
         self.janela.after_idle(self.painel.enquadrar_quando_visivel)
         self.janela.after(120, self.painel.enquadrar_quando_visivel)
 
-    def _ao_resultado(self, resultado: ResultadoDesenho | None):
-        self._resultado = resultado
-        if resultado is None:
-            self.var_area.set("Área: —")
-            self.var_perim.set("Perímetro: —")
-            for var, _tipo in self._vars_campos.values():
-                var.set("—")
-            return
-
-        if resultado.fechado:
-            self.var_area.set(f"Área: {formatar_decimal_br(resultado.area_m2, 2)} m²")
+    def _fmt_camada(self, res: ResultadoDesenho | None, prefixo: str):
+        if res is None:
+            return f"{prefixo} · Área: —", f"{prefixo} · Perímetro: —"
+        if res.fechado:
+            area = f"{prefixo} · Área: {formatar_decimal_br(res.area_m2, 2)} m²"
         else:
-            self.var_area.set("Área: — (complete o polígono)")
-        self.var_perim.set(
-            f"Perímetro: {formatar_decimal_br(resultado.perimetro_m, 2)} m"
-        )
+            area = f"{prefixo} · Área: — (complete)"
+        peri = f"{prefixo} · Perímetro: {formatar_decimal_br(res.perimetro_m, 2)} m"
+        return area, peri
 
-        for chave, (var, tipo) in self._vars_campos.items():
-            texto = valor_para_campo(resultado, tipo)
+    def _ao_resultado(self, resultados):
+        if not isinstance(resultados, dict):
+            resultados = {"externa": resultados, "hall": None}
+        self._resultados = {
+            "externa": resultados.get("externa"),
+            "hall": resultados.get("hall"),
+        }
+        ae, pe = self._fmt_camada(self._resultados["externa"], "Externa")
+        ah, ph = self._fmt_camada(self._resultados["hall"], "Hall")
+        self.var_area_ext.set(ae)
+        self.var_perim_ext.set(pe)
+        self.var_area_hall.set(ah)
+        self.var_perim_hall.set(ph)
+
+        for chave, (var, tipo, camada) in self._vars_campos.items():
+            texto = valor_para_campo(self._resultados.get(camada), tipo)
             if not texto:
                 var.set("—")
                 continue
@@ -189,30 +214,39 @@ class JanelaORCCAD:
     def _salvar_principal(self):
         if self.on_salvar_principal is None:
             return
-        resultado = self._resultado
-        if resultado is None or len(self.painel.pontos) < 2:
+        externa = self._resultados.get("externa")
+        if externa is None or len(self.painel._camadas["externa"]["pontos"]) < 2:
             messagebox.showinfo(
                 "Desenho",
-                "Desenhe a planta do condomínio antes de salvar.",
+                "Desenhe a parte EXTERNA da planta antes de salvar.",
                 parent=self.janela,
             )
             return
-        if not resultado.fechado:
+        if not externa.fechado:
             messagebox.showinfo(
                 "Desenho",
-                "Complete o polígono (Completar ou clique no primeiro ponto) "
-                "para obter a área e o perímetro.",
+                "Complete o polígono da EXTERNA para obter área e perímetro.",
                 parent=self.janela,
             )
             return
-        valores = valores_campos_desenho(resultado)
+        valores = valores_campos_desenho(self._resultados)
         if not valores:
             messagebox.showinfo(
                 "Desenho",
-                "Não foi possível calcular área e perímetro deste polígono.",
+                "Não foi possível calcular as metragens deste desenho.",
                 parent=self.janela,
             )
             return
+        hall = self._resultados.get("hall")
+        if hall is None or not hall.fechado:
+            if not messagebox.askyesno(
+                "Hall incompleto",
+                "O HALL ainda não está completo.\n\n"
+                "Salvar só com os campos da EXTERNA?\n"
+                "(os 4 campos do hall não serão preenchidos)",
+                parent=self.janela,
+            ):
+                return
         self.on_salvar_principal(self.painel.exportar(), valores)
         self._fechar()
 

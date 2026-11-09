@@ -4,7 +4,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files
 
 datas = [
-    ('vicios_construtivos.json', '.'),
+    ('anomalias_area_privativa.json', '.'),
     ('dados/municipios_uf.json', 'dados'),
     ('icone.ico', '.'),
     ('assets/icons', 'assets/icons'),

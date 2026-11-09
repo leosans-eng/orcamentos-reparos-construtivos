@@ -5,11 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 
 from core.area_comum_anomalias import (
-    NOME_SERVICOS_PRELIMINARES,
-    ORIGEM_SERVICOS_PRELIMINARES,
+    ETAPAS_ORCAMENTO_FIXAS,
+    NOMES_ETAPAS_FIXAS,
+    ORIGENS_ETAPAS_FIXAS,
     TIPO_ITEM_CATALOGO_PROPRIA,
     itens_efetivos_reparo,
-    normalizar_servicos_preliminares,
+    normalizar_etapa_orcamento_fixa,
     obter_anomalia,
     quantidade_de_item,
     titulo_grupo_orcamento,
@@ -257,7 +258,8 @@ def _montar_grupo_itens_sinapi(
     return deepcopy(tmp.obter_grupo(grupo_id))
 
 
-def _montar_grupo_servicos_preliminares(
+def _montar_grupo_etapa_fixa(
+    chave: str,
     *,
     catalogo: dict,
     quantitativos: dict,
@@ -265,13 +267,14 @@ def _montar_grupo_servicos_preliminares(
     uf: str,
     catalogo_composicoes,
 ) -> dict | None:
-    sp = normalizar_servicos_preliminares(
-        (catalogo or {}).get("servicos_preliminares")
-    )
-    itens = list(sp.get("itens") or [])
+    if chave not in ORIGENS_ETAPAS_FIXAS:
+        return None
+    etapa = normalizar_etapa_orcamento_fixa((catalogo or {}).get(chave), chave)
+    itens = list(etapa.get("itens") or [])
     if not itens:
         return None
-    nome = str(sp.get("nome") or "").strip() or NOME_SERVICOS_PRELIMINARES
+    nome_padrao = NOMES_ETAPAS_FIXAS.get(chave) or chave
+    nome = str(etapa.get("nome") or "").strip() or nome_padrao
     grupo = _montar_grupo_itens_sinapi(
         nome=nome,
         itens=itens,
@@ -281,11 +284,48 @@ def _montar_grupo_servicos_preliminares(
         uf=uf,
         catalogo_composicoes=catalogo_composicoes,
     )
-    grupo["origem"] = ORIGEM_SERVICOS_PRELIMINARES
+    grupo["origem"] = chave
     grupo["anomalia_id"] = ""
     grupo["etapa_predefinida_id"] = ""
     _marcar_itens_origem_anomalia(grupo)
     return grupo
+
+
+def _montar_grupo_servicos_preliminares(
+    *,
+    catalogo: dict,
+    quantitativos: dict,
+    sinapi,
+    uf: str,
+    catalogo_composicoes,
+) -> dict | None:
+    return _montar_grupo_etapa_fixa(
+        "servicos_preliminares",
+        catalogo=catalogo,
+        quantitativos=quantitativos,
+        sinapi=sinapi,
+        uf=uf,
+        catalogo_composicoes=catalogo_composicoes,
+    )
+
+
+def _flags_etapas_fixas(
+    *,
+    considerar_servicos_preliminares: bool = True,
+    considerar_destinacao_entulho: bool = True,
+    considerar_limpeza_geral: bool = True,
+    considerar_etapas_fixas: dict | None = None,
+) -> dict[str, bool]:
+    flags = {
+        "servicos_preliminares": bool(considerar_servicos_preliminares),
+        "destinacao_entulho": bool(considerar_destinacao_entulho),
+        "limpeza_geral": bool(considerar_limpeza_geral),
+    }
+    if isinstance(considerar_etapas_fixas, dict):
+        for chave in ORIGENS_ETAPAS_FIXAS:
+            if chave in considerar_etapas_fixas:
+                flags[chave] = bool(considerar_etapas_fixas.get(chave))
+    return flags
 
 
 def sincronizar_grupos_anomalias(
@@ -299,22 +339,40 @@ def sincronizar_grupos_anomalias(
     uf: str,
     catalogo_composicoes=None,
     considerar_servicos_preliminares: bool = True,
+    considerar_destinacao_entulho: bool = True,
+    considerar_limpeza_geral: bool = True,
+    considerar_etapas_fixas: dict | None = None,
 ) -> None:
-    """Reconstrói grupos gerados por anomalias/SP e preserva etapas manuais."""
+    """Reconstrói grupos auto (SP / anomalias / entulho / limpeza) e preserva manuais.
+
+    Ordem final: etapas de início → anomalias → manuais → etapas de fim.
+    """
     catalogo_composicoes = _catalogo_composicoes(catalogo_composicoes)
-    auto = []
-    grupo_sp = None
-    if considerar_servicos_preliminares:
-        grupo_sp = _montar_grupo_servicos_preliminares(
+    flags = _flags_etapas_fixas(
+        considerar_servicos_preliminares=considerar_servicos_preliminares,
+        considerar_destinacao_entulho=considerar_destinacao_entulho,
+        considerar_limpeza_geral=considerar_limpeza_geral,
+        considerar_etapas_fixas=considerar_etapas_fixas,
+    )
+
+    por_origem_fixa: dict[str, dict] = {}
+    for meta in ETAPAS_ORCAMENTO_FIXAS:
+        chave = meta["chave"]
+        if not flags.get(chave, True):
+            continue
+        grupo = _montar_grupo_etapa_fixa(
+            chave,
             catalogo=catalogo,
             quantitativos=quantitativos,
             sinapi=sinapi,
             uf=uf,
             catalogo_composicoes=catalogo_composicoes,
         )
-        if grupo_sp is not None:
-            auto.append(grupo_sp)
+        if grupo is None:
+            continue
+        por_origem_fixa[chave] = grupo
 
+    grupos_anomalia: list[dict] = []
     for anomalia in anomalias or []:
         nome = str(anomalia.get("nome") or "").strip()
         if not nome:
@@ -341,50 +399,65 @@ def sincronizar_grupos_anomalias(
         grupo["anomalia_id"] = str(anomalia.get("id") or "")
         grupo["etapa_predefinida_id"] = str(reparo.get("etapa_predefinida_id") or "")
         _marcar_itens_origem_anomalia(grupo)
-        auto.append(grupo)
+        grupos_anomalia.append(grupo)
 
-    origens_auto = {"anomalia", ORIGEM_SERVICOS_PRELIMINARES}
+    origens_auto = {"anomalia", *ORIGENS_ETAPAS_FIXAS}
     manuais = [
         g for g in (orcamento.grupos or []) if g.get("origem") not in origens_auto
     ]
     por_anomalia = {
-        str(g.get("anomalia_id") or ""): g
-        for g in auto
-        if g.get("origem") == "anomalia"
+        str(g.get("anomalia_id") or ""): g for g in grupos_anomalia
     }
-    usados = set()
-    resultado = []
-    sp_inserido = False
+
+    merged_fixas: dict[str, dict] = {}
+    anomalias_mescladas: list[dict] = []
+    usados_anomalia: set[str] = set()
     for antigo in orcamento.grupos or []:
         origem = antigo.get("origem")
-        if origem == ORIGEM_SERVICOS_PRELIMINARES:
-            if grupo_sp is None:
+        if origem in ORIGENS_ETAPAS_FIXAS:
+            novo = por_origem_fixa.get(origem)
+            if novo is None:
                 continue
-            resultado.append(_mesclar_grupo_anomalia(antigo, grupo_sp))
-            sp_inserido = True
+            merged_fixas[origem] = _mesclar_grupo_anomalia(antigo, novo)
             continue
         if origem == "anomalia":
             aid = str(antigo.get("anomalia_id") or "")
             novo = por_anomalia.get(aid)
             if novo is None:
                 continue
-            resultado.append(_mesclar_grupo_anomalia(antigo, novo))
-            usados.add(aid)
+            anomalias_mescladas.append(_mesclar_grupo_anomalia(antigo, novo))
+            usados_anomalia.add(aid)
             continue
-        resultado.append(antigo)
 
-    if grupo_sp is not None and not sp_inserido:
-        resultado.insert(0, grupo_sp)
-    for grupo in auto:
-        if grupo.get("origem") != "anomalia":
-            continue
+    for grupo in grupos_anomalia:
         aid = str(grupo.get("anomalia_id") or "")
-        if aid not in usados:
+        if aid not in usados_anomalia:
+            anomalias_mescladas.append(grupo)
+
+    resultado: list[dict] = []
+    for meta in ETAPAS_ORCAMENTO_FIXAS:
+        if meta.get("posicao") != "inicio":
+            continue
+        chave = meta["chave"]
+        grupo = merged_fixas.get(chave) or por_origem_fixa.get(chave)
+        if grupo is not None:
             resultado.append(grupo)
+    resultado.extend(anomalias_mescladas)
+
     ids_resultado = {g.get("id") for g in resultado}
     for grupo in manuais:
         if grupo.get("id") not in ids_resultado:
             resultado.append(grupo)
+            ids_resultado.add(grupo.get("id"))
+
+    for meta in ETAPAS_ORCAMENTO_FIXAS:
+        if meta.get("posicao") != "fim":
+            continue
+        chave = meta["chave"]
+        grupo = merged_fixas.get(chave) or por_origem_fixa.get(chave)
+        if grupo is not None:
+            resultado.append(grupo)
+
     orcamento.grupos = resultado
 
 

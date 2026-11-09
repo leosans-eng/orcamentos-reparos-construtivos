@@ -29,11 +29,23 @@ from core.desenho_geometria import (
     passo_grade_visivel,
     perimetro,
     ponto_na_direcao,
+    ponto_no_segmento,
     quase_iguais,
     resolver_snap,
     resultado_desenho,
     retangulo_eixos,
     segmento_mais_proximo,
+)
+from core.desenho_edicao import (
+    HistoricoDesenho,
+    ajustar_comprimento,
+    apagar_segmentos,
+    copiar_camadas,
+    extremos_segmento,
+    indices_segmentos,
+    mover_vertices,
+    selecionar_por_retangulo,
+    vertices_da_selecao,
 )
 from ui.icones import criar_botao_ttk_so_icone
 from ui.temas import cores_tema, estilos_botao
@@ -62,6 +74,15 @@ CHAVES_MEDIDA_ORCCAD = frozenset(
 
 COR_EXTERNA = "#006699"
 COR_HALL = "#2e7d32"
+COR_SELECAO = "#1e88e5"
+COR_GRIP = "#1565c0"
+COR_GRIP_QUENTE = "#e53935"
+COR_JANELA = "#1e88e5"
+COR_CRUZAMENTO = "#2e7d32"
+
+_TOL_LINHA_PX = 8.0
+_TOL_GRIP_PX = 7.0
+_ARRASTE_MIN_PX = 4.0
 
 _ZOOM_MIN = 8.0
 _ZOOM_MAX = 400.0
@@ -83,7 +104,8 @@ class PainelDesenho2D(tk.Frame):
             "hall": {"pontos": [], "fechado": False},
         }
         self.camada_ativa = "externa"
-        self._ferramenta = "polilinha"
+        # "selecao" é o estado sem comando: clique seleciona, como no AutoCAD.
+        self._ferramenta = "selecao"
         self._canto_ret = None
         self._buffer = ""
         self._shift = False
@@ -108,6 +130,18 @@ class PainelDesenho2D(tk.Frame):
         self._offset_comp = None  # comprimento editável (m)
         self._offset_hall_backup = None
         self._chips_camada: dict = {}
+
+        self._selecao: set[tuple[str, int]] = set()
+        self._hover_linha: tuple[str, int] | None = None
+        self._janela_sel: list[float] | None = None  # [sx0, sy0, sx1, sy1]
+        self._janela_por_arraste = False
+        self._press_xy: tuple[float, float] | None = None
+        self._mover_base: Ponto | None = None
+        self._grip: tuple[str, int, Ponto] | None = None
+        self._grip_por_arraste = False
+        self._editor_cota = None
+        self._historico = HistoricoDesenho()
+        self.revisao = 0
 
         self.var_ortho = tk.BooleanVar(value=False)
         self.var_polar = tk.BooleanVar(value=True)
@@ -164,28 +198,101 @@ class PainelDesenho2D(tk.Frame):
         self._offset_comp = None
         self._offset_hall_backup = None
         if self._ferramenta.startswith("offset"):
-            self._ferramenta = "polilinha"
+            self._ferramenta = "selecao"
 
-    def limpar(self):
-        self.pontos.clear()
-        self.fechado = False
+    # ------------------------------------------------------------------
+    # Estado, histórico e API pública
+    # ------------------------------------------------------------------
+
+    def _estado(self) -> dict:
+        return {"camadas": copiar_camadas(self._camadas), "ativa": self.camada_ativa}
+
+    def _restaurar(self, estado: dict):
+        self._camadas = copiar_camadas(estado["camadas"])
+        self.camada_ativa = estado.get("ativa") or "externa"
+
+    def _registrar(self, estado: dict | None = None):
+        """Guarda o estado anterior a uma alteração (para Ctrl+Z)."""
+        self._historico.registrar(estado if estado is not None else self._estado())
+        self.revisao += 1
+
+    def _cancelar_comandos(self):
+        if self._canto_ret is not None and len(self.pontos) == 1 and not self.fechado:
+            self.pontos.clear()
         self._canto_ret = None
         self._buffer = ""
+        self._janela_sel = None
+        self._janela_por_arraste = False
+        self._mover_base = None
+        self._grip = None
+        self._grip_por_arraste = False
+        self._fechar_editor_cota()
+        if self._ferramenta.startswith("offset"):
+            self._limpar_estado_offset(restaurar_hall=True)
+
+    def _apos_mudanca_historico(self, mensagem: str):
+        self._selecao.clear()
+        self._hover_linha = None
+        if self._ferramenta not in ("polilinha",):
+            self._ferramenta = "selecao"
+        self.revisao += 1
+        self._atualizar_chips_camada()
+        self._redesenhar_estatico()
+        self._atualizar_volante()
+        self._avisar_resultado()
+        self._set_status(mensagem)
+
+    def desfazer(self):
+        if self._ferramenta == "retangulo" and self._canto_ret is not None:
+            self._canto_ret = None
+            self.pontos.clear()
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._set_status("Retângulo cancelado.")
+            return
+        self._cancelar_comandos()
+        anterior = self._historico.desfazer(self._estado())
+        if anterior is None:
+            self._set_status("Nada para desfazer.")
+            return
+        self._restaurar(anterior)
+        self._apos_mudanca_historico("Desfeito. Ctrl+Y refaz.")
+
+    def refazer(self):
+        self._cancelar_comandos()
+        proximo = self._historico.refazer(self._estado())
+        if proximo is None:
+            self._set_status("Nada para refazer.")
+            return
+        self._restaurar(proximo)
+        self._apos_mudanca_historico("Refeito.")
+
+    def tem_pontos(self, camada: str) -> int:
+        return len(self._camadas.get(camada, {}).get("pontos") or [])
+
+    def limpar(self):
+        self._cancelar_comandos()
+        if self.pontos or self.fechado:
+            self._registrar()
+        self.pontos.clear()
+        self.fechado = False
         self._ultimo_snap = None
-        self._limpar_estado_offset(restaurar_hall=False)
+        self._selecao = {s for s in self._selecao if s[0] != self.camada_ativa}
+        self._ferramenta = "selecao"
         self._redesenhar_estatico()
         self._atualizar_volante()
         self._avisar_resultado()
         self._set_status(self._msg_inicio())
 
     def limpar_tudo(self):
+        self._cancelar_comandos()
+        if any(d["pontos"] for d in self._camadas.values()):
+            self._registrar()
         for chave in self._camadas:
             self._camadas[chave] = {"pontos": [], "fechado": False}
-        self._canto_ret = None
-        self._buffer = ""
         self._ultimo_snap = None
-        self._limpar_estado_offset(restaurar_hall=False)
-        self._ferramenta = "polilinha"
+        self._selecao.clear()
+        self._ferramenta = "selecao"
         self._redesenhar_estatico()
         self._atualizar_volante()
         self._avisar_resultado()
@@ -204,11 +311,13 @@ class PainelDesenho2D(tk.Frame):
         for chave, (pts, fechado) in camadas.items():
             self._camadas[chave] = {"pontos": list(pts), "fechado": fechado}
         self.camada_ativa = "externa"
-        self._canto_ret = None
-        self._buffer = ""
-        self._ultimo_snap = None
         self._limpar_estado_offset(restaurar_hall=False)
-        self._ferramenta = "polilinha"
+        self._cancelar_comandos()
+        self._ultimo_snap = None
+        self._selecao.clear()
+        self._historico.limpar()
+        self.revisao = 0
+        self._ferramenta = "selecao"
         self._atualizar_chips_camada()
         self._redesenhar_estatico()
         self._atualizar_volante()
@@ -221,9 +330,14 @@ class PainelDesenho2D(tk.Frame):
 
     def _msg_inicio(self) -> str:
         nome = "Externa" if self.camada_ativa == "externa" else "Hall"
+        if not self.pontos:
+            return (
+                f"Camada {nome}: escolha Polilinha ou Retângulo para desenhar. "
+                "Sem comando, o clique seleciona linhas."
+            )
         return (
-            f"Camada {nome}: clique o primeiro ponto. "
-            "Polar (F10) sugere 45°/90°. Offset: distância vazia e depois o comprimento."
+            f"Camada {nome}: clique numa linha ou arraste uma janela para selecionar. "
+            "M move · Delete apaga · duplo clique edita a cota."
         )
 
     def vincular_atalhos(self, janela):
@@ -258,7 +372,10 @@ class PainelDesenho2D(tk.Frame):
             ("<KeyRelease-space>", lambda e: self._set_espaco(False)),
             ("<Home>", self._ao_home),
             ("<Control-z>", self._ao_desfazer_tecla),
-            ("<Control-Z>", self._ao_desfazer_tecla),
+            ("<Control-Z>", self._ao_refazer_tecla),
+            ("<Control-y>", self._ao_refazer_tecla),
+            ("<Control-Y>", self._ao_refazer_tecla),
+            ("<Delete>", self._ao_delete),
         )
         for seq, handler in pares:
             wrapped = desta_janela(handler)
@@ -274,6 +391,9 @@ class PainelDesenho2D(tk.Frame):
                 self._binds_janela.append((janela, seq))
                 self._binds_janela.append((self.canvas, seq))
         janela.bind("<Destroy>", self._ao_destruir_janela, add="+")
+
+    def desvincular_atalhos(self):
+        self._desvincular_atalhos()
 
     def _desvincular_atalhos(self):
         for janela, seq in self._binds_janela:
@@ -366,12 +486,21 @@ class PainelDesenho2D(tk.Frame):
         _btn(
             "cad-offset-rect",
             lambda: self._usar_offset("retangulo"),
-            (4, 12),
+            (4, 4),
             "Offset (retângulo)",
             "Hall retangular a partir de uma parede.\n"
             "1) Clique a parede da Externa\n"
             "2) Digite a distância vazia / profundidade (m) e Enter\n"
             "3) Estique o comprimento (digite ou arraste) e Enter/clique.",
+        )
+        _btn(
+            "cad-move",
+            self.iniciar_mover,
+            (0, 12),
+            "Mover",
+            "Move as linhas selecionadas; as paredes vizinhas esticam.\n"
+            "1) Selecione (clique ou janela)  2) Ponto base  3) Destino\n"
+            "No destino, digite a distância (m) e Enter. Atalho: M.",
         )
         _btn(
             "checkmark-circle-outline",
@@ -383,17 +512,26 @@ class PainelDesenho2D(tk.Frame):
         )
         _btn(
             "arrow-undo-sharp",
-            self._desfazer,
-            (4, 4),
+            self.desfazer,
+            (4, 0),
             "Desfazer",
-            "Remove o último vértice da camada ativa.\nAtalho: Backspace ou Ctrl+Z.",
+            "Desfaz a última alteração (vértice, offset, mover, apagar…).\n"
+            "Atalho: Ctrl+Z. Backspace remove só o último vértice ao desenhar.",
+        )
+        _btn(
+            "arrow-redo-sharp",
+            self.refazer,
+            (4, 4),
+            "Refazer",
+            "Refaz o que foi desfeito.\nAtalho: Ctrl+Y.",
         )
         _btn(
             "trash-outline",
             self.limpar,
             (0, 0),
-            "Limpar",
-            "Apaga só a camada ativa (Externa ou Hall).",
+            "Limpar camada",
+            "Apaga só a camada ativa (Externa ou Hall).\n"
+            "Para apagar linhas selecionadas, use Delete.",
         )
         _btn(
             "expand",
@@ -418,10 +556,16 @@ class PainelDesenho2D(tk.Frame):
         vincular_tooltip(
             btn_ajuda,
             "EXTERNA e HALL são dois polígonos no mesmo desenho\n"
+            "Sem comando ativo (Esc), o clique seleciona linhas:\n"
+            "  arrastar → direita: janela azul (só o que estiver inteiro dentro)\n"
+            "  arrastar ← esquerda: cruzamento verde (tudo o que tocar)\n"
+            "  Clique substitui · Shift+clique adiciona/remove · clique no vazio limpa\n"
+            "  Shift+janela acrescenta à seleção · Esc limpa\n"
+            "Seleção: M move · Delete apaga · quadrados azuis (grips) arrastam vértices\n"
+            "Duplo clique numa linha: digitar o novo comprimento\n"
             "Offset: 1º distância vazia · 2º comprimento (digite ou arraste)\n"
-            "Hall também pode ser desenhado do zero na camada HALL\n"
             "Shift: trava H/V · F11: guias · digite medida + Enter\n"
-            "Botão direito: completa · roda: zoom · espaço+arraste: pan",
+            "Ctrl+Z / Ctrl+Y · roda: zoom · espaço+arraste: pan",
         )
 
         moldura = ttk.Frame(self)
@@ -489,6 +633,7 @@ class PainelDesenho2D(tk.Frame):
     def _ligar_canvas(self):
         c = self.canvas
         c.bind("<Button-1>", self._ao_clique)
+        c.bind("<Double-Button-1>", self._ao_duplo_clique)
         c.bind("<B1-Motion>", self._ao_arraste)
         c.bind("<ButtonRelease-1>", self._ao_soltar)
         c.bind("<Button-2>", self._ao_pan_inicio)
@@ -546,7 +691,19 @@ class PainelDesenho2D(tk.Frame):
     def _ao_desfazer_tecla(self, event):
         if self._foco_em_campo():
             return None
-        self._desfazer()
+        self.desfazer()
+        return "break"
+
+    def _ao_refazer_tecla(self, event):
+        if self._foco_em_campo():
+            return None
+        self.refazer()
+        return "break"
+
+    def _ao_delete(self, event):
+        if self._foco_em_campo():
+            return None
+        self.apagar_selecao()
         return "break"
 
     def _ao_home(self, event):
@@ -581,7 +738,11 @@ class PainelDesenho2D(tk.Frame):
     def _origem_atual(self) -> Ponto | None:
         if self._ferramenta == "retangulo":
             return self._canto_ret
-        if self.pontos and not self.fechado:
+        if self._ferramenta == "mover":
+            return self._mover_base
+        if self._grip is not None:
+            return self._grip[2]
+        if self._ferramenta == "polilinha" and self.pontos and not self.fechado:
             return self.pontos[-1]
         return None
 
@@ -608,7 +769,11 @@ class PainelDesenho2D(tk.Frame):
             config=self._config_snap(),
             abertura=self._abertura_m(),
             abertura_guia=self._abertura_guia_m(),
-            pode_fechar=len(self.pontos) >= 3 and not self.fechado,
+            pode_fechar=(
+                self._ferramenta == "polilinha"
+                and len(self.pontos) >= 3
+                and not self.fechado
+            ),
             ponto_fechamento=self.pontos[0] if self.pontos else None,
         )
 
@@ -616,10 +781,9 @@ class PainelDesenho2D(tk.Frame):
         if camada not in self._camadas or camada == self.camada_ativa:
             self._atualizar_chips_camada()
             return
-        self._canto_ret = None
-        self._buffer = ""
-        if self._ferramenta.startswith("offset"):
-            self._limpar_estado_offset(restaurar_hall=True)
+        self._cancelar_comandos()
+        if self._ferramenta in ("mover", "retangulo"):
+            self._ferramenta = "selecao"
         self.camada_ativa = camada
         self._atualizar_chips_camada()
         self._redesenhar_estatico()
@@ -640,10 +804,12 @@ class PainelDesenho2D(tk.Frame):
         if len(externa) < 2:
             self._set_status("Desenhe e complete a Externa antes de usar Offset.")
             return
-        self._limpar_estado_offset(restaurar_hall=True)
+        self._cancelar_comandos()
+        self._selecao.clear()
         self._offset_hall_backup = {
             "pontos": list(self._camadas["hall"]["pontos"]),
             "fechado": bool(self._camadas["hall"]["fechado"]),
+            "estado": self._estado(),
         }
         self._ferramenta = f"offset_{modo}"
         self._offset_modo = modo
@@ -718,8 +884,10 @@ class PainelDesenho2D(tk.Frame):
             return
         self._atualizar_rascunho_offset()
         modo = self._offset_modo
+        if self._offset_hall_backup is not None:
+            self._registrar(self._offset_hall_backup["estado"])
         self._limpar_estado_offset(restaurar_hall=False)
-        self._ferramenta = "polilinha"
+        self._ferramenta = "selecao" if modo == "retangulo" else "polilinha"
         self._buffer = ""
         self._atualizar_chips_camada()
         self._redesenhar_estatico()
@@ -787,6 +955,12 @@ class PainelDesenho2D(tk.Frame):
                 "(o lado segue o cursor)."
             )
             return
+        if self._ferramenta == "selecao":
+            self._clique_selecao(event)
+            return
+        if self._ferramenta == "mover":
+            self._clique_mover(event)
+            return
         if self.fechado:
             self._set_status(
                 "Polígono desta camada completo. Limpar, Desfazer ou troque de camada."
@@ -799,6 +973,320 @@ class PainelDesenho2D(tk.Frame):
             return
         self._clique_polilinha(snap)
 
+    # ------------------------------------------------------------------
+    # Seleção (estado sem comando), grips, mover, apagar e cotas
+    # ------------------------------------------------------------------
+
+    def _linha_em(self, sx: float, sy: float, tol_px: float = _TOL_LINHA_PX):
+        """Linha (camada, índice) mais próxima do ponto de tela, ou None."""
+        cursor = self._tela_para_mundo(sx, sy)
+        melhor = None
+        for nome, dados in self._camadas.items():
+            pts = dados["pontos"]
+            n = len(pts)
+            for i in indices_segmentos(n, bool(dados["fechado"])):
+                ia, ib = extremos_segmento(n, i)
+                pe = ponto_no_segmento(cursor, pts[ia], pts[ib])
+                d = distancia(cursor, pe) * self._zoom
+                if d <= tol_px and (melhor is None or d < melhor[0]):
+                    melhor = (d, (nome, i))
+        return melhor[1] if melhor else None
+
+    def _grips(self) -> set[tuple[str, int]]:
+        return vertices_da_selecao(self._camadas, self._selecao)
+
+    def _grip_em(self, sx: float, sy: float):
+        for nome, idx in self._grips():
+            p = self._camadas[nome]["pontos"][idx]
+            gx, gy = self._mundo_para_tela(p.x, p.y)
+            if abs(gx - sx) <= _TOL_GRIP_PX and abs(gy - sy) <= _TOL_GRIP_PX:
+                return nome, idx
+        return None
+
+    def _clique_selecao(self, event):
+        self._press_xy = (event.x, event.y)
+        shift = bool(event.state & 0x0001)
+        if self._grip is not None:
+            self._soltar_grip(self._resolver(event.x, event.y).ponto)
+            return
+        if self._janela_sel is not None:
+            self._janela_sel[2], self._janela_sel[3] = event.x, event.y
+            self._concluir_janela(shift)
+            return
+        grip = self._grip_em(event.x, event.y)
+        if grip is not None:
+            nome, idx = grip
+            self._grip = (nome, idx, self._camadas[nome]["pontos"][idx])
+            self._grip_por_arraste = False
+            self._ultimo_snap = self._resolver(event.x, event.y)
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._set_status(
+                "Grip ativo: clique o novo lugar do vértice ou digite a distância (m) e Enter. "
+                "Esc cancela."
+            )
+            return
+        linha = self._linha_em(event.x, event.y)
+        if linha is not None:
+            if shift:
+                if linha in self._selecao:
+                    self._selecao.discard(linha)
+                else:
+                    self._selecao.add(linha)
+            else:
+                self._selecao = {linha}
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._status_selecao()
+            return
+        self._janela_sel = [event.x, event.y, event.x, event.y]
+        self._janela_por_arraste = False
+        self._atualizar_volante()
+        self._set_status(
+            "Arraste: → janela (inteiro dentro, azul) · "
+            "← cruzamento (tudo o que tocar, verde). "
+            "Clique no vazio limpa a seleção."
+        )
+
+    def _concluir_janela(self, com_shift: bool):
+        sx0, sy0, sx1, sy1 = self._janela_sel
+        self._janela_sel = None
+        self._janela_por_arraste = False
+        if abs(sx1 - sx0) < 2 and abs(sy1 - sy0) < 2:
+            if not com_shift:
+                self._selecao.clear()
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._status_selecao()
+            return
+        achadas = selecionar_por_retangulo(
+            self._camadas,
+            self._tela_para_mundo(sx0, sy0),
+            self._tela_para_mundo(sx1, sy1),
+            cruzamento=sx1 < sx0,
+        )
+        if com_shift:
+            self._selecao |= achadas
+        else:
+            self._selecao = set(achadas)
+        self._redesenhar_estatico()
+        self._atualizar_volante()
+        self._status_selecao()
+
+    def _status_selecao(self):
+        n = len(self._selecao)
+        if not n:
+            self._set_status(self._msg_inicio())
+            return
+        total = sum(
+            distancia(*self._extremos(nome, i)) for nome, i in self._selecao
+        )
+        self._set_status(
+            f"{n} linha(s) selecionada(s) · {formatar_decimal_br(total, 2)} m. "
+            "M move · Delete apaga · arraste um grip azul · Esc limpa."
+        )
+
+    def _extremos(self, nome: str, i: int) -> tuple[Ponto, Ponto]:
+        pts = self._camadas[nome]["pontos"]
+        ia, ib = extremos_segmento(len(pts), i)
+        return pts[ia], pts[ib]
+
+    def _soltar_grip(self, destino: Ponto):
+        if self._grip is None:
+            return
+        nome, idx, original = self._grip
+        self._grip = None
+        self._grip_por_arraste = False
+        self._buffer = ""
+        if quase_iguais(destino, original):
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._status_selecao()
+            return
+        self._registrar()
+        self._camadas = mover_vertices(
+            self._camadas, [(nome, idx)], destino.x - original.x, destino.y - original.y
+        )
+        self._redesenhar_estatico()
+        self._atualizar_volante()
+        self._avisar_resultado()
+        self._set_status("Vértice movido. Ctrl+Z desfaz.")
+
+    def iniciar_mover(self):
+        if self._ferramenta.startswith("offset") or self._ferramenta in (
+            "polilinha",
+            "retangulo",
+        ):
+            self._cancelar_comandos()
+            self._ferramenta = "selecao"
+        if not self._selecao:
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._set_status(
+                "Mover: primeiro selecione linhas (clique ou janela) e pressione M."
+            )
+            return
+        self._grip = None
+        self._janela_sel = None
+        self._ferramenta = "mover"
+        self._mover_base = None
+        self._buffer = ""
+        self.canvas.focus_set()
+        self._atualizar_volante()
+        self._set_status("Mover: clique o PONTO BASE (use o snap).")
+
+    def _clique_mover(self, event):
+        snap = self._resolver(event.x, event.y)
+        self._ultimo_snap = snap
+        if self._mover_base is None:
+            self._mover_base = snap.ponto
+            self._atualizar_volante()
+            self._set_status(
+                "Mover: clique o DESTINO ou digite a distância (m) e Enter "
+                "(a direção segue o cursor)."
+            )
+            return
+        self._aplicar_mover(snap.ponto)
+
+    def _camadas_movidas(self, destino: Ponto):
+        base = self._mover_base
+        vertices = vertices_da_selecao(self._camadas, self._selecao)
+        return mover_vertices(
+            self._camadas, vertices, destino.x - base.x, destino.y - base.y
+        )
+
+    def _aplicar_mover(self, destino: Ponto):
+        if self._mover_base is None:
+            return
+        if not quase_iguais(destino, self._mover_base):
+            self._registrar()
+            self._camadas = self._camadas_movidas(destino)
+            msg = "Linhas movidas. Ctrl+Z desfaz."
+        else:
+            msg = "Destino igual à base: nada foi movido."
+        self._mover_base = None
+        self._buffer = ""
+        self._ferramenta = "selecao"
+        self._selecao.clear()
+        self._redesenhar_estatico()
+        self._atualizar_volante()
+        self._avisar_resultado()
+        self._set_status(msg)
+
+    def apagar_selecao(self):
+        if self._ferramenta not in ("selecao",) or not self._selecao:
+            self._set_status("Selecione linhas para apagar (clique ou janela).")
+            return
+        novas = copiar_camadas(self._camadas)
+        for nome, dados in novas.items():
+            indices = [i for camada, i in self._selecao if camada == nome]
+            if not indices:
+                continue
+            resultado = apagar_segmentos(dados["pontos"], bool(dados["fechado"]), indices)
+            if resultado is None:
+                rotulo = "Externa" if nome == "externa" else "Hall"
+                self._set_status(
+                    f"{rotulo}: apagar essas linhas dividiria o desenho em partes. "
+                    "Apague linhas vizinhas ou a camada inteira."
+                )
+                return
+            dados["pontos"], dados["fechado"] = resultado
+        self._registrar()
+        self._camadas = novas
+        n = len(self._selecao)
+        self._selecao.clear()
+        self._hover_linha = None
+        self._redesenhar_estatico()
+        self._atualizar_volante()
+        self._avisar_resultado()
+        self._set_status(f"{n} linha(s) apagada(s). Ctrl+Z desfaz.")
+
+    def _ao_duplo_clique(self, event):
+        if self._ferramenta != "selecao" or self._espaco:
+            return None
+        self._janela_sel = None
+        linha = self._linha_em(event.x, event.y, tol_px=_TOL_LINHA_PX + 6)
+        if linha is None:
+            return "break"
+        self._abrir_editor_cota(*linha)
+        return "break"
+
+    def _abrir_editor_cota(self, nome: str, indice: int):
+        self._fechar_editor_cota()
+        a, b = self._extremos(nome, indice)
+        atual = distancia(a, b)
+        xm, ym = self._mundo_para_tela((a.x + b.x) / 2, (a.y + b.y) / 2)
+        var = tk.StringVar(value=formatar_decimal_br(atual, 2))
+        entrada = tk.Entry(
+            self.canvas,
+            textvariable=var,
+            width=9,
+            justify="center",
+            font=("Segoe UI", 9, "bold"),
+            relief="solid",
+            bd=1,
+        )
+        item = self.canvas.create_window(xm, ym - 14, window=entrada)
+        self._editor_cota = (entrada, item, nome, indice)
+
+        def aplicar(_e=None):
+            texto = var.get()
+            self._fechar_editor_cota()
+            try:
+                metros = parse_decimal_br(texto)
+            except ValueError:
+                self._set_status("Comprimento inválido.")
+                return "break"
+            self._aplicar_cota(nome, indice, metros)
+            return "break"
+
+        def cancelar(_e=None):
+            self._fechar_editor_cota()
+            self._set_status("Edição de cota cancelada.")
+            return "break"
+
+        entrada.bind("<Return>", aplicar)
+        entrada.bind("<KP_Enter>", aplicar)
+        entrada.bind("<Escape>", cancelar)
+        entrada.bind("<FocusOut>", lambda _e: self._fechar_editor_cota())
+        entrada.focus_set()
+        entrada.select_range(0, "end")
+        self._set_status(
+            "Digite o novo comprimento (m) e Enter. A linha seguinte acompanha; Esc cancela."
+        )
+
+    def _fechar_editor_cota(self):
+        editor = self._editor_cota
+        self._editor_cota = None
+        if editor is None:
+            return
+        entrada, item, _nome, _indice = editor
+        try:
+            self.canvas.delete(item)
+            entrada.destroy()
+            self.canvas.focus_set()
+        except tk.TclError:
+            pass
+
+    def _aplicar_cota(self, nome: str, indice: int, metros: float):
+        if metros <= 0:
+            self._set_status("Informe um comprimento maior que zero.")
+            return
+        dados = self._camadas[nome]
+        n = len(dados["pontos"])
+        if indice not in indices_segmentos(n, bool(dados["fechado"])):
+            return
+        self._registrar()
+        dados["pontos"] = ajustar_comprimento(
+            dados["pontos"], bool(dados["fechado"]), indice, metros
+        )
+        self._redesenhar_estatico()
+        self._atualizar_volante()
+        self._avisar_resultado()
+        self._set_status(
+            f"Linha ajustada para {formatar_decimal_br(metros, 2)} m. Ctrl+Z desfaz."
+        )
+
     def _clique_polilinha(self, snap: ResultadoSnap):
         if (
             snap.tipo == "primeiro"
@@ -809,6 +1297,7 @@ class PainelDesenho2D(tk.Frame):
             return
         if self.pontos and quase_iguais(snap.ponto, self.pontos[-1]):
             return
+        self._registrar()
         self.pontos.append(snap.ponto)
         self._buffer = ""
         self._redesenhar_estatico()
@@ -830,10 +1319,14 @@ class PainelDesenho2D(tk.Frame):
             return
         if quase_iguais(ponto, self._canto_ret):
             return
+        anterior = self._estado()
+        anterior["camadas"][self.camada_ativa] = {"pontos": [], "fechado": False}
+        self._registrar(anterior)
         self.pontos = list(retangulo_eixos(self._canto_ret, ponto))
         self._canto_ret = None
         self.fechado = True
         self._buffer = ""
+        self._ferramenta = "selecao"
         self._redesenhar_estatico()
         self._atualizar_volante()
         self._avisar_resultado()
@@ -843,6 +1336,15 @@ class PainelDesenho2D(tk.Frame):
         self._cursor_tela = (event.x, event.y)
         if self._pan is not None:
             self._ao_pan_move(event)
+            return
+        if self._ferramenta == "selecao" and self._grip is None:
+            if self._janela_sel is not None:
+                self._janela_sel[2], self._janela_sel[3] = event.x, event.y
+            self._hover_linha = (
+                None if self._janela_sel is not None else self._linha_em(event.x, event.y)
+            )
+            self._ultimo_snap = None
+            self._atualizar_volante()
             return
         if (
             self._ferramenta.startswith("offset")
@@ -859,13 +1361,52 @@ class PainelDesenho2D(tk.Frame):
         self._ultimo_snap = self._resolver(event.x, event.y)
         self._atualizar_volante()
 
+    def _arrastou(self, event) -> bool:
+        if self._press_xy is None:
+            return False
+        x0, y0 = self._press_xy
+        return math.hypot(event.x - x0, event.y - y0) >= _ARRASTE_MIN_PX
+
     def _ao_arraste(self, event):
         if self._pan is not None or self._espaco:
             self._ao_pan_move(event)
+            return
+        if self._ferramenta != "selecao":
+            self._ao_mover(event)
+            return
+        if self._grip is not None:
+            if self._arrastou(event):
+                self._grip_por_arraste = True
+            self._cursor_tela = (event.x, event.y)
+            self._ultimo_snap = self._resolver(event.x, event.y)
+            self._atualizar_volante()
+            return
+        if self._janela_sel is not None:
+            if self._arrastou(event):
+                self._janela_por_arraste = True
+            self._janela_sel[2], self._janela_sel[3] = event.x, event.y
+            self._atualizar_volante()
 
-    def _ao_soltar(self, _event):
+    def _ao_soltar(self, event):
         if self._pan is not None:
             self._ao_pan_fim()
+            return
+        if self._ferramenta != "selecao":
+            return
+        if self._grip is not None and self._grip_por_arraste:
+            self._soltar_grip(self._resolver(event.x, event.y).ponto)
+        elif self._janela_sel is not None and self._janela_por_arraste:
+            self._janela_sel[2], self._janela_sel[3] = event.x, event.y
+            self._concluir_janela(bool(event.state & 0x0001))
+        elif self._janela_sel is not None:
+            self._janela_sel = None
+            self._janela_por_arraste = False
+            if not (event.state & 0x0001) and self._selecao:
+                self._selecao.clear()
+                self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._status_selecao()
+        self._press_xy = None
 
     def _ao_pan_inicio(self, event):
         self._pan = (event.x, event.y, self._ox, self._oy)
@@ -890,6 +1431,8 @@ class PainelDesenho2D(tk.Frame):
         if self._ferramenta.startswith("offset"):
             self._cancelar_offset()
             return "break"
+        if self._ferramenta in ("selecao", "mover"):
+            return self._ao_escape()
         if self._ferramenta == "retangulo" and self._canto_ret is not None:
             self._canto_ret = None
             self.pontos.clear()
@@ -924,7 +1467,15 @@ class PainelDesenho2D(tk.Frame):
                 self._ferramenta.startswith("offset")
                 and self._offset_fase in ("distancia", "comprimento")
             )
-            if not digitando_offset and (not self.pontos or self.fechado):
+            digitando_edicao = (
+                self._ferramenta == "mover" and self._mover_base is not None
+            ) or self._grip is not None
+            desenhando = (
+                self._ferramenta in ("polilinha", "retangulo")
+                and self.pontos
+                and not self.fechado
+            )
+            if not (digitando_offset or digitando_edicao or desenhando):
                 return "break"
             if ch in ",." and ("," in self._buffer or "." in self._buffer):
                 return "break"
@@ -939,8 +1490,12 @@ class PainelDesenho2D(tk.Frame):
                     pass
             self._atualizar_volante()
             return "break"
-        if (event.keysym or "").lower() == "c" and not self._buffer:
+        tecla = (event.keysym or "").lower()
+        if tecla == "c" and not self._buffer and self._ferramenta == "polilinha":
             self.fechar_poligono()
+            return "break"
+        if tecla == "m" and not self._buffer and self._ferramenta == "selecao":
+            self.iniciar_mover()
             return "break"
         return None
 
@@ -965,7 +1520,8 @@ class PainelDesenho2D(tk.Frame):
         if self._buffer:
             self._confirmar_distancia()
             return "break"
-        self.fechar_poligono()
+        if self._ferramenta == "polilinha":
+            self.fechar_poligono()
         return "break"
 
     def _cancelar_offset(self):
@@ -1011,19 +1567,47 @@ class PainelDesenho2D(tk.Frame):
                 return "break"
             self._cancelar_offset()
             return "break"
+        if self._editor_cota is not None:
+            self._fechar_editor_cota()
+            return "break"
         if self._buffer:
             self._buffer = ""
             self._atualizar_volante()
             self._set_status("Medida digitada cancelada.")
             return "break"
+        if self._ferramenta == "mover":
+            self._mover_base = None
+            self._ferramenta = "selecao"
+            self._atualizar_volante()
+            self._set_status("Mover cancelado. A seleção foi mantida.")
+            return "break"
+        if self._grip is not None:
+            self._grip = None
+            self._grip_por_arraste = False
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._status_selecao()
+            return "break"
+        if self._janela_sel is not None:
+            self._janela_sel = None
+            self._atualizar_volante()
+            self._status_selecao()
+            return "break"
         if self._canto_ret is not None:
             self._canto_ret = None
             self.pontos.clear()
+        if self._ferramenta in ("polilinha", "retangulo"):
+            # Como no AutoCAD: Esc encerra o comando e mantém o que foi desenhado.
+            self._ferramenta = "selecao"
             self._redesenhar_estatico()
             self._atualizar_volante()
+            self._set_status("Comando encerrado. " + self._msg_inicio())
             return "break"
-        if self.pontos and not self.fechado:
-            self._desfazer()
+        if self._selecao:
+            self._selecao.clear()
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._set_status(self._msg_inicio())
         return "break"
 
     def _ao_backspace(self, _event=None):
@@ -1031,7 +1615,8 @@ class PainelDesenho2D(tk.Frame):
             self._buffer = self._buffer[:-1]
             self._atualizar_volante()
             return "break"
-        self._desfazer()
+        if self._ferramenta in ("polilinha", "retangulo"):
+            self._desfazer()
         return "break"
 
     def _confirmar_distancia(self):
@@ -1053,7 +1638,8 @@ class PainelDesenho2D(tk.Frame):
             self._confirmar_distancia_offset(metros)
             return
         origem = self._origem_atual()
-        if origem is None or self.fechado:
+        editando = self._ferramenta == "mover" or self._grip is not None
+        if origem is None or (self.fechado and not editando):
             self._buffer = ""
             return
         try:
@@ -1065,8 +1651,17 @@ class PainelDesenho2D(tk.Frame):
             self._set_status("Informe um comprimento maior que zero.")
             return
         destino = self._ultimo_snap.ponto if self._ultimo_snap else origem
+        if quase_iguais(destino, origem):
+            self._set_status("Aponte o cursor na direção desejada antes do Enter.")
+            return
         ponto = ponto_na_direcao(origem, destino, metros)
         self._buffer = ""
+        if self._ferramenta == "mover":
+            self._aplicar_mover(ponto)
+            return
+        if self._grip is not None:
+            self._soltar_grip(ponto)
+            return
         if self._ferramenta == "retangulo":
             self._clique_retangulo(ponto)
             return
@@ -1074,17 +1669,21 @@ class PainelDesenho2D(tk.Frame):
         self._clique_polilinha(snap_falso)
 
     def _desfazer(self):
-        if self.fechado:
+        """Backspace ao desenhar: tira o último vértice (ou reabre o polígono)."""
+        if self._ferramenta == "retangulo" and self._canto_ret is not None:
+            self._canto_ret = None
+            self.pontos.clear()
+        elif self.fechado:
+            self._registrar()
             self.fechado = False
+            self._ferramenta = "polilinha"
             self._redesenhar_estatico()
             self._atualizar_volante()
             self._avisar_resultado()
             self._set_status("Polígono reaberto. Continue ou complete de novo.")
             return
-        if self._ferramenta == "retangulo" and self._canto_ret is not None:
-            self._canto_ret = None
-            self.pontos.clear()
         elif self.pontos:
+            self._registrar()
             self.pontos.pop()
         self._buffer = ""
         self._redesenhar_estatico()
@@ -1097,32 +1696,44 @@ class PainelDesenho2D(tk.Frame):
         if len(self.pontos) < 3:
             self._set_status("São necessários pelo menos 3 pontos para completar.")
             return
+        self._registrar()
         self.fechado = True
         self._buffer = ""
+        self._ferramenta = "selecao"
         self._redesenhar_estatico()
         self._atualizar_volante()
         self._avisar_resultado()
         self._set_status("Polígono completo. Aplique a metragem ou limpe para outro desenho.")
 
     def _usar(self, ferramenta: str):
-        if self._ferramenta.startswith("offset"):
-            self._limpar_estado_offset(restaurar_hall=True)
-        else:
-            self._limpar_estado_offset(restaurar_hall=False)
-        if ferramenta == self._ferramenta and not self.pontos:
-            return
-        self._ferramenta = ferramenta
-        # Não apaga a outra camada; só reinicia a ativa se já houver traço.
-        if self.pontos or self.fechado:
-            self.limpar()
-        else:
-            self._canto_ret = None
-            self._buffer = ""
+        self._cancelar_comandos()
+        self._selecao.clear()
+        nome = "Externa" if self.camada_ativa == "externa" else "Hall"
+        if self.fechado:
+            self._ferramenta = "selecao"
             self._redesenhar_estatico()
             self._atualizar_volante()
-            self._avisar_resultado()
+            self._set_status(
+                f"A camada {nome} já tem um polígono completo. "
+                "Use Limpar camada, edite as linhas ou troque de camada."
+            )
+            return
+        if ferramenta == "retangulo" and self.pontos:
+            self._ferramenta = "selecao"
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._set_status(
+                f"A camada {nome} já tem linhas. Limpe-a para desenhar um retângulo."
+            )
+            return
+        self._ferramenta = ferramenta
+        self._redesenhar_estatico()
+        self._atualizar_volante()
+        self._avisar_resultado()
         if ferramenta == "retangulo":
             self._set_status("Retângulo na camada ativa: clique dois cantos opostos.")
+        elif self.pontos:
+            self._set_status("Polilinha: continuando do último ponto da camada.")
         else:
             self._set_status(
                 "Polilinha na camada ativa. Polar sugere 45°/90° sem bloquear."
@@ -1447,7 +2058,10 @@ class PainelDesenho2D(tk.Frame):
                 self._status.config(text=live)
             return
 
-        if origem is not None and snap is not None and not self.fechado:
+        self._desenhar_edicao_volante()
+
+        editando = self._ferramenta == "mover" or self._grip is not None
+        if origem is not None and snap is not None and (not self.fechado or editando):
             x1, y1 = self._mundo_para_tela(origem.x, origem.y)
             x2, y2 = self._mundo_para_tela(snap.ponto.x, snap.ponto.y)
             c.create_line(
@@ -1488,9 +2102,108 @@ class PainelDesenho2D(tk.Frame):
         if live:
             self._status.config(text=live)
 
+    def _linha_volante(self, a: Ponto, b: Ponto, cor: str, largura: int, **kwargs):
+        x1, y1 = self._mundo_para_tela(a.x, a.y)
+        x2, y2 = self._mundo_para_tela(b.x, b.y)
+        self.canvas.create_line(
+            x1, y1, x2, y2, fill=cor, width=largura, tags="volante", **kwargs
+        )
+
+    def _desenhar_edicao_volante(self):
+        """Destaque de seleção, janela/cruzamento, grips e fantasma do mover."""
+        c = self.canvas
+        if (
+            self._ferramenta not in ("selecao", "mover")
+            and self._grip is None
+            and not self._selecao
+            and self._janela_sel is None
+        ):
+            return
+
+        hover = self._hover_linha
+        if hover and hover not in self._selecao:
+            try:
+                self._linha_volante(*self._extremos(*hover), "#90caf9", 5)
+            except (IndexError, KeyError):
+                pass
+
+        for chave in list(self._selecao):
+            try:
+                self._linha_volante(*self._extremos(*chave), COR_SELECAO, 4)
+            except (IndexError, KeyError):
+                continue
+
+        snap = self._ultimo_snap
+        if (
+            self._ferramenta == "mover"
+            and self._mover_base is not None
+            and snap is not None
+        ):
+            ghost = self._camadas_movidas(snap.ponto)
+            for nome, i in list(self._selecao):
+                pts = ghost[nome]["pontos"]
+                n = len(pts)
+                if i not in indices_segmentos(n, bool(ghost[nome]["fechado"])):
+                    continue
+                ia, ib = extremos_segmento(n, i)
+                self._linha_volante(pts[ia], pts[ib], COR_SELECAO, 3, dash=(6, 4))
+
+        if self._grip is not None and snap is not None:
+            nome, idx, _orig = self._grip
+            dest = snap.ponto
+            pts = self._camadas[nome]["pontos"]
+            n = len(pts)
+            if 0 <= idx < n:
+                fechado = bool(self._camadas[nome]["fechado"]) and n >= 3
+                vizinhos = []
+                if idx > 0 or fechado:
+                    vizinhos.append((idx - 1) % n)
+                if idx < n - 1 or fechado:
+                    vizinhos.append((idx + 1) % n)
+                for j in vizinhos:
+                    self._linha_volante(pts[j], dest, COR_GRIP_QUENTE, 2, dash=(4, 3))
+
+        for nome, idx in self._grips():
+            p = self._camadas[nome]["pontos"][idx]
+            quente = (
+                self._grip is not None
+                and self._grip[0] == nome
+                and self._grip[1] == idx
+            )
+            if quente and snap is not None:
+                p = snap.ponto
+            sx, sy = self._mundo_para_tela(p.x, p.y)
+            r = 5
+            c.create_rectangle(
+                sx - r,
+                sy - r,
+                sx + r,
+                sy + r,
+                fill=COR_GRIP_QUENTE if quente else COR_GRIP,
+                outline="#ffffff",
+                width=1,
+                tags="volante",
+            )
+
+        if self._janela_sel is not None:
+            sx0, sy0, sx1, sy1 = self._janela_sel
+            cruzamento = sx1 < sx0
+            cor = COR_CRUZAMENTO if cruzamento else COR_JANELA
+            fill = "#c8e6c9" if cruzamento else "#bbdefb"
+            kwargs = dict(
+                outline=cor,
+                fill=fill,
+                stipple="gray25",
+                width=2,
+                tags="volante",
+            )
+            if cruzamento:
+                kwargs["dash"] = (4, 3)
+            c.create_rectangle(sx0, sy0, sx1, sy1, **kwargs)
+
     def _texto_live(self, snap: ResultadoSnap | None) -> str:
-        partes = ["Externa" if self.camada_ativa == "externa" else "Hall"]
         if self._ferramenta.startswith("offset"):
+            partes = ["Externa" if self.camada_ativa == "externa" else "Hall"]
             partes.append(f"Offset {self._offset_modo or ''}".strip())
             if self._offset_fase == "comprimento":
                 partes.append("esticar comprimento")
@@ -1501,6 +2214,54 @@ class PainelDesenho2D(tk.Frame):
             if self._buffer:
                 partes.append(f"digitando {self._buffer} m")
             return "  ·  ".join(partes)
+
+        if self._grip is not None:
+            partes = ["Grip"]
+            orig = self._grip[2]
+            if snap is not None:
+                partes.append(f"{formatar_decimal_br(distancia(orig, snap.ponto), 2)} m")
+                if snap.rotulo:
+                    partes.append(snap.rotulo)
+            if self._buffer:
+                partes.append(f"digitando {self._buffer} m")
+            else:
+                partes.append("clique o destino ou Enter")
+            return "  ·  ".join(partes)
+
+        if self._ferramenta == "mover":
+            partes = [f"Mover · {len(self._selecao)} linha(s)"]
+            if self._mover_base is None:
+                partes.append("clique o ponto base")
+            elif snap is not None:
+                metros = distancia(self._mover_base, snap.ponto)
+                partes.append(f"{formatar_decimal_br(metros, 2)} m")
+                partes.append(f"{angulo_graus(self._mover_base, snap.ponto):.0f}°")
+                if snap.rotulo:
+                    partes.append(snap.rotulo)
+            if self._buffer:
+                partes.append(f"digitando {self._buffer} m")
+            elif self._mover_base is not None:
+                partes.append("clique o destino ou Enter")
+            return "  ·  ".join(partes)
+
+        if self._ferramenta == "selecao":
+            if self._janela_sel is not None:
+                sx0, _sy0, sx1, _sy1 = self._janela_sel
+                if sx1 < sx0:
+                    return "Cruzamento (verde): seleciona tudo o que tocar. Solte para confirmar."
+                return "Janela (azul): só o que estiver inteiro dentro. Solte para confirmar."
+            n = len(self._selecao)
+            if not n:
+                return self._msg_inicio()
+            total = sum(
+                distancia(*self._extremos(nome, i)) for nome, i in self._selecao
+            )
+            return (
+                f"{n} linha(s) selecionada(s) · {formatar_decimal_br(total, 2)} m. "
+                "M move · Delete apaga · arraste um grip azul · Esc limpa."
+            )
+
+        partes = ["Externa" if self.camada_ativa == "externa" else "Hall"]
         if snap and snap.rotulo:
             partes.append(snap.rotulo)
         if self.pontos:

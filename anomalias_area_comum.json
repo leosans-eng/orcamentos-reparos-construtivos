@@ -162,6 +162,45 @@
         "da_etapa": true,
         "fatores": [
           {
+            "tipo_calculo": "por_bloco",
+            "coeficiente": 1.0
+          },
+          {
+            "tipo_calculo": "area_fachada_bloco",
+            "coeficiente": 0.8
+          }
+        ],
+        "tipo_calculo": "por_bloco",
+        "coeficiente": 1.0
+      },
+      {
+        "id": "42d42d98-5601-45d3-b1c4-ea544aec1b35",
+        "tipo": "sinapi",
+        "codigo_sinapi": "10775",
+        "unidade": "MES",
+        "da_etapa": true,
+        "fatores": [
+          {
+            "tipo_calculo": "fixo",
+            "coeficiente": 1.0
+          }
+        ],
+        "tipo_calculo": "fixo",
+        "coeficiente": 1.0
+      }
+    ]
+  },
+  "destinacao_entulho": {
+    "nome": "DESTINAÇÃO DO ENTULHO",
+    "itens": [
+      {
+        "id": "2d540aa5-fe1d-494f-902f-5bf776ef0498",
+        "tipo": "sinapi",
+        "codigo_sinapi": "100981",
+        "unidade": "M3",
+        "da_etapa": true,
+        "fatores": [
+          {
             "tipo_calculo": "fixo",
             "coeficiente": 1.0
           }
@@ -170,9 +209,44 @@
         "coeficiente": 1.0
       },
       {
-        "id": "42d42d98-5601-45d3-b1c4-ea544aec1b35",
+        "id": "0b161929-4cc0-4334-afb7-972d5a381f2c",
         "tipo": "sinapi",
-        "codigo_sinapi": "10775",
+        "codigo_sinapi": "97914",
+        "unidade": "M3XKM",
+        "da_etapa": true,
+        "fatores": [
+          {
+            "tipo_calculo": "fixo",
+            "coeficiente": 1.0
+          }
+        ],
+        "tipo_calculo": "fixo",
+        "coeficiente": 1.0
+      }
+    ]
+  },
+  "limpeza_geral": {
+    "nome": "LIMPEZA GERAL",
+    "itens": [
+      {
+        "id": "5c4f3ddb-c250-4420-bcd2-ce3ca7705171",
+        "tipo": "sinapi",
+        "codigo_sinapi": "99811",
+        "unidade": "M2",
+        "da_etapa": true,
+        "fatores": [
+          {
+            "tipo_calculo": "fixo",
+            "coeficiente": 1.0
+          }
+        ],
+        "tipo_calculo": "fixo",
+        "coeficiente": 1.0
+      },
+      {
+        "id": "ad38f557-6b2b-4e84-985d-f71eba157176",
+        "tipo": "sinapi",
+        "codigo_sinapi": "101452",
         "unidade": "MES",
         "da_etapa": true,
         "fatores": [

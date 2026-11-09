@@ -314,6 +314,8 @@ def novo_rascunho() -> dict:
         "esquadrias": [esquadria_vazia(item) for item in ESQUADRIAS_MODELO],
         "anomalias_orcamento": [],
         "considerar_servicos_preliminares": True,
+        "considerar_destinacao_entulho": True,
+        "considerar_limpeza_geral": True,
         "extras_orcamento": [],
         "orcamento": {"grupos": []},
         "observacoes": "",
@@ -443,6 +445,16 @@ def normalizar_rascunho(dados) -> dict:
         )
     else:
         base["considerar_servicos_preliminares"] = True
+    if "considerar_destinacao_entulho" in dados:
+        base["considerar_destinacao_entulho"] = bool(
+            dados.get("considerar_destinacao_entulho")
+        )
+    else:
+        base["considerar_destinacao_entulho"] = True
+    if "considerar_limpeza_geral" in dados:
+        base["considerar_limpeza_geral"] = bool(dados.get("considerar_limpeza_geral"))
+    else:
+        base["considerar_limpeza_geral"] = True
 
     extras = []
     origem_extras = dados.get("extras_orcamento")

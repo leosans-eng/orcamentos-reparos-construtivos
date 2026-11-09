@@ -22,6 +22,7 @@ class OrcApiClient:
         self.base_url = base_url.rstrip("/")
         self.access_token = access_token
         self.username: str | None = None
+        self._me_cache: dict | None = None
         sessao = carregar_sessao()
         if sessao and access_token is None:
             self.access_token = sessao.get("access_token")
@@ -146,12 +147,18 @@ class OrcApiClient:
         token = dados["access_token"]
         self.access_token = token
         self.username = dados.get("username", username)
+        self._me_cache = None
         salvar_sessao(token, self.username or username)
+        try:
+            self.obter_me(usar_cache=False)
+        except ApiError:
+            pass
         return token
 
     def logout(self) -> None:
         self.access_token = None
         self.username = None
+        self._me_cache = None
         limpar_sessao()
 
     def trocar_senha(self, senha_atual: str, senha_nova: str) -> dict:
@@ -162,9 +169,14 @@ class OrcApiClient:
         )
         return self._tratar_resposta(response)
 
-    def obter_me(self) -> dict:
-        response = self._request("GET", "/api/auth/me")
-        return self._tratar_resposta(response)
+    def obter_me(self, *, usar_cache: bool = True) -> dict:
+        if usar_cache and self._me_cache is not None:
+            return self._me_cache
+        response = self._request("GET", "/api/auth/me", timeout=8)
+        dados = self._tratar_resposta(response)
+        if isinstance(dados, dict):
+            self._me_cache = dados
+        return dados
 
     def listar_usuarios(self) -> list:
         response = self._request("GET", "/api/auth/users")

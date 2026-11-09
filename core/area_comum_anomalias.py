@@ -19,12 +19,48 @@ VERSAO_CATALOGO = 1
 
 ORIGEM_ITENS = "itens"
 ORIGEM_ETAPA = "etapa_predefinida"
-ORIGEM_SERVICOS_PRELIMINARES = "servicos_preliminares"
+
+CHAVE_SERVICOS_PRELIMINARES = "servicos_preliminares"
+CHAVE_DESTINACAO_ENTULHO = "destinacao_entulho"
+CHAVE_LIMPEZA_GERAL = "limpeza_geral"
+
+ORIGEM_SERVICOS_PRELIMINARES = CHAVE_SERVICOS_PRELIMINARES
+ORIGEM_DESTINACAO_ENTULHO = CHAVE_DESTINACAO_ENTULHO
+ORIGEM_LIMPEZA_GERAL = CHAVE_LIMPEZA_GERAL
 
 TIPO_ITEM_CATALOGO_SINAPI = TIPO_ITEM_SINAPI
 TIPO_ITEM_CATALOGO_PROPRIA = TIPO_ITEM_PROPRIA
 
 NOME_SERVICOS_PRELIMINARES = "SERVIÇOS PRELIMINARES"
+NOME_DESTINACAO_ENTULHO = "DESTINAÇÃO DO ENTULHO"
+NOME_LIMPEZA_GERAL = "LIMPEZA GERAL"
+
+# Etapas fixas do orçamento: início (SP) e fim (entulho, limpeza).
+ETAPAS_ORCAMENTO_FIXAS = (
+    {
+        "chave": CHAVE_SERVICOS_PRELIMINARES,
+        "nome": NOME_SERVICOS_PRELIMINARES,
+        "rotulo": "Serviços preliminares",
+        "posicao": "inicio",
+        "ordem": 0,
+    },
+    {
+        "chave": CHAVE_DESTINACAO_ENTULHO,
+        "nome": NOME_DESTINACAO_ENTULHO,
+        "rotulo": "Destinação do entulho",
+        "posicao": "fim",
+        "ordem": 0,
+    },
+    {
+        "chave": CHAVE_LIMPEZA_GERAL,
+        "nome": NOME_LIMPEZA_GERAL,
+        "rotulo": "Limpeza geral",
+        "posicao": "fim",
+        "ordem": 1,
+    },
+)
+ORIGENS_ETAPAS_FIXAS = {item["chave"] for item in ETAPAS_ORCAMENTO_FIXAS}
+NOMES_ETAPAS_FIXAS = {item["chave"]: item["nome"] for item in ETAPAS_ORCAMENTO_FIXAS}
 
 TITULO_ANOMALIA = "anomalia"
 TITULO_REPARO = "reparo"
@@ -171,19 +207,31 @@ MAPA_TIPO_QUANTITATIVO = {
 UNIDADES_COMUNS = ("m²", "m", "m³", "H", "Un", "un", "KG", "L")
 
 
+def meta_etapa_fixa(chave: str) -> dict[str, Any] | None:
+    for item in ETAPAS_ORCAMENTO_FIXAS:
+        if item["chave"] == chave:
+            return item
+    return None
+
+
+def nova_etapa_orcamento_fixa(chave: str) -> dict[str, Any]:
+    meta = meta_etapa_fixa(chave)
+    nome = (meta or {}).get("nome") or NOMES_ETAPAS_FIXAS.get(chave) or chave
+    return {"nome": nome, "itens": []}
+
+
 def novos_servicos_preliminares() -> dict[str, Any]:
-    return {
-        "nome": NOME_SERVICOS_PRELIMINARES,
-        "itens": [],
-    }
+    return nova_etapa_orcamento_fixa(CHAVE_SERVICOS_PRELIMINARES)
 
 
 def catalogo_vazio() -> dict[str, Any]:
-    return {
+    base = {
         "versao": VERSAO_CATALOGO,
         "anomalias": {},
-        "servicos_preliminares": novos_servicos_preliminares(),
     }
+    for meta in ETAPAS_ORCAMENTO_FIXAS:
+        base[meta["chave"]] = nova_etapa_orcamento_fixa(meta["chave"])
+    return base
 
 
 def _coeficiente_item(coeficiente) -> float:
@@ -343,8 +391,8 @@ def _normalizar_item_catalogo(bruto: dict) -> dict[str, Any] | None:
     return novo
 
 
-def normalizar_servicos_preliminares(bruto) -> dict[str, Any]:
-    base = novos_servicos_preliminares()
+def normalizar_etapa_orcamento_fixa(bruto, chave: str) -> dict[str, Any]:
+    base = nova_etapa_orcamento_fixa(chave)
     if not isinstance(bruto, dict):
         return base
     nome = str(bruto.get("nome") or "").strip()
@@ -357,6 +405,10 @@ def normalizar_servicos_preliminares(bruto) -> dict[str, Any]:
             itens.append(normalizado)
     base["itens"] = itens
     return base
+
+
+def normalizar_servicos_preliminares(bruto) -> dict[str, Any]:
+    return normalizar_etapa_orcamento_fixa(bruto, CHAVE_SERVICOS_PRELIMINARES)
 
 
 def itens_servicos_da_etapa(
@@ -466,16 +518,66 @@ def nova_anomalia(nome: str) -> dict[str, Any]:
     }
 
 
+def semear_etapas_orcamento_fixas(catalogo: dict[str, Any]) -> bool:
+    """Preenche etapas fixas vazias a partir das etapas pré-definidas. Retorna se alterou."""
+    if not isinstance(catalogo, dict):
+        return False
+
+    vazias: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for meta in ETAPAS_ORCAMENTO_FIXAS:
+        chave = meta["chave"]
+        etapa = normalizar_etapa_orcamento_fixa(catalogo.get(chave), chave)
+        catalogo[chave] = etapa
+        if not etapa.get("itens"):
+            vazias.append((meta, etapa))
+    if not vazias:
+        return False
+
+    try:
+        from core.etapas_predefinidas_storage import (
+            carregar,
+            listar,
+            obter_cache_catalogo,
+        )
+
+        if obter_cache_catalogo() is None:
+            carregar()
+        etapas = listar()
+    except (ValueError, OSError, TypeError, ImportError):
+        return False
+
+    por_nome = {
+        str(item.get("nome") or "").strip().casefold(): item for item in etapas
+    }
+    alterou = False
+    for meta, etapa in vazias:
+        encontrada = por_nome.get(str(meta.get("nome") or "").casefold())
+        if encontrada is None:
+            continue
+        etapa["itens"] = itens_servicos_da_etapa(
+            encontrada, tipo_calculo_padrao="fixo"
+        )
+        if not (etapa.get("nome") or "").strip():
+            etapa["nome"] = encontrada.get("nome") or meta["nome"]
+        catalogo[meta["chave"]] = etapa
+        alterou = True
+    return alterou
+
+
 def carregar_catalogo(caminho: Path | None = None) -> dict[str, Any]:
     origem = caminho or anomalias_area_comum_path()
     if not Path(origem).is_file():
-        return catalogo_vazio()
-    try:
-        with open(origem, "r", encoding="utf-8") as f:
-            dados = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return catalogo_vazio()
-    return normalizar_catalogo(dados)
+        dados = catalogo_vazio()
+    else:
+        try:
+            with open(origem, "r", encoding="utf-8") as f:
+                bruto = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            dados = catalogo_vazio()
+        else:
+            dados = normalizar_catalogo(bruto)
+    semear_etapas_orcamento_fixas(dados)
+    return dados
 
 
 def salvar_catalogo(dados: dict[str, Any], caminho: Path | None = None) -> Path:
@@ -493,9 +595,9 @@ def normalizar_catalogo(dados) -> dict[str, Any]:
     base = catalogo_vazio()
     if not isinstance(dados, dict):
         return base
-    base["servicos_preliminares"] = normalizar_servicos_preliminares(
-        dados.get("servicos_preliminares")
-    )
+    for meta in ETAPAS_ORCAMENTO_FIXAS:
+        chave = meta["chave"]
+        base[chave] = normalizar_etapa_orcamento_fixa(dados.get(chave), chave)
     anomalias = dados.get("anomalias")
     if not isinstance(anomalias, dict):
         return base
@@ -560,11 +662,17 @@ def normalizar_catalogo(dados) -> dict[str, Any]:
     return base
 
 
-def obter_servicos_preliminares(dados: dict | None = None) -> dict[str, Any]:
+def obter_etapa_orcamento_fixa(
+    chave: str, dados: dict | None = None
+) -> dict[str, Any]:
     origem = dados if dados is not None else carregar_catalogo()
     return deepcopy(
-        normalizar_servicos_preliminares((origem or {}).get("servicos_preliminares"))
+        normalizar_etapa_orcamento_fixa((origem or {}).get(chave), chave)
     )
+
+
+def obter_servicos_preliminares(dados: dict | None = None) -> dict[str, Any]:
+    return obter_etapa_orcamento_fixa(CHAVE_SERVICOS_PRELIMINARES, dados)
 
 
 def nomes_anomalias(dados: dict | None = None) -> list[str]:

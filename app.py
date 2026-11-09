@@ -11,7 +11,7 @@ from core.app_state import (
 )
 from core.precarga_catalogos import iniciar_precarga_catalogos
 from ui.area_privativa import criar_area_privativa
-from ui.area_comum import AreaComumFrame, acesso_area_comum_liberado
+from ui.area_comum import AreaComumFrame
 from ui.composicoes_proprias import ComposicoesPropriasFrame
 from ui.consulta_sinapi import ConsultaSinapiFrame
 from ui.etapas_predefinidas import EtapasPredefinidasFrame
@@ -373,16 +373,8 @@ class OrcApp:
             )
 
     def _ao_selecionar_modulo_hub(self, modulo):
-        if modulo == "area_comum" and not acesso_area_comum_liberado(
-            offline=self.offline
-        ):
-            messagebox.showinfo(
-                "Área Comum",
-                "Este módulo ainda está em desenvolvimento e, por enquanto, "
-                "está disponível apenas para administradores.",
-                parent=self.janela,
-            )
-            return
+        # O hub já oculta o cartão para quem não é admin; não consultar a API de novo
+        # no clique (isso congelava a UI e, se a rede falhasse, negava o próprio admin).
         self.mostrar_modulo(modulo)
 
     def mostrar_modulo(self, nome):
@@ -414,16 +406,21 @@ class OrcApp:
         )
         entrando_modulo_expandido = nome in modulos_expandidos
         modulo_anterior = self._modulo_atual
-
-        for frame in self._frames.values():
-            frame.pack_forget()
+        cursor_anterior = None
+        try:
+            cursor_anterior = self.janela.cget("cursor")
+            self.janela.config(cursor="watch")
+            self.janela.update_idletasks()
+        except tk.TclError:
+            cursor_anterior = None
 
         try:
+            # Monta o módulo com o hub ainda visível; só troca a tela depois.
             if nome not in self._frames:
                 self._criar_modulo(nome)
-            self._frames[nome].pack(fill="both", expand=True)
-            self._modulo_atual = nome
-            self.janela.title(TITULOS_JANELA.get(nome, TITULOS_JANELA["hub"]))
+
+            for frame in self._frames.values():
+                frame.pack_forget()
 
             if entrando_modulo_expandido:
                 try:
@@ -438,6 +435,10 @@ class OrcApp:
                 centralizar_janela_principal(
                     self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
                 )
+
+            self._frames[nome].pack(fill="both", expand=True)
+            self._modulo_atual = nome
+            self.janela.title(TITULOS_JANELA.get(nome, TITULOS_JANELA["hub"]))
 
             if nome == "hub":
                 centralizar_janela_principal(
@@ -484,6 +485,12 @@ class OrcApp:
                     centralizar_janela_principal(
                         self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
                     )
+        finally:
+            if cursor_anterior is not None:
+                try:
+                    self.janela.config(cursor=cursor_anterior)
+                except tk.TclError:
+                    pass
 
     def executar(self):
         self.janela.mainloop()

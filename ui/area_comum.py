@@ -261,7 +261,7 @@ class AreaComumFrame(tk.Frame):
         self._historico_redo = []
         self._snapshot_base = None
         self._binds_historico = []
-        self._catalogo = carregar_catalogo()
+        self._catalogo = {}
         self._quantitativos = {}
         self._anomalias_orcamento = []
         self._etapas = []
@@ -319,6 +319,8 @@ class AreaComumFrame(tk.Frame):
         self.var_total = tk.StringVar(value="Total geral: R$ 0,00")
         self.var_catalogo_anomalia = tk.StringVar()
         self.var_considerar_sp = tk.BooleanVar(value=True)
+        self.var_considerar_entulho = tk.BooleanVar(value=True)
+        self.var_considerar_limpeza = tk.BooleanVar(value=True)
         self.var_rotulo_condominio = tk.StringVar(value="")
         self.var_legenda_desenho = tk.StringVar(value="Ainda não há planta salva.")
 
@@ -393,17 +395,19 @@ class AreaComumFrame(tk.Frame):
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=12, pady=(0, 6))
-        self.notebook.bind("<<NotebookTabChanged>>", self._ao_trocar_aba)
 
         self._montar_aba_dados()
         self._montar_aba_anomalias()
         self._montar_aba_orcamento()
         self._montar_rodape()
+        self._catalogo = carregar_catalogo()
+        if hasattr(self, "campo_catalogo"):
+            self.campo_catalogo.definir_opcoes(nomes_anomalias(self._catalogo))
         self._carregar_etapas()
-        self._recarregar_catalogo_anomalias()
         self._atualizar_rotulo_condominio()
         self._atualizar_previa_desenho()
-        self._recalcular()
+        self.notebook.bind("<<NotebookTabChanged>>", self._ao_trocar_aba)
+        self.after_idle(self._recalcular)
 
         topo = self.winfo_toplevel()
         topo.bind("<Control-s>", self._ao_atalho_salvar)
@@ -977,18 +981,7 @@ class AreaComumFrame(tk.Frame):
 
         topo = tk.Frame(aba, bg=fundo)
         topo.pack(fill="x", padx=10, pady=(8, 4))
-        tk.Label(
-            topo,
-            text=(
-                "Anomalias cadastradas (cada uma aponta para itens SINAPI ou para uma "
-                "etapa pré-definida). Passe o mouse sobre a porcentagem para editá-la."
-            ),
-            bg=fundo,
-            fg=cores.texto_suave,
-            wraplength=900,
-            justify="left",
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True)
+        # Empacota o botão primeiro (side=right) para não ser empurrado pelo texto.
         if acesso_area_comum_liberado(offline=self._offline):
             criar_botao_ttk_com_icone(
                 topo,
@@ -998,7 +991,19 @@ class AreaComumFrame(tk.Frame):
                 estilo=self._estilos.compacto,
                 cor_icone=self._estilos.icone,
                 refs=self._refs_icones,
-            ).pack(side="right")
+            ).pack(side="right", padx=(8, 0))
+        tk.Label(
+            topo,
+            text=(
+                "Anomalias cadastradas (cada uma aponta para itens SINAPI ou para uma "
+                "etapa pré-definida). Passe o mouse sobre a porcentagem para editá-la."
+            ),
+            bg=fundo,
+            fg=cores.texto_suave,
+            wraplength=820,
+            justify="left",
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True)
 
         form = tk.Frame(aba, bg=fundo)
         form.pack(fill="x", padx=10, pady=(0, 6))
@@ -1069,21 +1074,39 @@ class AreaComumFrame(tk.Frame):
             refs=self._refs_icones,
         ).pack(side="left", padx=(6, 0))
 
-        caixa_sp = tk.LabelFrame(
+        caixa_etapas = tk.LabelFrame(
             rodape_anom,
-            text="Serviços preliminares",
+            text="Etapas padrão do orçamento",
             bg=fundo,
             fg=cores.texto,
             padx=8,
             pady=4,
         )
-        caixa_sp.pack(side="right")
+        caixa_etapas.pack(side="right")
         ttk.Checkbutton(
-            caixa_sp,
-            text="Considerar Serviços Preliminares",
+            caixa_etapas,
+            text="Serviços Preliminares",
             variable=self.var_considerar_sp,
-            command=self._ao_trocar_considerar_sp,
-        ).pack(anchor="w")
+            command=lambda: self._ao_trocar_etapa_fixa(
+                "Serviços preliminares", self.var_considerar_sp
+            ),
+        ).pack(side="left")
+        ttk.Checkbutton(
+            caixa_etapas,
+            text="Destinação do Entulho",
+            variable=self.var_considerar_entulho,
+            command=lambda: self._ao_trocar_etapa_fixa(
+                "Destinação do entulho", self.var_considerar_entulho
+            ),
+        ).pack(side="left", padx=(12, 0))
+        ttk.Checkbutton(
+            caixa_etapas,
+            text="Limpeza Geral",
+            variable=self.var_considerar_limpeza,
+            command=lambda: self._ao_trocar_etapa_fixa(
+                "Limpeza geral", self.var_considerar_limpeza
+            ),
+        ).pack(side="left", padx=(12, 0))
 
     def _criar_halo(self, parent, *, padx=3, pady=2):
         return tk.Frame(parent, bg=self._cores.fundo, padx=padx, pady=pady)
@@ -1585,6 +1608,8 @@ class AreaComumFrame(tk.Frame):
         self._registrar_historico("Editar dados", coalescer=True)
 
     def _ao_trocar_aba(self, _event=None):
+        if self._carregando or self._aplicando_historico:
+            return
         self._carregar_etapas()
         self._recalcular()
 
@@ -1752,6 +1777,8 @@ class AreaComumFrame(tk.Frame):
         dados["esquadrias"] = esquadrias
         dados["anomalias_orcamento"] = list(self._anomalias_orcamento)
         dados["considerar_servicos_preliminares"] = bool(self.var_considerar_sp.get())
+        dados["considerar_destinacao_entulho"] = bool(self.var_considerar_entulho.get())
+        dados["considerar_limpeza_geral"] = bool(self.var_considerar_limpeza.get())
         dados["extras_orcamento"] = []
         dados["orcamento"] = self._orcamento_para_rascunho()
         dados["observacoes"] = self.texto_obs.get("1.0", "end").strip()
@@ -1880,6 +1907,18 @@ class AreaComumFrame(tk.Frame):
                 )
             else:
                 self.var_considerar_sp.set(True)
+            if "considerar_destinacao_entulho" in dados:
+                self.var_considerar_entulho.set(
+                    bool(dados.get("considerar_destinacao_entulho"))
+                )
+            else:
+                self.var_considerar_entulho.set(True)
+            if "considerar_limpeza_geral" in dados:
+                self.var_considerar_limpeza.set(
+                    bool(dados.get("considerar_limpeza_geral"))
+                )
+            else:
+                self.var_considerar_limpeza.set(True)
             self._carregar_orcamento_rascunho(dados)
             self._redesenhar_anomalias_orcamento()
             self.texto_obs.delete("1.0", "end")
@@ -2415,18 +2454,21 @@ class AreaComumFrame(tk.Frame):
             selecao = (row,)
         self._alterar_percentual_anomalia(selecao[0])
 
-    def _ao_trocar_considerar_sp(self):
+    def _ao_trocar_etapa_fixa(self, rotulo: str, variavel: tk.BooleanVar):
         if self._carregando or self._aplicando_historico:
             return
         self._marcar_sujo()
-        self._registrar_historico("Serviços preliminares")
+        self._registrar_historico(rotulo)
         self._recalcular()
-        ativo = bool(self.var_considerar_sp.get())
+        ativo = bool(variavel.get())
         self._mostrar_feedback(
-            "Serviços preliminares "
-            + ("incluídos no orçamento." if ativo else "removidos do orçamento."),
+            f"{rotulo} "
+            + ("incluído no orçamento." if ativo else "removido do orçamento."),
             "green",
         )
+
+    def _ao_trocar_considerar_sp(self):
+        self._ao_trocar_etapa_fixa("Serviços preliminares", self.var_considerar_sp)
 
     def _alterar_percentual_anomalia(self, item_id=None):
         if item_id is None:
@@ -3481,6 +3523,8 @@ class AreaComumFrame(tk.Frame):
             sinapi=self.ctx.sinapi,
             uf=uf,
             considerar_servicos_preliminares=bool(self.var_considerar_sp.get()),
+            considerar_destinacao_entulho=bool(self.var_considerar_entulho.get()),
+            considerar_limpeza_geral=bool(self.var_considerar_limpeza.get()),
         )
         itens_uf_fixada = {
             item["id"]: {

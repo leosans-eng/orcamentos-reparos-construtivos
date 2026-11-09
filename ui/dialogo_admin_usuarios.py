@@ -573,10 +573,12 @@ class DialogoAdminUsuarios(tk.Toplevel):
 
 
 def usuario_atual_eh_admin() -> bool:
+    cliente = get_client()
     try:
-        return _eh_admin(get_client().obter_me())
+        return _eh_admin(cliente.obter_me())
     except ApiError:
-        return False
+        # Falha de rede/API não pode rebaixar um admin já autenticado nesta sessão.
+        return _eh_admin(getattr(cliente, "_me_cache", None))
 
 
 def abrir_dialogo_admin_usuarios(parent):

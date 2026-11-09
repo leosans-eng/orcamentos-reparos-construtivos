@@ -7,7 +7,8 @@ from tkinter import messagebox, ttk
 
 from core.area_comum import PERCENTUAIS_MODELO
 from core.area_comum_anomalias import (
-    NOME_SERVICOS_PRELIMINARES,
+    ETAPAS_ORCAMENTO_FIXAS,
+    NOMES_ETAPAS_FIXAS,
     ORIGEM_ETAPA,
     ORIGEM_ITENS,
     ROTULOS_TIPO_CALCULO,
@@ -21,17 +22,19 @@ from core.area_comum_anomalias import (
     chave_titulo_orcamento,
     itens_servicos_da_etapa,
     itens_sinapi_da_etapa,
+    meta_etapa_fixa,
+    normalizar_etapa_orcamento_fixa,
     normalizar_fatores,
-    normalizar_servicos_preliminares,
     nova_anomalia,
+    nova_etapa_orcamento_fixa,
     novo_fator,
     novo_item_composicao_propria,
     novo_item_sinapi,
     novo_reparo,
-    novos_servicos_preliminares,
     rotulo_fatores,
     rotulo_titulo_orcamento,
     salvar_catalogo,
+    semear_etapas_orcamento_fixas,
 )
 from ui.icones import criar_botao_ttk_com_icone
 from ui.temas import aplicar_chrome_dialogo, texto_contraste
@@ -588,6 +591,7 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         self._reparo_atual_id: str | None = None
         self._carregando = False
         self._dados = carregar_catalogo()
+        self._etapas_ui: dict[str, dict] = {}
 
         self.title("Configurar — Área Comum")
         aplicar_icone_janela(self)
@@ -619,11 +623,12 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         self.notebook.grid(row=1, column=0, sticky="nsew")
 
         aba_anom = tk.Frame(self.notebook, bg=fundo)
-        aba_sp = tk.Frame(self.notebook, bg=fundo)
         self.notebook.add(aba_anom, text="Anomalias")
-        self.notebook.add(aba_sp, text="Serviços preliminares")
         self._montar_aba_anomalias(aba_anom, cores, estilos, fundo)
-        self._montar_aba_servicos(aba_sp, cores, estilos, fundo)
+        for meta in ETAPAS_ORCAMENTO_FIXAS:
+            aba = tk.Frame(self.notebook, bg=fundo)
+            self.notebook.add(aba, text=meta["rotulo"])
+            self._montar_aba_etapa_fixa(aba, meta["chave"], cores, estilos, fundo)
 
         rodape = tk.Frame(painel, bg=fundo)
         rodape.grid(row=2, column=0, sticky="ew", pady=(8, 0))
@@ -642,7 +647,8 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
 
         self.bind("<Escape>", lambda _e: self.destroy())
         self._popular_lista()
-        self._redesenhar_servicos()
+        for meta in ETAPAS_ORCAMENTO_FIXAS:
+            self._redesenhar_etapa_fixa(meta["chave"])
         self.update_idletasks()
         centralizar_janela(self, parent, largura=1220, altura=altura)
 
@@ -868,14 +874,17 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             refs=self._refs_icones,
         ).pack(side="left")
 
-    def _montar_aba_servicos(self, aba, cores, estilos, fundo):
+    def _montar_aba_etapa_fixa(self, aba, chave: str, cores, estilos, fundo):
+        meta = meta_etapa_fixa(chave) or {}
+        rotulo = meta.get("rotulo") or chave
+        nome_padrao = NOMES_ETAPAS_FIXAS.get(chave) or chave
         aba.columnconfigure(0, weight=1)
         aba.rowconfigure(2, weight=1)
 
         tk.Label(
             aba,
             text=(
-                "Itens incluídos no orçamento quando «Considerar Serviços Preliminares» "
+                f"Itens incluídos no orçamento quando «Considerar {rotulo}» "
                 "estiver marcado na aba 2. Defina o quantitativo de cada item."
             ),
             bg=fundo,
@@ -890,35 +899,37 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         tk.Label(linha_nome, text="Título no orçamento:", bg=fundo, fg=cores.texto).pack(
             side="left"
         )
-        self.var_sp_nome = tk.StringVar(value=NOME_SERVICOS_PRELIMINARES)
-        ttk.Entry(linha_nome, textvariable=self.var_sp_nome).pack(
+        var_nome = tk.StringVar(value=nome_padrao)
+        ttk.Entry(linha_nome, textvariable=var_nome).pack(
             side="left", fill="x", expand=True, padx=(8, 0)
         )
-        self.var_sp_nome.trace_add("write", lambda *_a: self._aplicar_servicos())
+        var_nome.trace_add(
+            "write", lambda *_a, c=chave: self._aplicar_etapa_fixa(c)
+        )
         criar_botao_ttk_com_icone(
             linha_nome,
             texto="Importar etapa",
             nome_icone="cloud-download-outline",
-            command=self._importar_etapa_servicos,
+            command=lambda c=chave: self._importar_etapa_fixa(c),
             estilo=estilos.compacto,
             cor_icone=estilos.icone,
             refs=self._refs_icones,
         ).pack(side="left", padx=(8, 0))
 
         colunas = ("tipo", "codigo", "descricao", "unidade", "formula")
-        self.tree_sp = ttk.Treeview(aba, columns=colunas, show="headings", height=10)
-        self.tree_sp.heading("tipo", text="Tipo")
-        self.tree_sp.heading("codigo", text="Código")
-        self.tree_sp.heading("descricao", text="Descrição")
-        self.tree_sp.heading("unidade", text="Unid.")
-        self.tree_sp.heading("formula", text="Fórmula (fatores)")
-        self.tree_sp.column("tipo", width=110, anchor="w")
-        self.tree_sp.column("codigo", width=90, anchor="center")
-        self.tree_sp.column("descricao", width=280, anchor="w")
-        self.tree_sp.column("unidade", width=70, anchor="center")
-        self.tree_sp.column("formula", width=280, anchor="w")
-        self.tree_sp.grid(row=2, column=0, sticky="nsew", padx=10)
-        self.tree_sp.bind("<Double-1>", lambda _e: self._editar_item_sp())
+        tree = ttk.Treeview(aba, columns=colunas, show="headings", height=10)
+        tree.heading("tipo", text="Tipo")
+        tree.heading("codigo", text="Código")
+        tree.heading("descricao", text="Descrição")
+        tree.heading("unidade", text="Unid.")
+        tree.heading("formula", text="Fórmula (fatores)")
+        tree.column("tipo", width=110, anchor="w")
+        tree.column("codigo", width=90, anchor="center")
+        tree.column("descricao", width=280, anchor="w")
+        tree.column("unidade", width=70, anchor="center")
+        tree.column("formula", width=280, anchor="w")
+        tree.grid(row=2, column=0, sticky="nsew", padx=10)
+        tree.bind("<Double-1>", lambda _e, c=chave: self._editar_item_etapa_fixa(c))
 
         botoes = tk.Frame(aba, bg=fundo)
         botoes.grid(row=3, column=0, sticky="e", padx=10, pady=(6, 8))
@@ -926,7 +937,7 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             botoes,
             texto="Adicionar SINAPI",
             nome_icone="add-circle-outline",
-            command=self._adicionar_item_sp_sinapi,
+            command=lambda c=chave: self._adicionar_item_etapa_sinapi(c),
             estilo=estilos.compacto_adicionar,
             cor_icone=estilos.icone_adicionar,
             refs=self._refs_icones,
@@ -935,7 +946,7 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             botoes,
             texto="Adicionar composição",
             nome_icone="add-circle-outline",
-            command=self._adicionar_item_sp_propria,
+            command=lambda c=chave: self._adicionar_item_etapa_propria(c),
             estilo=estilos.compacto_adicionar,
             cor_icone=estilos.icone_adicionar,
             refs=self._refs_icones,
@@ -944,7 +955,7 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             botoes,
             texto="Editar",
             nome_icone="pencil",
-            command=self._editar_item_sp,
+            command=lambda c=chave: self._editar_item_etapa_fixa(c),
             estilo=estilos.compacto_editar,
             cor_icone=estilos.icone_editar,
             refs=self._refs_icones,
@@ -953,11 +964,18 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             botoes,
             texto="Remover",
             nome_icone="remove-circle-outline",
-            command=self._remover_item_sp,
+            command=lambda c=chave: self._remover_item_etapa_fixa(c),
             estilo=estilos.compacto_excluir,
             cor_icone=estilos.icone_excluir,
             refs=self._refs_icones,
         ).pack(side="left")
+
+        self._etapas_ui[chave] = {
+            "var_nome": var_nome,
+            "tree": tree,
+            "nome_padrao": nome_padrao,
+            "rotulo": rotulo,
+        }
 
     def _anomalias(self) -> dict:
         return self._dados.setdefault("anomalias", {})
@@ -1273,46 +1291,38 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         self._anomalias().pop(self._nome_atual, None)
         self._popular_lista()
 
-    def _servicos(self) -> dict:
-        atual = normalizar_servicos_preliminares(
-            self._dados.get("servicos_preliminares")
-        )
-        self._dados["servicos_preliminares"] = atual
+    def _etapa_fixa(self, chave: str) -> dict:
+        atual = normalizar_etapa_orcamento_fixa(self._dados.get(chave), chave)
+        self._dados[chave] = atual
         return atual
 
-    def _aplicar_servicos(self):
+    def _ui_etapa_fixa(self, chave: str) -> dict:
+        return self._etapas_ui.get(chave) or {}
+
+    def _aplicar_etapa_fixa(self, chave: str):
         if self._carregando:
             return
-        sp = self._servicos()
-        sp["nome"] = (self.var_sp_nome.get() or "").strip() or NOME_SERVICOS_PRELIMINARES
+        ui = self._ui_etapa_fixa(chave)
+        etapa = self._etapa_fixa(chave)
+        nome_padrao = ui.get("nome_padrao") or NOMES_ETAPAS_FIXAS.get(chave) or chave
+        var_nome = ui.get("var_nome")
+        texto = var_nome.get() if var_nome is not None else ""
+        etapa["nome"] = (texto or "").strip() or nome_padrao
 
-    def _semear_servicos_se_vazio(self):
-        sp = self._servicos()
-        if sp.get("itens"):
+    def _redesenhar_etapa_fixa(self, chave: str):
+        ui = self._ui_etapa_fixa(chave)
+        tree = ui.get("tree")
+        var_nome = ui.get("var_nome")
+        if tree is None or var_nome is None:
             return
-        etapa = next(
-            (
-                item
-                for item in _listar_etapas()
-                if str(item.get("nome") or "").strip().casefold()
-                == NOME_SERVICOS_PRELIMINARES.casefold()
-            ),
-            None,
-        )
-        if etapa is None:
-            return
-        sp["itens"] = itens_servicos_da_etapa(etapa, tipo_calculo_padrao="fixo")
-        if not (sp.get("nome") or "").strip():
-            sp["nome"] = etapa.get("nome") or NOME_SERVICOS_PRELIMINARES
-
-    def _redesenhar_servicos(self):
         self._carregando = True
         try:
-            self._semear_servicos_se_vazio()
-            sp = self._servicos()
-            self.var_sp_nome.set(sp.get("nome") or NOME_SERVICOS_PRELIMINARES)
-            self.tree_sp.delete(*self.tree_sp.get_children())
-            for item in sp.get("itens") or []:
+            semear_etapas_orcamento_fixas(self._dados)
+            etapa = self._etapa_fixa(chave)
+            nome_padrao = ui.get("nome_padrao") or NOMES_ETAPAS_FIXAS.get(chave) or chave
+            var_nome.set(etapa.get("nome") or nome_padrao)
+            tree.delete(*tree.get_children())
+            for item in etapa.get("itens") or []:
                 tipo = str(item.get("tipo") or TIPO_ITEM_CATALOGO_SINAPI)
                 if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
                     rotulo_tipo = "Composição"
@@ -1322,7 +1332,7 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
                     rotulo_tipo = "SINAPI"
                     codigo = item.get("codigo_sinapi") or item.get("codigo") or ""
                     descricao = ""
-                self.tree_sp.insert(
+                tree.insert(
                     "",
                     "end",
                     iid=item.get("id"),
@@ -1337,37 +1347,42 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         finally:
             self._carregando = False
 
-    def _importar_etapa_servicos(self):
-        self._aplicar_servicos()
+    def _importar_etapa_fixa(self, chave: str):
+        self._aplicar_etapa_fixa(chave)
+        nome_padrao = (
+            self._ui_etapa_fixa(chave).get("nome_padrao")
+            or NOMES_ETAPAS_FIXAS.get(chave)
+            or chave
+        )
 
-        def ao_escolher(etapa):
-            sp = self._servicos()
-            sp["itens"] = itens_servicos_da_etapa(
-                etapa,
-                itens_atuais=sp.get("itens") or [],
+        def ao_escolher(etapa_predef):
+            etapa = self._etapa_fixa(chave)
+            etapa["itens"] = itens_servicos_da_etapa(
+                etapa_predef,
+                itens_atuais=etapa.get("itens") or [],
                 tipo_calculo_padrao="fixo",
             )
-            if not (sp.get("nome") or "").strip() or sp.get("nome") == NOME_SERVICOS_PRELIMINARES:
-                sp["nome"] = etapa.get("nome") or NOME_SERVICOS_PRELIMINARES
-            self._redesenhar_servicos()
+            if not (etapa.get("nome") or "").strip() or etapa.get("nome") == nome_padrao:
+                etapa["nome"] = etapa_predef.get("nome") or nome_padrao
+            self._redesenhar_etapa_fixa(chave)
 
         DialogoSelecionarEtapaPredefinida(self, ao_escolher)
 
-    def _adicionar_item_sp_sinapi(self):
-        sp = self._servicos()
+    def _adicionar_item_etapa_sinapi(self, chave: str):
+        etapa = self._etapa_fixa(chave)
 
         def ao_confirmar(item):
             item["da_etapa"] = False
             item["tipo"] = TIPO_ITEM_CATALOGO_SINAPI
-            sp.setdefault("itens", []).append(item)
-            self._redesenhar_servicos()
+            etapa.setdefault("itens", []).append(item)
+            self._redesenhar_etapa_fixa(chave)
 
         DialogoItemSinapiAreaComum(self, on_confirmar=ao_confirmar, ctx=self.ctx)
 
-    def _adicionar_item_sp_propria(self):
+    def _adicionar_item_etapa_propria(self, chave: str):
         from ui.orcamento_customizado import DialogoBuscaComposicaoPropria
 
-        sp = self._servicos()
+        etapa = self._etapa_fixa(chave)
         try:
             from core.composicoes_proprias_storage import listar as listar_composicoes
 
@@ -1392,8 +1407,8 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
                 coeficiente=1,
                 da_etapa=False,
             )
-            sp.setdefault("itens", []).append(item)
-            self._redesenhar_servicos()
+            etapa.setdefault("itens", []).append(item)
+            self._redesenhar_etapa_fixa(chave)
 
         estados = self.ctx.obter_estados() if self.ctx is not None else []
         DialogoBuscaComposicaoPropria(
@@ -1407,13 +1422,18 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             texto_confirmar="Usar composição",
         )
 
-    def _editar_item_sp(self):
-        sp = self._servicos()
-        selecao = self.tree_sp.selection()
+    def _editar_item_etapa_fixa(self, chave: str):
+        etapa = self._etapa_fixa(chave)
+        tree = self._ui_etapa_fixa(chave).get("tree")
+        if tree is None:
+            return
+        selecao = tree.selection()
         if not selecao:
             return
         item_id = selecao[0]
-        atual = next((i for i in sp.get("itens") or [] if i.get("id") == item_id), None)
+        atual = next(
+            (i for i in etapa.get("itens") or [] if i.get("id") == item_id), None
+        )
         if atual is None:
             return
         tipo = str(atual.get("tipo") or TIPO_ITEM_CATALOGO_SINAPI)
@@ -1424,11 +1444,11 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
                 atual["fatores"] = fatores
                 atual["tipo_calculo"] = fatores[0]["tipo_calculo"]
                 atual["coeficiente"] = fatores[0]["coeficiente"]
-                for i, existente in enumerate(sp["itens"]):
+                for i, existente in enumerate(etapa["itens"]):
                     if existente.get("id") == item_id:
-                        sp["itens"][i] = atual
+                        etapa["itens"][i] = atual
                         break
-                self._redesenhar_servicos()
+                self._redesenhar_etapa_fixa(chave)
 
             DialogoCoefCalculoItem(
                 self,
@@ -1442,29 +1462,37 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             item["id"] = item_id
             item["da_etapa"] = bool(atual.get("da_etapa"))
             item["tipo"] = TIPO_ITEM_CATALOGO_SINAPI
-            for i, existente in enumerate(sp["itens"]):
+            for i, existente in enumerate(etapa["itens"]):
                 if existente.get("id") == item_id:
-                    sp["itens"][i] = item
+                    etapa["itens"][i] = item
                     break
-            self._redesenhar_servicos()
+            self._redesenhar_etapa_fixa(chave)
 
-        DialogoItemSinapiAreaComum(self, item=atual, on_confirmar=ao_confirmar, ctx=self.ctx)
+        DialogoItemSinapiAreaComum(
+            self, item=atual, on_confirmar=ao_confirmar, ctx=self.ctx
+        )
 
-    def _remover_item_sp(self):
-        sp = self._servicos()
-        selecao = self.tree_sp.selection()
+    def _remover_item_etapa_fixa(self, chave: str):
+        etapa = self._etapa_fixa(chave)
+        tree = self._ui_etapa_fixa(chave).get("tree")
+        if tree is None:
+            return
+        selecao = tree.selection()
         if not selecao:
             return
         item_id = selecao[0]
-        sp["itens"] = [i for i in sp.get("itens") or [] if i.get("id") != item_id]
-        self._redesenhar_servicos()
+        etapa["itens"] = [i for i in etapa.get("itens") or [] if i.get("id") != item_id]
+        self._redesenhar_etapa_fixa(chave)
 
     def _salvar(self):
         self._aplicar_reparo()
-        self._aplicar_servicos()
-        self._dados["servicos_preliminares"] = normalizar_servicos_preliminares(
-            self._dados.get("servicos_preliminares") or novos_servicos_preliminares()
-        )
+        for meta in ETAPAS_ORCAMENTO_FIXAS:
+            chave = meta["chave"]
+            self._aplicar_etapa_fixa(chave)
+            self._dados[chave] = normalizar_etapa_orcamento_fixa(
+                self._dados.get(chave) or nova_etapa_orcamento_fixa(chave),
+                chave,
+            )
         try:
             salvar_catalogo(self._dados)
         except OSError as exc:

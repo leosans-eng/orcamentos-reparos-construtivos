@@ -19,36 +19,60 @@
               "tipo": "sinapi",
               "codigo_sinapi": "97633",
               "unidade": "M2",
+              "da_etapa": true,
+              "fatores": [
+                {
+                  "tipo_calculo": "area_piso_hall_total",
+                  "coeficiente": 1.0
+                }
+              ],
               "tipo_calculo": "area_piso_hall_total",
-              "coeficiente": 1.0,
-              "da_etapa": true
+              "coeficiente": 1.0
             },
             {
               "id": "e19c8abe-592b-4410-9080-9568baed8f11",
               "tipo": "sinapi",
               "codigo_sinapi": "87256",
               "unidade": "M2",
+              "da_etapa": true,
+              "fatores": [
+                {
+                  "tipo_calculo": "area_piso_hall_total",
+                  "coeficiente": 1.0
+                }
+              ],
               "tipo_calculo": "area_piso_hall_total",
-              "coeficiente": 1.0,
-              "da_etapa": true
+              "coeficiente": 1.0
             },
             {
               "id": "f03099ce-1e64-4a37-a71a-05944c7fb0d1",
               "tipo": "sinapi",
               "codigo_sinapi": "97632",
               "unidade": "M",
+              "da_etapa": true,
+              "fatores": [
+                {
+                  "tipo_calculo": "area_piso_hall_total",
+                  "coeficiente": 1.0
+                }
+              ],
               "tipo_calculo": "area_piso_hall_total",
-              "coeficiente": 1.0,
-              "da_etapa": true
+              "coeficiente": 1.0
             },
             {
               "id": "d7c96205-efcf-4fe4-ae77-72f720c8c5e3",
               "tipo": "sinapi",
               "codigo_sinapi": "88650",
               "unidade": "M",
+              "da_etapa": true,
+              "fatores": [
+                {
+                  "tipo_calculo": "area_piso_hall_total",
+                  "coeficiente": 1.0
+                }
+              ],
               "tipo_calculo": "area_piso_hall_total",
-              "coeficiente": 1.0,
-              "da_etapa": true
+              "coeficiente": 1.0
             }
           ]
         }
@@ -93,9 +117,15 @@
         "codigo": "47",
         "nome": "PROJETOS E LAUDOS DE REFORMA",
         "unidade": "H",
+        "da_etapa": true,
+        "fatores": [
+          {
+            "tipo_calculo": "por_bloco",
+            "coeficiente": 2.0
+          }
+        ],
         "tipo_calculo": "por_bloco",
-        "coeficiente": 2.0,
-        "da_etapa": true
+        "coeficiente": 2.0
       },
       {
         "id": "62b2128b-eed6-47d2-aba4-f5e4d7fab36c",
@@ -104,9 +134,23 @@
         "codigo": "48",
         "nome": "ADMINISTRAÇÃO LOCAL",
         "unidade": "H",
-        "tipo_calculo": "fixo",
-        "coeficiente": 1.0,
-        "da_etapa": true
+        "da_etapa": true,
+        "fatores": [
+          {
+            "tipo_calculo": "por_bloco",
+            "coeficiente": 0.8
+          },
+          {
+            "tipo_calculo": "fixo",
+            "coeficiente": 20.0
+          },
+          {
+            "tipo_calculo": "fixo",
+            "coeficiente": 4.0
+          }
+        ],
+        "tipo_calculo": "por_bloco",
+        "coeficiente": 0.8
       },
       {
         "id": "7c3055ce-60ca-49dd-b41d-8928888f4c98",
@@ -115,18 +159,30 @@
         "codigo": "49",
         "nome": "ALUGUEL DE ANDAIME FACHADEIRO",
         "unidade": "M²xMês",
+        "da_etapa": true,
+        "fatores": [
+          {
+            "tipo_calculo": "fixo",
+            "coeficiente": 1.0
+          }
+        ],
         "tipo_calculo": "fixo",
-        "coeficiente": 1.0,
-        "da_etapa": true
+        "coeficiente": 1.0
       },
       {
         "id": "42d42d98-5601-45d3-b1c4-ea544aec1b35",
         "tipo": "sinapi",
         "codigo_sinapi": "10775",
         "unidade": "MES",
+        "da_etapa": true,
+        "fatores": [
+          {
+            "tipo_calculo": "fixo",
+            "coeficiente": 1.0
+          }
+        ],
         "tipo_calculo": "fixo",
-        "coeficiente": 1.0,
-        "da_etapa": true
+        "coeficiente": 1.0
       }
     ]
   }

@@ -83,8 +83,6 @@ def _ajustar_janela_ao_conteudo(janela: tk.Toplevel) -> None:
     except tk.TclError:
         return
     try:
-        x = int(janela.winfo_rootx())
-        y = int(janela.winfo_rooty())
         largura_atual = max(int(janela.winfo_width()), 520)
         # Libera o tamanho fixo para o Tk recalcular a altura natural.
         janela.geometry("")
@@ -93,9 +91,7 @@ def _ajustar_janela_ao_conteudo(janela: tk.Toplevel) -> None:
         altura_req = max(int(janela.winfo_reqheight()), 1)
         tela_h = int(janela.winfo_screenheight())
         altura = min(altura_req, max(280, tela_h - 80))
-        if y + altura > tela_h - 20:
-            y = max(20, tela_h - altura - 20)
-        janela.geometry(f"{largura}x{altura}+{x}+{y}")
+        janela.geometry(f"{largura}x{altura}")
         janela.update_idletasks()
     except tk.TclError:
         pass

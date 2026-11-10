@@ -2596,10 +2596,12 @@ def _foto_rgb(buf: bytearray, largura: int, altura: int) -> tk.PhotoImage:
 
 
 def _raster_linha(depth, buf, largura, altura, p0, p1, cor, folga):
+    """Traço de um pixel. A folga deixa a linha na frente da própria face."""
     x0, y0, z0 = p0[0], p0[1], p0[2] + folga
     x1, y1, z1 = p1[0], p1[1], p1[2] + folga
     r, g, b = _COR_BLOCO[cor]
-    passos = max(abs(int(round(x1)) - int(round(x0))), abs(int(round(y1)) - int(round(y0))), 1)
+    dist = math.hypot(x1 - x0, y1 - y0)
+    passos = max(int(math.ceil(dist)), 1)
     for passo in range(passos + 1):
         t = passo / passos
         x = int(round(x0 + (x1 - x0) * t))
@@ -2760,7 +2762,6 @@ class VistaIsometricaBloco(tk.Frame):
         if _area_assinada_xy(contorno) < 0:
             contorno.reverse()
         n = len(contorno)
-        olhar_x, olhar_y = sin_a, cos_a
         depth = [1e30] * (rw * rh)
         buf = bytearray(bytes((251, 252, 253)) * (rw * rh))
         for a, b, c3 in _triangular_poligono(contorno):
@@ -2781,7 +2782,6 @@ class VistaIsometricaBloco(tk.Frame):
             dx, dy = bx - ax, by - ay
             comp = math.hypot(dx, dy) or 1.0
             fora_x, fora_y = dy / comp, -dx / comp
-            voltada = fora_x * olhar_x + fora_y * olhar_y
             nrx = fora_x * cos_a - fora_y * sin_a
             cor_parede = 1 if nrx >= 0 else 2
             p00 = tela(ax, ay, 0.0)
@@ -2790,14 +2790,12 @@ class VistaIsometricaBloco(tk.Frame):
             p01 = tela(ax, ay, altura)
             _raster_triangulo(depth, buf, rw, rh, p00, p10, p11, cor_parede, 0.0)
             _raster_triangulo(depth, buf, rw, rh, p00, p11, p01, cor_parede, 0.0)
-            if not self._var_linhas.get():
-                continue
-            topo_a = tela(ax, ay, altura)
-            topo_b = tela(bx, by, altura)
-            _raster_linha(depth, buf, rw, rh, topo_a, topo_b, 4, -0.08)
-            if voltada < -1e-4:
-                _raster_linha(depth, buf, rw, rh, tela(ax, ay, 0.0), topo_a, 4, -0.08)
-                _raster_linha(depth, buf, rw, rh, tela(bx, by, 0.0), topo_b, 4, -0.08)
+        if self._var_linhas.get():
+            for i in range(n):
+                ax, ay = contorno[i]
+                bx, by = contorno[(i + 1) % n]
+                _raster_linha(depth, buf, rw, rh, tela(ax, ay, altura), tela(bx, by, altura), 4, -0.15)
+                _raster_linha(depth, buf, rw, rh, tela(ax, ay, 0.0), tela(ax, ay, altura), 4, -0.15)
                 for andar in range(1, pav):
                     _raster_linha(
                         depth,
@@ -2807,7 +2805,7 @@ class VistaIsometricaBloco(tk.Frame):
                         tela(ax, ay, andar * pe),
                         tela(bx, by, andar * pe),
                         4,
-                        -0.08,
+                        -0.15,
                     )
         self._foto = _foto_rgb(buf, rw, rh)
         c.create_image(0, 0, image=self._foto, anchor="nw")

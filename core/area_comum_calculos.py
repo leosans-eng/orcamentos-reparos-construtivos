@@ -132,6 +132,9 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
 
     aptos_bloco = aptos_pav * pavimentos
     aptos_total = aptos_bloco * blocos
+    pavimentos_friso = pavimentos - 1.0
+    if pavimentos_friso < 0:
+        pavimentos_friso = 0.0
     peri_ext_total = peri_ext_bloco * blocos
     peri_plat_total = peri_plat_bloco * blocos
     peri_hall_parede_total = peri_hall_parede_pav * pavimentos * blocos
@@ -183,6 +186,7 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
     q: dict = {
         "qtd_blocos": blocos,
         "qtd_pavimentos": pavimentos,
+        "pavimentos_friso": pavimentos_friso,
         "qtd_aptos_por_pavimento": aptos_pav,
         "qtd_aptos_por_bloco": aptos_bloco,
         "qtd_aptos_total": aptos_total,

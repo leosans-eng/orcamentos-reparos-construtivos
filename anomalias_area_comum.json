@@ -127,15 +127,19 @@
               "da_etapa": true,
               "fatores": [
                 {
-                  "tipo_calculo": "perimetro_paredes_externas_total",
+                  "tipo_calculo": "perimetro_paredes_externas_bloco",
                   "coeficiente": 1.0
                 },
                 {
-                  "tipo_calculo": "por_pavimento",
+                  "tipo_calculo": "pavimentos_friso",
                   "coeficiente": 1.0
+                },
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 0.2
                 }
               ],
-              "tipo_calculo": "perimetro_paredes_externas_total",
+              "tipo_calculo": "perimetro_paredes_externas_bloco",
               "coeficiente": 1.0
             },
             {
@@ -146,11 +150,19 @@
               "da_etapa": true,
               "fatores": [
                 {
-                  "tipo_calculo": "fixo",
+                  "tipo_calculo": "perimetro_paredes_externas_bloco",
                   "coeficiente": 1.0
+                },
+                {
+                  "tipo_calculo": "pavimentos_friso",
+                  "coeficiente": 1.0
+                },
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 0.2
                 }
               ],
-              "tipo_calculo": "fixo",
+              "tipo_calculo": "perimetro_paredes_externas_bloco",
               "coeficiente": 1.0
             },
             {
@@ -161,11 +173,19 @@
               "da_etapa": true,
               "fatores": [
                 {
-                  "tipo_calculo": "fixo",
+                  "tipo_calculo": "perimetro_paredes_externas_bloco",
                   "coeficiente": 1.0
+                },
+                {
+                  "tipo_calculo": "pavimentos_friso",
+                  "coeficiente": 1.0
+                },
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 0.2
                 }
               ],
-              "tipo_calculo": "fixo",
+              "tipo_calculo": "perimetro_paredes_externas_bloco",
               "coeficiente": 1.0
             }
           ]

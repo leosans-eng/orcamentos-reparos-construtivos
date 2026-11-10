@@ -90,6 +90,7 @@ TIPOS_CALCULO = (
     "perimetro_hall_rodape_total",
     "area_cobertura_total",
     "perimetro_paredes_externas_total",
+    "perimetro_paredes_externas_bloco",
     "perimetro_platibanda_total",
     "perimetro_beiral",
     "pingadeira_total",
@@ -108,6 +109,7 @@ TIPOS_CALCULO = (
     "pct_pintura_teto_hall",
     "por_bloco",
     "por_pavimento",
+    "pavimentos_friso",
     "por_apartamento",
     "fixo",
 )
@@ -121,6 +123,7 @@ ROTULOS_TIPO_CALCULO = {
     "perimetro_hall_rodape_total": "Perímetro de rodapé do hall (total)",
     "area_cobertura_total": "Área de cobertura (total)",
     "perimetro_paredes_externas_total": "Perímetro de paredes externas (total)",
+    "perimetro_paredes_externas_bloco": "Perímetro de paredes externas (um bloco)",
     "perimetro_platibanda_total": "Perímetro de platibanda (total)",
     "perimetro_beiral": "Perímetro de beiral (calha)",
     "pingadeira_total": "Pingadeira (total)",
@@ -139,6 +142,7 @@ ROTULOS_TIPO_CALCULO = {
     "pct_pintura_teto_hall": "% Pintura do teto do hall",
     "por_bloco": "Por bloco",
     "por_pavimento": "Por pavimento",
+    "pavimentos_friso": "Pavimentos − 1",
     "por_apartamento": "Por apartamento",
     "fixo": "Quantidade fixa",
 }
@@ -152,6 +156,7 @@ ROTULOS_CURTOS_TIPO_CALCULO = {
     "perimetro_hall_rodape_total": "rodapé hall",
     "area_cobertura_total": "cobertura",
     "perimetro_paredes_externas_total": "perím. paredes",
+    "perimetro_paredes_externas_bloco": "perím./bloco",
     "perimetro_platibanda_total": "platibanda",
     "perimetro_beiral": "beiral",
     "pingadeira_total": "pingadeira",
@@ -170,6 +175,7 @@ ROTULOS_CURTOS_TIPO_CALCULO = {
     "pct_pintura_teto_hall": "% pintura teto",
     "por_bloco": "blocos",
     "por_pavimento": "pavimentos",
+    "pavimentos_friso": "pavimentos−1",
     "por_apartamento": "apartamentos",
     "fixo": "fixo",
 }
@@ -183,6 +189,7 @@ MAPA_TIPO_QUANTITATIVO = {
     "perimetro_hall_rodape_total": "perimetro_hall_rodape_total_m",
     "area_cobertura_total": "area_cobertura_total_m2",
     "perimetro_paredes_externas_total": "perimetro_paredes_externas_total_m",
+    "perimetro_paredes_externas_bloco": "perimetro_paredes_externas_bloco_m",
     "perimetro_platibanda_total": "perimetro_platibanda_total_m",
     "perimetro_beiral": "perimetro_beiral_m",
     "pingadeira_total": "pingadeira_total_m",
@@ -201,6 +208,7 @@ MAPA_TIPO_QUANTITATIVO = {
     "pct_pintura_teto_hall": "pct_pintura_teto_hall_m2",
     "por_bloco": "qtd_blocos",
     "por_pavimento": "qtd_pavimentos",
+    "pavimentos_friso": "pavimentos_friso",
     "por_apartamento": "qtd_aptos_total",
 }
 

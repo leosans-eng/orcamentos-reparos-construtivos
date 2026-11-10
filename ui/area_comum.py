@@ -569,34 +569,82 @@ class AreaComumFrame(tk.Frame):
             anchor="w" if compacta else "center",
         )
         if compacta:
-            valor.pack(side="left")
-            legenda.pack(side="left", padx=(6, 0), fill="x", expand=True)
+            caixa.valor_num = valor
+            valor.grid(row=0, column=0, sticky="w")
+            legenda.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+            caixa.columnconfigure(1, weight=1)
         else:
             valor.pack()
             legenda.pack()
         return caixa
 
     def _grade_caixas(self, parent, itens, colunas=5, *, compacta=False, wraplength=168):
+        caixas = []
         for indice, item in enumerate(itens):
             var, rotulo = item[0], item[1]
             unidade = item[2] if len(item) > 2 else ""
             linha, col = divmod(indice, colunas)
-            self._caixa(
+            caixa = self._caixa(
                 parent,
                 var,
                 rotulo,
                 unidade,
                 wraplength=wraplength,
                 compacta=compacta,
-            ).grid(
+            )
+            caixa.grid(
                 row=linha,
                 column=col,
                 sticky="nsew",
                 padx=(0, 6),
                 pady=2 if compacta else 4,
             )
+            if compacta:
+                caixas.append(caixa)
+                var.trace_add("write", self._agendar_alinhamento_caixas)
         for col in range(colunas):
             parent.columnconfigure(col, weight=1)
+        if caixas:
+            grupos = getattr(self, "_grupos_caixas_compactas", None)
+            if grupos is None:
+                grupos = []
+                self._grupos_caixas_compactas = grupos
+            grupos.append(caixas)
+            self._agendar_alinhamento_caixas()
+
+    def _igualar_altura_titulos(self, *titulos):
+        """A borda do quadro passa no meio do título. Alturas diferentes deslocam essa linha."""
+        try:
+            if not all(titulo.winfo_exists() for titulo in titulos):
+                return
+            self.update_idletasks()
+            altura = max(titulo.winfo_reqheight() for titulo in titulos)
+            for titulo in titulos:
+                titulo.configure(width=max(titulo.winfo_reqwidth(), 1), height=altura)
+                titulo.pack_propagate(False)
+        except tk.TclError:
+            return
+
+    def _agendar_alinhamento_caixas(self, *_args):
+        if getattr(self, "_job_alinhar_caixas", None) is not None:
+            return
+        self._job_alinhar_caixas = self.after_idle(self._aplicar_alinhamento_caixas)
+
+    def _aplicar_alinhamento_caixas(self):
+        self._job_alinhar_caixas = None
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            return
+        for caixas in getattr(self, "_grupos_caixas_compactas", ()):
+            maior = 0
+            for caixa in caixas:
+                try:
+                    maior = max(maior, caixa.valor_num.winfo_reqwidth())
+                except tk.TclError:
+                    return
+            for caixa in caixas:
+                caixa.columnconfigure(0, minsize=maior)
 
     def _vincular_selecionar_tudo(self, widget):
         def _selecionar(_event=None):
@@ -771,7 +819,10 @@ class AreaComumFrame(tk.Frame):
         self.vista_bloco = VistaIsometricaBloco(lado_desenho, largura=340, altura=220)
         self.vista_bloco.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
 
-        titulo_esq = tk.Frame(interior, bg=fundo)
+        faixa_esq = tk.Frame(interior, bg=fundo)
+        faixa_esq.pack(fill="x", pady=(0, 8), padx=8)
+
+        titulo_esq = tk.Frame(faixa_esq, bg=fundo)
         tk.Label(
             titulo_esq,
             text="Medidas das esquadrias",
@@ -809,14 +860,14 @@ class AreaComumFrame(tk.Frame):
         vincular_tooltip(caixa_info_esq, texto_dica_esq)
         vincular_tooltip(info_esq, texto_dica_esq)
         bloco_esq = tk.LabelFrame(
-            interior,
+            faixa_esq,
             labelwidget=titulo_esq,
             bg=fundo,
             fg=cores.texto,
             padx=10,
             pady=8,
         )
-        bloco_esq.pack(fill="x", pady=(0, 8), padx=8)
+        bloco_esq.pack(side="left", fill="y", anchor="n")
 
         cabecalhos = (
             "Esquadria",
@@ -889,24 +940,34 @@ class AreaComumFrame(tk.Frame):
                 bd=1,
             ).grid(row=linha_total, column=col, padx=4, pady=(6, 2))
 
-        bloco_res = tk.LabelFrame(
-            interior,
+        titulo_res = tk.Frame(faixa_esq, bg=fundo)
+        tk.Label(
+            titulo_res,
             text="Quantitativos de fachada e cobertura",
+            bg=fundo,
+            fg=cores.texto,
+        ).pack(side="left")
+        bloco_res = tk.LabelFrame(
+            faixa_esq,
+            labelwidget=titulo_res,
             bg=fundo,
             fg=cores.texto,
             padx=10,
             pady=8,
         )
-        bloco_res.pack(fill="x", pady=(0, 8), padx=8)
+        bloco_res.pack(side="left", fill="both", expand=True, anchor="n", padx=(12, 0))
+        self.after_idle(lambda: self._igualar_altura_titulos(titulo_esq, titulo_res))
         grade_res = tk.Frame(bloco_res, bg=fundo)
-        grade_res.pack(fill="x")
+        grade_res.pack(fill="both", expand=True)
         self._grade_caixas(
             grade_res,
             [
                 (self.var_resumo[chave], rotulo, unidade)
                 for chave, rotulo, unidade in CAMPOS_RESUMO_FACHADA
             ],
-            colunas=4,
+            colunas=2,
+            compacta=True,
+            wraplength=180,
         )
 
         bloco_pct = tk.LabelFrame(

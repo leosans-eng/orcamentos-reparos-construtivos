@@ -50,6 +50,7 @@ from core.desenho_edicao import (
 from ui.icones import criar_botao_ttk_so_icone
 from ui.temas import cores_tema, estilos_botao
 from ui.widgets import (
+    _configurar_checkbutton_plano,
     formatar_decimal_br,
     formatar_quantidade_edicao,
     parse_decimal_br,
@@ -2631,6 +2632,7 @@ class VistaIsometricaBloco(tk.Frame):
         self._ultimo_x = 0
         self._foto = None
         self._job_giro = None
+        self._var_linhas = tk.BooleanVar(value=True)
         self.canvas = tk.Canvas(
             self,
             width=largura,
@@ -2638,9 +2640,25 @@ class VistaIsometricaBloco(tk.Frame):
             bg="#fbfcfd",
             highlightthickness=1,
             highlightbackground=cores.borda_suave,
+            highlightcolor=cores.borda_suave,
+            takefocus=0,
             cursor="fleur",
         )
         self.canvas.pack(fill="both", expand=True)
+        _configurar_checkbutton_plano(
+            ttk.Style(self),
+            "Iso.TCheckbutton",
+            "#fbfcfd",
+            cores.texto_suave,
+        )
+        ttk.Checkbutton(
+            self.canvas,
+            text="Linhas",
+            variable=self._var_linhas,
+            command=self._redesenhar,
+            style="Iso.TCheckbutton",
+            takefocus=False,
+        ).place(relx=1.0, rely=1.0, anchor="se", x=-8, y=-4)
         self.canvas.bind("<Configure>", lambda _e: self._redesenhar())
         self.canvas.bind("<ButtonPress-1>", self._iniciar_giro)
         self.canvas.bind("<B1-Motion>", self._girar)
@@ -2772,6 +2790,8 @@ class VistaIsometricaBloco(tk.Frame):
             p01 = tela(ax, ay, altura)
             _raster_triangulo(depth, buf, rw, rh, p00, p10, p11, cor_parede, 0.0)
             _raster_triangulo(depth, buf, rw, rh, p00, p11, p01, cor_parede, 0.0)
+            if not self._var_linhas.get():
+                continue
             topo_a = tela(ax, ay, altura)
             topo_b = tela(bx, by, altura)
             _raster_linha(depth, buf, rw, rh, topo_a, topo_b, 4, -0.08)

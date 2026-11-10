@@ -2576,7 +2576,7 @@ def _raster_triangulo(depth, buf, largura, altura, p0, p1, p2, cor, folga):
                 buf[o + 2] = b
 
 
-def _foto_rgb(buf: bytearray, largura: int, altura: int, escala: int) -> tk.PhotoImage:
+def _foto_rgb(buf: bytearray, largura: int, altura: int) -> tk.PhotoImage:
     import os
     import tempfile
 
@@ -2591,8 +2591,6 @@ def _foto_rgb(buf: bytearray, largura: int, altura: int, escala: int) -> tk.Phot
             os.remove(path)
         except OSError:
             pass
-    if escala > 1:
-        return imagem.zoom(escala, escala)
     return imagem
 
 
@@ -2633,7 +2631,6 @@ class VistaIsometricaBloco(tk.Frame):
         self._ultimo_x = 0
         self._foto = None
         self._job_giro = None
-        self._escala = 1
         self.canvas = tk.Canvas(
             self,
             width=largura,
@@ -2671,13 +2668,10 @@ class VistaIsometricaBloco(tk.Frame):
             return
         self._angulo += (event.x - self._ultimo_x) * 0.012
         self._ultimo_x = event.x
-        self._escala = 2
         self._pedir_redesenho()
 
     def _soltar_giro(self, _event):
         self._arrastando = False
-        self._escala = 1
-        self._pedir_redesenho()
 
     def _pedir_redesenho(self):
         if self._job_giro is not None:
@@ -2696,8 +2690,7 @@ class VistaIsometricaBloco(tk.Frame):
             return
         if w < 8 or h < 8:
             return
-        escala = self._escala if w // max(self._escala, 1) >= 8 and h // max(self._escala, 1) >= 8 else 1
-        rw, rh = w // escala, h // escala
+        rw, rh = w, h
         c.delete("all")
         c.create_rectangle(0, 0, w, h, fill="#fbfcfd", outline="")
         if not self._fechado:
@@ -2796,7 +2789,7 @@ class VistaIsometricaBloco(tk.Frame):
                         4,
                         -0.08,
                     )
-        self._foto = _foto_rgb(buf, rw, rh, escala)
+        self._foto = _foto_rgb(buf, rw, rh)
         c.create_image(0, 0, image=self._foto, anchor="nw")
         c.create_text(
             8,

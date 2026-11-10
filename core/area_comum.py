@@ -52,27 +52,27 @@ CAMPOS_MEDIDA_EDITAVEIS = (
 )
 
 CAMPOS_MEDIDA_AUTO = (
-    ("qtd_aptos_por_bloco", "Quantidade de apartamentos por bloco"),
-    ("qtd_aptos_total", "Quantidade total de apartamentos"),
-    ("perimetro_paredes_externas_total_m", "Perímetro de paredes externas (total) (m)"),
-    ("perimetro_platibanda_total_m", "Perímetro de platibanda (total) (m)"),
-    ("perimetro_hall_parede_total_m", "Perímetro de parede do hall (total) (m)"),
-    ("perimetro_hall_rodape_total_m", "Perímetro de rodapé do hall (total) (m)"),
-    ("area_laje_hall_total_m2", "Área da laje do hall (total) (m²)"),
-    ("area_piso_hall_total_m2", "Área de piso do hall (total) (m²)"),
-    ("caixas_inspecao_total", "Caixas de inspeção (total)"),
-    ("caixas_gordura_total", "Caixas de gordura (total)"),
+    ("qtd_aptos_por_bloco", "Apartamentos por bloco", ""),
+    ("qtd_aptos_total", "Apartamentos no total", ""),
+    ("perimetro_paredes_externas_total_m", "Perímetro de Paredes externas (total)", "m"),
+    ("perimetro_platibanda_total_m", "Perímetro de Platibanda (total)", "m"),
+    ("perimetro_hall_parede_total_m", "Perímetro de Paredes do hall (total)", "m"),
+    ("perimetro_hall_rodape_total_m", "Perímetro de Rodapé do hall (total)", "m"),
+    ("area_laje_hall_total_m2", "Área da Laje do hall (total)", "m²"),
+    ("area_piso_hall_total_m2", "Área do Piso do hall (total)", "m²"),
+    ("area_cobertura_total_m2", "Área da Cobertura (total)", "m²"),
+    ("area_alvenaria_hall_total_m2", "Área de Paredes internas do hall (total)", "m²"),
+    ("caixas_inspecao_total", "Caixas de inspeção", ""),
+    ("caixas_gordura_total", "Caixas de gordura", ""),
 )
 
 CAMPOS_RESUMO_FACHADA = (
-    ("esquadria_area_pav_m2", "Área de esquadrias (um pavimento)", "m²"),
+    ("esquadria_area_pav_m2", "Área de esquadrias (por pavimento)", "m²"),
     ("esquadria_area_total_m2", "Área de esquadrias (total)", "m²"),
-    ("esquadria_perimetro_pav_m", "Perímetro de esquadrias (um pavimento)", "m"),
+    ("esquadria_perimetro_pav_m", "Perímetro de esquadrias (por pavimento)", "m"),
     ("pingadeira_total_m", "Pingadeira (total)", "m"),
-    ("area_fachada_bloco_m2", "Área de fachada (um bloco, sem esquadrias)", "m²"),
+    ("area_fachada_bloco_m2", "Área de fachada (por bloco, sem esquadrias)", "m²"),
     ("area_fachada_total_m2", "Área de fachada (total, sem esquadrias)", "m²"),
-    ("area_cobertura_total_m2", "Área de cobertura (total)", "m²"),
-    ("area_alvenaria_hall_total_m2", "Área de alvenaria interna do hall (total)", "m²"),
 )
 
 PERCENTUAIS_MODELO = (

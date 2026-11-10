@@ -105,6 +105,72 @@
           "itens": []
         }
       ]
+    },
+    "Umidade em frisos da fachada": {
+      "reparos": [
+        {
+          "id": "216f8bbe-4011-4182-9f40-e35b0ad48b56",
+          "nome": "Reparo padrão",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "896af35a-5dd1-4154-9ba0-8d73d5e882fb",
+          "etapa_nome": "IMPERMEABILIZAÇÃO DE MOLDURAS (FACHADAS)",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "personalizado",
+          "titulo_personalizado": "IMPERMEABILIZAÇÃO DE FRISOS DAS FACHADAS",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "e5f382c0-06a5-4503-94f1-d6e3c98c61f7",
+              "tipo": "sinapi",
+              "codigo_sinapi": "99814",
+              "unidade": "M2",
+              "da_etapa": true,
+              "fatores": [
+                {
+                  "tipo_calculo": "perimetro_paredes_externas_total",
+                  "coeficiente": 1.0
+                },
+                {
+                  "tipo_calculo": "por_pavimento",
+                  "coeficiente": 1.0
+                }
+              ],
+              "tipo_calculo": "perimetro_paredes_externas_total",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "d5c27ba3-6249-4d13-937c-e6f26c483a07",
+              "tipo": "sinapi",
+              "codigo_sinapi": "98556",
+              "unidade": "M2",
+              "da_etapa": true,
+              "fatores": [
+                {
+                  "tipo_calculo": "fixo",
+                  "coeficiente": 1.0
+                }
+              ],
+              "tipo_calculo": "fixo",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "dee4461a-7995-48c9-a5dd-f26debc701f3",
+              "tipo": "sinapi",
+              "codigo_sinapi": "102489",
+              "unidade": "M2",
+              "da_etapa": true,
+              "fatores": [
+                {
+                  "tipo_calculo": "fixo",
+                  "coeficiente": 1.0
+                }
+              ],
+              "tipo_calculo": "fixo",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ]
     }
   },
   "servicos_preliminares": {

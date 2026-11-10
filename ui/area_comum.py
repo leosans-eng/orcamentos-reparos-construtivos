@@ -281,7 +281,7 @@ class AreaComumFrame(tk.Frame):
             chave: tk.StringVar() for chave, _rotulo in CAMPOS_MEDIDA_EDITAVEIS
         }
         self.var_medidas_auto = {
-            chave: tk.StringVar(value="—") for chave, _rotulo in CAMPOS_MEDIDA_AUTO
+            chave: tk.StringVar(value="—") for chave, _rotulo, _unidade in CAMPOS_MEDIDA_AUTO
         }
         self.var_resumo = {
             chave: tk.StringVar(value="—") for chave, _rotulo, _un in CAMPOS_RESUMO_FACHADA
@@ -550,13 +550,14 @@ class AreaComumFrame(tk.Frame):
             padx=6 if compacta else 8,
             pady=1 if compacta else 4,
         )
-        texto = rotulo if not unidade else f"{rotulo} ({unidade})"
+        texto = rotulo if compacta or not unidade else f"{rotulo} ({unidade})"
+        fonte_valor = ("Segoe UI", 9 if compacta else 10, "bold")
         valor = tk.Label(
             caixa,
             textvariable=var,
             bg=cores.fundo_cartao_off,
             fg=cores.titulo,
-            font=("Segoe UI", 9 if compacta else 10, "bold"),
+            font=fonte_valor,
         )
         legenda = tk.Label(
             caixa,
@@ -570,9 +571,20 @@ class AreaComumFrame(tk.Frame):
         )
         if compacta:
             caixa.valor_num = valor
+            caixa.unidade = unidade
+            unidade_lbl = tk.Label(
+                caixa,
+                text=unidade,
+                bg=cores.fundo_cartao_off,
+                fg=cores.titulo,
+                font=fonte_valor,
+            )
+            caixa.valor_un = unidade_lbl
+            caixa.folga_un = 4
             valor.grid(row=0, column=0, sticky="w")
-            legenda.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-            caixa.columnconfigure(1, weight=1)
+            unidade_lbl.grid(row=0, column=1, sticky="w", padx=(caixa.folga_un, 0))
+            legenda.grid(row=0, column=2, sticky="ew", padx=(6, 0))
+            caixa.columnconfigure(2, weight=1)
         else:
             valor.pack()
             legenda.pack()
@@ -638,13 +650,20 @@ class AreaComumFrame(tk.Frame):
             return
         for caixas in getattr(self, "_grupos_caixas_compactas", ()):
             maior = 0
+            maior_un = 0
             for caixa in caixas:
                 try:
                     maior = max(maior, caixa.valor_num.winfo_reqwidth())
+                    if caixa.valor_un is not None:
+                        maior_un = max(
+                            maior_un,
+                            caixa.valor_un.winfo_reqwidth() + caixa.folga_un,
+                        )
                 except tk.TclError:
                     return
             for caixa in caixas:
                 caixa.columnconfigure(0, minsize=maior)
+                caixa.columnconfigure(1, minsize=maior_un)
 
     def _vincular_selecionar_tudo(self, widget):
         def _selecionar(_event=None):
@@ -782,8 +801,8 @@ class AreaComumFrame(tk.Frame):
         self._grade_caixas(
             caixas_auto,
             [
-                (self.var_medidas_auto[chave], rotulo)
-                for chave, rotulo in CAMPOS_MEDIDA_AUTO
+                (self.var_medidas_auto[chave], rotulo, unidade)
+                for chave, rotulo, unidade in CAMPOS_MEDIDA_AUTO
             ],
             colunas=2,
             compacta=True,
@@ -943,7 +962,7 @@ class AreaComumFrame(tk.Frame):
         titulo_res = tk.Frame(faixa_esq, bg=fundo)
         tk.Label(
             titulo_res,
-            text="Quantitativos de fachada e cobertura",
+            text="Quantitativos de esquadrias e fachada",
             bg=fundo,
             fg=cores.texto,
         ).pack(side="left")
@@ -1785,7 +1804,7 @@ class AreaComumFrame(tk.Frame):
         self._quantitativos = q
         self._atualizar_vista_bloco()
 
-        for chave, _rotulo in CAMPOS_MEDIDA_AUTO:
+        for chave, _rotulo, _unidade in CAMPOS_MEDIDA_AUTO:
             self.var_medidas_auto[chave].set(
                 _fmt(q.get(chave, 0), inteiro=chave in CHAVES_INTEIRAS)
             )

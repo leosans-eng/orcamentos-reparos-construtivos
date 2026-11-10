@@ -293,11 +293,12 @@ class OrcamentoCustomizado:
         tipo_sinapi="",
         *,
         estado_fixado=False,
+        permitir_zero=False,
     ):
         grupo = self.obter_grupo(grupo_id)
         if grupo is None:
             raise ValueError("Grupo não encontrado.")
-        if quantidade <= 0:
+        if quantidade < 0 or (quantidade == 0 and not permitir_zero):
             raise ValueError("A quantidade deve ser maior que zero.")
         item = _criar_item_sinapi(
             codigo,
@@ -322,6 +323,7 @@ class OrcamentoCustomizado:
         quantidade=1.0,
         *,
         custo_unitario_referencia=None,
+        permitir_zero=False,
     ):
         grupo = self.obter_grupo(grupo_id)
         if grupo is None:
@@ -329,7 +331,7 @@ class OrcamentoCustomizado:
         catalogo_id = str(composicao_catalogo_id or "").strip()
         if not catalogo_id and not str(codigo or "").strip() and not str(nome or "").strip():
             raise ValueError("Informe a composição do catálogo ou os dados do item.")
-        if quantidade <= 0:
+        if quantidade < 0 or (quantidade == 0 and not permitir_zero):
             raise ValueError("A quantidade deve ser maior que zero.")
         item = _criar_composicao_propria(
             catalogo_id,

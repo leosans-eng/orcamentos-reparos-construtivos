@@ -698,7 +698,64 @@ def configurar_estilos_ttk(root, *, forcar=False, tema_id: str | None = None):
         )
     except tk.TclError:
         pass
+    if not pixmap:
+        _configurar_abas_notebook(style, cores)
     root._orc_estilos_ttk = True
+
+
+def _configurar_abas_notebook(style, cores) -> None:
+    """No tema padrão, as abas nativas quase somem no fundo. Destaca seleção e hover."""
+    try:
+        style.element_create("Orc.Notebook.tab", "from", "clam")
+    except tk.TclError:
+        pass
+    try:
+        style.layout(
+            "TNotebook.Tab",
+            [
+                (
+                    "Orc.Notebook.tab",
+                    {
+                        "sticky": "nswe",
+                        "children": [
+                            (
+                                "Notebook.padding",
+                                {
+                                    "side": "top",
+                                    "sticky": "nswe",
+                                    "children": [
+                                        (
+                                            "Notebook.label",
+                                            {"side": "top", "sticky": ""},
+                                        )
+                                    ],
+                                },
+                            )
+                        ],
+                    },
+                )
+            ],
+        )
+    except tk.TclError:
+        return
+    fundo_aba = "#d4e4ee"
+    fundo_hover = "#b9d3e4"
+    style.configure("TNotebook", background=cores.fundo, borderwidth=0, tabmargins=(6, 6, 6, 0))
+    style.configure(
+        "TNotebook.Tab",
+        background=fundo_aba,
+        foreground=cores.titulo,
+        padding=(14, 4),
+        font=("Segoe UI", 10),
+        borderwidth=0,
+        focuscolor=cores.fundo,
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", cores.titulo), ("active", fundo_hover)],
+        foreground=[("selected", "#ffffff"), ("active", cores.titulo_hover)],
+        expand=[("selected", (1, 2, 1, 0))],
+    )
 
 
 def confirmar_exclusao_com_espera(

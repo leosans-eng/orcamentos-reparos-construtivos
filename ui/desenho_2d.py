@@ -329,16 +329,7 @@ class PainelDesenho2D(tk.Frame):
             self._set_status(self._msg_inicio())
 
     def _msg_inicio(self) -> str:
-        nome = "Externa" if self.camada_ativa == "externa" else "Hall"
-        if not self.pontos:
-            return (
-                f"Camada {nome}: escolha Polilinha ou Retângulo para desenhar. "
-                "Sem comando, o clique seleciona linhas."
-            )
-        return (
-            f"Camada {nome}: clique numa linha ou arraste uma janela para selecionar. "
-            "M move · Delete apaga · duplo clique edita a cota."
-        )
+        return ""
 
     def vincular_atalhos(self, janela):
         """F3/F7/F8/F10/F11 em qualquer foco da janela (bind_all)."""
@@ -624,7 +615,7 @@ class PainelDesenho2D(tk.Frame):
             vincular_tooltip(chip, dicas_chip[chave])
             self._chips[chave] = chip
 
-        self._status = ttk.Label(rodape, text="Clique para começar.")
+        self._status = ttk.Label(rodape, text="")
         self._status.pack(side="right")
 
         self._atualizar_chips()
@@ -1042,11 +1033,6 @@ class PainelDesenho2D(tk.Frame):
         self._janela_sel = [event.x, event.y, event.x, event.y]
         self._janela_por_arraste = False
         self._atualizar_volante()
-        self._set_status(
-            "Arraste: → janela (inteiro dentro, azul) · "
-            "← cruzamento (tudo o que tocar, verde). "
-            "Clique no vazio limpa a seleção."
-        )
 
     def _concluir_janela(self, com_shift: bool):
         sx0, sy0, sx1, sy1 = self._janela_sel
@@ -1082,8 +1068,7 @@ class PainelDesenho2D(tk.Frame):
             distancia(*self._extremos(nome, i)) for nome, i in self._selecao
         )
         self._set_status(
-            f"{n} linha(s) selecionada(s) · {formatar_decimal_br(total, 2)} m. "
-            "M move · Delete apaga · arraste um grip azul · Esc limpa."
+            f"{n} linha(s) · {formatar_decimal_br(total, 2)} m"
         )
 
     def _extremos(self, nome: str, i: int) -> tuple[Ponto, Ponto]:
@@ -1601,7 +1586,7 @@ class PainelDesenho2D(tk.Frame):
             self._ferramenta = "selecao"
             self._redesenhar_estatico()
             self._atualizar_volante()
-            self._set_status("Comando encerrado. " + self._msg_inicio())
+            self._set_status("")
             return "break"
         if self._selecao:
             self._selecao.clear()
@@ -2246,20 +2231,14 @@ class PainelDesenho2D(tk.Frame):
 
         if self._ferramenta == "selecao":
             if self._janela_sel is not None:
-                sx0, _sy0, sx1, _sy1 = self._janela_sel
-                if sx1 < sx0:
-                    return "Cruzamento (verde): seleciona tudo o que tocar. Solte para confirmar."
-                return "Janela (azul): só o que estiver inteiro dentro. Solte para confirmar."
+                return ""
             n = len(self._selecao)
             if not n:
-                return self._msg_inicio()
+                return ""
             total = sum(
                 distancia(*self._extremos(nome, i)) for nome, i in self._selecao
             )
-            return (
-                f"{n} linha(s) selecionada(s) · {formatar_decimal_br(total, 2)} m. "
-                "M move · Delete apaga · arraste um grip azul · Esc limpa."
-            )
+            return f"{n} linha(s) · {formatar_decimal_br(total, 2)} m"
 
         partes = ["Externa" if self.camada_ativa == "externa" else "Hall"]
         if snap and snap.rotulo:
@@ -2463,3 +2442,378 @@ class PreviaDesenho2D(tk.Frame):
                 x1, y1 = tela(a)
                 x2, y2 = tela(b)
                 c.create_line(x1, y1, x2, y2, fill=cor, width=2)
+        c.create_text(
+            8,
+            h - 6,
+            text="Planta baixa",
+            anchor="sw",
+            fill=cores.texto_suave,
+            font=("Segoe UI", 8),
+        )
+
+
+def _area_assinada_xy(pts: list[tuple[float, float]]) -> float:
+    soma = 0.0
+    n = len(pts)
+    for i in range(n):
+        x1, y1 = pts[i]
+        x2, y2 = pts[(i + 1) % n]
+        soma += x1 * y2 - x2 * y1
+    return soma / 2.0
+
+
+def _ponto_no_triangulo(p, a, b, c) -> bool:
+    def cruz(u, v, w):
+        return (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0])
+
+    return cruz(a, b, p) > 1e-8 and cruz(b, c, p) > 1e-8 and cruz(c, a, p) > 1e-8
+
+
+def _triangular_poligono(pts: list[tuple[float, float]]) -> list[tuple]:
+    """Divide um polígono CCW, mesmo côncavo, em triângulos."""
+    n = len(pts)
+    if n < 3:
+        return []
+    if n == 3:
+        return [(pts[0], pts[1], pts[2])]
+    idx = list(range(n))
+    saida = []
+    guarda = n * n
+    while len(idx) > 3 and guarda > 0:
+        guarda -= 1
+        achou = False
+        m = len(idx)
+        for i in range(m):
+            i0, i1, i2 = idx[(i - 1) % m], idx[i], idx[(i + 1) % m]
+            a, b, c = pts[i0], pts[i1], pts[i2]
+            if (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) <= 1e-8:
+                continue
+            if any(
+                _ponto_no_triangulo(pts[j], a, b, c)
+                for j in idx
+                if j not in (i0, i1, i2)
+            ):
+                continue
+            saida.append((a, b, c))
+            del idx[i]
+            achou = True
+            break
+        if not achou:
+            break
+    if len(idx) == 3:
+        saida.append((pts[idx[0]], pts[idx[1]], pts[idx[2]]))
+    return saida
+
+
+_COR_BLOCO = (
+    (251, 252, 253),
+    (212, 232, 243),
+    (158, 195, 214),
+    (231, 243, 248),
+    (0, 102, 153),
+)
+
+
+def _raster_triangulo(depth, buf, largura, altura, p0, p1, p2, cor, folga):
+    """Preenche um triângulo. Aresta de topo ou de base plana também entra."""
+    verts = sorted(
+        (
+            (p0[0], p0[1], p0[2] + folga),
+            (p1[0], p1[1], p1[2] + folga),
+            (p2[0], p2[1], p2[2] + folga),
+        ),
+        key=lambda p: (p[1], p[0]),
+    )
+    (x0, y0, z0), (x1, y1, z1), (x2, y2, z2) = verts
+    if y2 <= y0:
+        return
+    r, g, b = _COR_BLOCO[cor]
+
+    def borda(y, ya, xa, za, yb, xb, zb):
+        dy = yb - ya
+        if abs(dy) < 1e-12:
+            return xa, za
+        t = (y - ya) / dy
+        return xa + (xb - xa) * t, za + (zb - za) * t
+
+    y_ini = max(0, math.floor(y0))
+    y_fim = min(altura - 1, math.ceil(y2))
+    for y in range(y_ini, y_fim + 1):
+        ys = y + 0.5
+        if ys < y0 or ys > y2:
+            continue
+        xl, zl = borda(ys, y0, x0, z0, y2, x2, z2)
+        if y1 <= y0:
+            xs, zs = borda(ys, y1, x1, z1, y2, x2, z2)
+        elif y1 >= y2:
+            xs, zs = borda(ys, y0, x0, z0, y1, x1, z1)
+        elif ys <= y1:
+            xs, zs = borda(ys, y0, x0, z0, y1, x1, z1)
+        else:
+            xs, zs = borda(ys, y1, x1, z1, y2, x2, z2)
+        if xl > xs:
+            xl, xs, zl, zs = xs, xl, zs, zl
+        # Meio pixel a mais fecha a fresta entre triângulos vizinhos.
+        i0 = max(0, math.floor(xl - 0.5))
+        i1 = min(largura - 1, math.ceil(xs + 0.5))
+        if i1 < i0:
+            continue
+        span = xs - xl
+        base = y * largura
+        for x in range(i0, i1 + 1):
+            t = 0.0 if span < 1e-9 else ((x + 0.5) - xl) / span
+            if t < 0.0:
+                t = 0.0
+            elif t > 1.0:
+                t = 1.0
+            z = zl + (zs - zl) * t
+            i = base + x
+            if z < depth[i]:
+                depth[i] = z
+                o = i * 3
+                buf[o] = r
+                buf[o + 1] = g
+                buf[o + 2] = b
+
+
+def _foto_rgb(buf: bytearray, largura: int, altura: int, escala: int) -> tk.PhotoImage:
+    import os
+    import tempfile
+
+    fd, path = tempfile.mkstemp(suffix=".ppm")
+    try:
+        with os.fdopen(fd, "wb") as arquivo:
+            arquivo.write(f"P6\n{largura} {altura}\n255\n".encode("ascii"))
+            arquivo.write(buf)
+        imagem = tk.PhotoImage(file=path)
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    if escala > 1:
+        return imagem.zoom(escala, escala)
+    return imagem
+
+
+def _raster_linha(depth, buf, largura, altura, p0, p1, cor, folga):
+    x0, y0, z0 = p0[0], p0[1], p0[2] + folga
+    x1, y1, z1 = p1[0], p1[1], p1[2] + folga
+    r, g, b = _COR_BLOCO[cor]
+    passos = max(abs(int(round(x1)) - int(round(x0))), abs(int(round(y1)) - int(round(y0))), 1)
+    for passo in range(passos + 1):
+        t = passo / passos
+        x = int(round(x0 + (x1 - x0) * t))
+        y = int(round(y0 + (y1 - y0) * t))
+        if x < 0 or y < 0 or x >= largura or y >= altura:
+            continue
+        z = z0 + (z1 - z0) * t
+        i = y * largura + x
+        if z < depth[i]:
+            depth[i] = z
+            o = i * 3
+            buf[o] = r
+            buf[o + 1] = g
+            buf[o + 2] = b
+
+
+class VistaIsometricaBloco(tk.Frame):
+    """Extrusão isométrica de um bloco a partir da planta externa."""
+
+    def __init__(self, parent, *, largura=340, altura=168):
+        cores = cores_tema(parent)
+        super().__init__(parent, bg=cores.fundo)
+        self._cores = cores
+        self._pontos: list[Ponto] = []
+        self._fechado = False
+        self._pe_direito = 0.0
+        self._pavimentos = 0
+        self._angulo = math.radians(-38)
+        self._arrastando = False
+        self._ultimo_x = 0
+        self._foto = None
+        self._job_giro = None
+        self._escala = 1
+        self.canvas = tk.Canvas(
+            self,
+            width=largura,
+            height=altura,
+            bg="#fbfcfd",
+            highlightthickness=1,
+            highlightbackground=cores.borda_suave,
+            cursor="fleur",
+        )
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Configure>", lambda _e: self._redesenhar())
+        self.canvas.bind("<ButtonPress-1>", self._iniciar_giro)
+        self.canvas.bind("<B1-Motion>", self._girar)
+        self.canvas.bind("<ButtonRelease-1>", self._soltar_giro)
+
+    def definir(self, pontos, fechado, pe_direito: float, pavimentos: float) -> None:
+        self._pontos = list(pontos or [])
+        self._fechado = bool(fechado) and len(self._pontos) >= 3
+        try:
+            self._pe_direito = max(0.0, float(pe_direito or 0))
+        except (TypeError, ValueError):
+            self._pe_direito = 0.0
+        try:
+            self._pavimentos = max(0, int(round(float(pavimentos or 0))))
+        except (TypeError, ValueError):
+            self._pavimentos = 0
+        self._redesenhar()
+
+    def _iniciar_giro(self, event):
+        self._arrastando = True
+        self._ultimo_x = event.x
+
+    def _girar(self, event):
+        if not self._arrastando:
+            return
+        self._angulo += (event.x - self._ultimo_x) * 0.012
+        self._ultimo_x = event.x
+        self._escala = 2
+        self._pedir_redesenho()
+
+    def _soltar_giro(self, _event):
+        self._arrastando = False
+        self._escala = 1
+        self._pedir_redesenho()
+
+    def _pedir_redesenho(self):
+        if self._job_giro is not None:
+            return
+        self._job_giro = self.after(16, self._executar_redesenho)
+
+    def _executar_redesenho(self):
+        self._job_giro = None
+        self._redesenhar()
+
+    def _redesenhar(self):
+        c = self.canvas
+        try:
+            w, h = c.winfo_width(), c.winfo_height()
+        except tk.TclError:
+            return
+        if w < 8 or h < 8:
+            return
+        escala = self._escala if w // max(self._escala, 1) >= 8 and h // max(self._escala, 1) >= 8 else 1
+        rw, rh = w // escala, h // escala
+        c.delete("all")
+        c.create_rectangle(0, 0, w, h, fill="#fbfcfd", outline="")
+        if not self._fechado:
+            self._mensagem(c, w, h, "A vista do bloco usa a planta externa fechada.")
+            return
+        if self._pe_direito <= 0 or self._pavimentos <= 0:
+            self._mensagem(
+                c,
+                w,
+                h,
+                "Informe o pé-direito e a quantidade de pavimentos\npara ver o bloco.",
+            )
+            return
+
+        pe = self._pe_direito
+        pav = self._pavimentos
+        altura = pe * pav
+        ang = self._angulo
+        cos_a = math.cos(ang)
+        sin_a = math.sin(ang)
+        pts = self._pontos
+
+        def mundo(x, y, z):
+            rx = x * cos_a - y * sin_a
+            ry = x * sin_a + y * cos_a
+            return rx, ry * 0.5 + z, ry
+
+        amostras = []
+        for p in pts:
+            amostras.append(mundo(p.x, p.y, 0.0))
+            amostras.append(mundo(p.x, p.y, altura))
+        sxs = [a[0] for a in amostras]
+        sys_ = [a[1] for a in amostras]
+        minx, maxx = min(sxs), max(sxs)
+        miny, maxy = min(sys_), max(sys_)
+        margem = 16
+        largura_m = max(maxx - minx, 0.5)
+        altura_m = max(maxy - miny, 0.5)
+        zoom = min((rw - 2 * margem) / largura_m, (rh - 2 * margem) / altura_m)
+        zoom = max(zoom, 1e-6)
+        ox = rw / 2.0 - (minx + maxx) / 2.0 * zoom
+        oy = rh / 2.0 + (miny + maxy) / 2.0 * zoom
+
+        def tela(x, y, z):
+            sx, sy, profundidade = mundo(x, y, z)
+            return ox + sx * zoom, oy - sy * zoom, profundidade
+
+        contorno = [(p.x, p.y) for p in pts]
+        if _area_assinada_xy(contorno) < 0:
+            contorno.reverse()
+        n = len(contorno)
+        olhar_x, olhar_y = sin_a, cos_a
+        depth = [1e30] * (rw * rh)
+        buf = bytearray(bytes((251, 252, 253)) * (rw * rh))
+        for a, b, c3 in _triangular_poligono(contorno):
+            _raster_triangulo(
+                depth,
+                buf,
+                rw,
+                rh,
+                tela(a[0], a[1], altura),
+                tela(b[0], b[1], altura),
+                tela(c3[0], c3[1], altura),
+                3,
+                -0.04,
+            )
+        for i in range(n):
+            ax, ay = contorno[i]
+            bx, by = contorno[(i + 1) % n]
+            dx, dy = bx - ax, by - ay
+            comp = math.hypot(dx, dy) or 1.0
+            fora_x, fora_y = dy / comp, -dx / comp
+            voltada = fora_x * olhar_x + fora_y * olhar_y
+            nrx = fora_x * cos_a - fora_y * sin_a
+            cor_parede = 1 if nrx >= 0 else 2
+            p00 = tela(ax, ay, 0.0)
+            p10 = tela(bx, by, 0.0)
+            p11 = tela(bx, by, altura)
+            p01 = tela(ax, ay, altura)
+            _raster_triangulo(depth, buf, rw, rh, p00, p10, p11, cor_parede, 0.0)
+            _raster_triangulo(depth, buf, rw, rh, p00, p11, p01, cor_parede, 0.0)
+            topo_a = tela(ax, ay, altura)
+            topo_b = tela(bx, by, altura)
+            _raster_linha(depth, buf, rw, rh, topo_a, topo_b, 4, -0.08)
+            if voltada < -1e-4:
+                _raster_linha(depth, buf, rw, rh, tela(ax, ay, 0.0), topo_a, 4, -0.08)
+                _raster_linha(depth, buf, rw, rh, tela(bx, by, 0.0), topo_b, 4, -0.08)
+                for andar in range(1, pav):
+                    _raster_linha(
+                        depth,
+                        buf,
+                        rw,
+                        rh,
+                        tela(ax, ay, andar * pe),
+                        tela(bx, by, andar * pe),
+                        4,
+                        -0.08,
+                    )
+        self._foto = _foto_rgb(buf, rw, rh, escala)
+        c.create_image(0, 0, image=self._foto, anchor="nw")
+        c.create_text(
+            8,
+            h - 6,
+            text="Visão isométrica",
+            anchor="sw",
+            fill=self._cores.texto_suave,
+            font=("Segoe UI", 8),
+        )
+
+    def _mensagem(self, canvas, largura, altura, texto):
+        canvas.create_text(
+            largura / 2,
+            altura / 2,
+            text=texto,
+            fill=self._cores.texto_suave,
+            font=("Segoe UI", 9),
+            justify="center",
+            width=max(120, largura - 24),
+        )

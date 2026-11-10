@@ -4,7 +4,6 @@ from tkinter import ttk
 from core.api_client import get_client
 from ui.icones import criar_icone_svg
 from ui.temas import cores_tema, tema_usa_imagens
-from ui.area_comum import acesso_area_comum_liberado
 from ui.widgets import aplicar_hover_cartao
 
 LARGURA_CARTAO = 240
@@ -40,7 +39,6 @@ class HubFrame(tk.Frame):
     def _montar(self):
         cores = cores_tema(self)
         self.configure(bg=cores.fundo)
-        area_comum_liberada = acesso_area_comum_liberado(offline=self.offline)
 
         faixa = tk.Frame(self, bg=cores.faixa, height=6)
         faixa.pack(fill="x")
@@ -103,8 +101,7 @@ class HubFrame(tk.Frame):
                         "com a opção de composições próprias"
                     ),
                     "modulo": "area_comum",
-                    "habilitado": area_comum_liberada,
-                    "aviso": "Prévia" if area_comum_liberada else "Em breve",
+                    "habilitado": True,
                     "icone_titulo": "construct-outline",
                 },
             ],

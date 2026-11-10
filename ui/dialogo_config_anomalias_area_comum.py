@@ -879,23 +879,10 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         rotulo = meta.get("rotulo") or chave
         nome_padrao = NOMES_ETAPAS_FIXAS.get(chave) or chave
         aba.columnconfigure(0, weight=1)
-        aba.rowconfigure(2, weight=1)
-
-        tk.Label(
-            aba,
-            text=(
-                f"Itens incluídos no orçamento quando «Considerar {rotulo}» "
-                "estiver marcado na aba 2. Defina o quantitativo de cada item."
-            ),
-            bg=fundo,
-            fg=cores.texto_suave,
-            wraplength=980,
-            justify="left",
-            anchor="w",
-        ).grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 4))
+        aba.rowconfigure(1, weight=1)
 
         linha_nome = tk.Frame(aba, bg=fundo)
-        linha_nome.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 6))
+        linha_nome.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 6))
         tk.Label(linha_nome, text="Título no orçamento:", bg=fundo, fg=cores.texto).pack(
             side="left"
         )
@@ -928,11 +915,11 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         tree.column("descricao", width=280, anchor="w")
         tree.column("unidade", width=70, anchor="center")
         tree.column("formula", width=280, anchor="w")
-        tree.grid(row=2, column=0, sticky="nsew", padx=10)
+        tree.grid(row=1, column=0, sticky="nsew", padx=10)
         tree.bind("<Double-1>", lambda _e, c=chave: self._editar_item_etapa_fixa(c))
 
         botoes = tk.Frame(aba, bg=fundo)
-        botoes.grid(row=3, column=0, sticky="e", padx=10, pady=(6, 8))
+        botoes.grid(row=2, column=0, sticky="e", padx=10, pady=(6, 8))
         criar_botao_ttk_com_icone(
             botoes,
             texto="Adicionar SINAPI",

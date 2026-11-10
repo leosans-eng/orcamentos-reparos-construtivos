@@ -181,12 +181,12 @@
         "da_etapa": true,
         "fatores": [
           {
-            "tipo_calculo": "fixo",
-            "coeficiente": 1.0
+            "tipo_calculo": "por_bloco",
+            "coeficiente": 0.8
           }
         ],
-        "tipo_calculo": "fixo",
-        "coeficiente": 1.0
+        "tipo_calculo": "por_bloco",
+        "coeficiente": 0.8
       }
     ]
   },

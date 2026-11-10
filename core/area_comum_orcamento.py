@@ -132,6 +132,7 @@ def _mesclar_grupo_anomalia(antigo: dict, novo: dict) -> dict:
     for item in template_novos:
         fila = fila_por_chave.get(_chave_item_orcamento(item)) or []
         if not fila:
+            mesclados.append(item)
             continue
         velho = fila.pop(0)
         item["id"] = velho.get("id") or item.get("id")
@@ -151,23 +152,8 @@ def _mesclar_grupo_anomalia(antigo: dict, novo: dict) -> dict:
             item["qtd_manual"] = True
         mesclados.append(item)
 
-    mesclados_por_id = {item.get("id"): item for item in mesclados}
-    ordenados = []
-    vistos = set()
-    for velho in itens_antigos:
-        ident = velho.get("id")
-        if velho.get("origem_anomalia"):
-            atualizado = mesclados_por_id.get(ident)
-            if atualizado is None:
-                continue
-            ordenados.append(atualizado)
-        else:
-            ordenados.append(velho)
-        vistos.add(ident)
-    for item in mesclados:
-        if item.get("id") not in vistos:
-            ordenados.append(item)
-    novo["itens"] = ordenados
+    # Ordem do cadastro; itens digitados à mão ficam depois.
+    novo["itens"] = mesclados + extras
     return novo
 
 
@@ -219,8 +205,8 @@ def _montar_grupo_itens_sinapi(
     for item in itens or []:
         tipo = str(item.get("tipo") or "")
         qtd = quantidade_de_item(item, quantitativos) * fator
-        if qtd <= 0:
-            continue
+        if qtd < 0:
+            qtd = 0.0
         if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
             catalogo_id = str(item.get("composicao_catalogo_id") or "").strip()
             composicao = (
@@ -238,6 +224,7 @@ def _montar_grupo_itens_sinapi(
                 or "Composição",
                 (composicao or {}).get("unidade") or item.get("unidade") or "un",
                 qtd,
+                permitir_zero=True,
             )
             continue
         codigo = str(item.get("codigo_sinapi") or item.get("codigo") or "").strip()
@@ -254,6 +241,7 @@ def _montar_grupo_itens_sinapi(
             qtd,
             estado or uf,
             tipo_ic,
+            permitir_zero=True,
         )
     return deepcopy(tmp.obter_grupo(grupo_id))
 

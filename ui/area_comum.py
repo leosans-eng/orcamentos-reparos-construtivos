@@ -1,4 +1,4 @@
-"""Módulo de orçamento para Área Comum (prévia, acesso restrito)."""
+"""Módulo de orçamento para Área Comum."""
 
 from __future__ import annotations
 
@@ -68,10 +68,9 @@ from core.orcamento_customizado import (
 )
 from core.sinapi_busca import deve_fixar_estado_sinapi, estados_com_codigo, obter_item_sinapi
 from ui.calculadora import abrir_calculadora
-from ui.dialogo_admin_usuarios import usuario_atual_eh_admin
 from ui.dialogo_previa_composicao import DialogoPreviaComposicao
 from ui.dialogo_config_anomalias_area_comum import DialogoConfigAnomaliasAreaComum
-from ui.desenho_2d import CHAVES_MEDIDA_ORCCAD, PreviaDesenho2D
+from ui.desenho_2d import CHAVES_MEDIDA_ORCCAD, PreviaDesenho2D, VistaIsometricaBloco
 from ui.grade_orcamento import GradeOrcamento
 from ui.icones import (
     criar_botao_inserir_prominente,
@@ -99,13 +98,6 @@ DEBOUNCE_AUTOSAVE_MS = 1600
 DEBOUNCE_MUNICIPIO_MS = 450
 DEBOUNCE_CALCULO_MS = 180
 HISTORICO_MAX = 40
-
-
-def acesso_area_comum_liberado(*, offline: bool = False) -> bool:
-    """Prévia visível para admin; no modo offline não há papéis, então libera."""
-    if offline:
-        return True
-    return usuario_atual_eh_admin()
 
 
 def _nome_arquivo_sugerido(nome_condominio: str) -> str:
@@ -383,16 +375,6 @@ class AreaComumFrame(tk.Frame):
             montar_acoes_antes_referencia=self._montar_rotulo_arquivo,
         )
 
-        aviso = tk.Label(
-            self,
-            text="Prévia em desenvolvimento — visível apenas no desenvolvimento.",
-            font=("Segoe UI", 8, "italic"),
-            fg=cores.texto_suave,
-            bg=fundo,
-            anchor="w",
-        )
-        aviso.pack(fill="x", padx=12, pady=(0, 4))
-
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=12, pady=(0, 6))
 
@@ -558,42 +540,60 @@ class AreaComumFrame(tk.Frame):
             refs=self._refs_icones,
         ).pack(side="left", padx=(6, 0))
 
-    def _caixa(self, parent, var, rotulo, unidade="", wraplength=168):
+    def _caixa(self, parent, var, rotulo, unidade="", wraplength=168, *, compacta=False):
         cores = self._cores
         caixa = tk.Frame(
             parent,
             bg=cores.fundo_cartao_off,
             highlightbackground=cores.borda_suave,
             highlightthickness=1,
-            padx=8,
-            pady=4,
+            padx=6 if compacta else 8,
+            pady=1 if compacta else 4,
         )
         texto = rotulo if not unidade else f"{rotulo} ({unidade})"
-        tk.Label(
+        valor = tk.Label(
             caixa,
             textvariable=var,
             bg=cores.fundo_cartao_off,
             fg=cores.titulo,
-            font=("Segoe UI", 10, "bold"),
-        ).pack()
-        tk.Label(
+            font=("Segoe UI", 9 if compacta else 10, "bold"),
+        )
+        legenda = tk.Label(
             caixa,
             text=texto,
             bg=cores.fundo_cartao_off,
             fg=cores.texto_suave,
             font=("Segoe UI", 8),
             wraplength=wraplength,
-            justify="center",
-        ).pack()
+            justify="left" if compacta else "center",
+            anchor="w" if compacta else "center",
+        )
+        if compacta:
+            valor.pack(side="left")
+            legenda.pack(side="left", padx=(6, 0), fill="x", expand=True)
+        else:
+            valor.pack()
+            legenda.pack()
         return caixa
 
-    def _grade_caixas(self, parent, itens, colunas=5):
+    def _grade_caixas(self, parent, itens, colunas=5, *, compacta=False, wraplength=168):
         for indice, item in enumerate(itens):
             var, rotulo = item[0], item[1]
             unidade = item[2] if len(item) > 2 else ""
             linha, col = divmod(indice, colunas)
-            self._caixa(parent, var, rotulo, unidade).grid(
-                row=linha, column=col, sticky="nsew", padx=(0, 8), pady=4
+            self._caixa(
+                parent,
+                var,
+                rotulo,
+                unidade,
+                wraplength=wraplength,
+                compacta=compacta,
+            ).grid(
+                row=linha,
+                column=col,
+                sticky="nsew",
+                padx=(0, 6),
+                pady=2 if compacta else 4,
             )
         for col in range(colunas):
             parent.columnconfigure(col, weight=1)
@@ -659,6 +659,7 @@ class AreaComumFrame(tk.Frame):
         bloco_qtd.pack(fill="x", pady=(8, 8), padx=8)
         bloco_qtd.columnconfigure(0, weight=1)
         bloco_qtd.columnconfigure(1, weight=1, minsize=320)
+        bloco_qtd.rowconfigure(0, weight=1)
 
         campos = tk.Frame(bloco_qtd, bg=fundo)
         campos.grid(row=0, column=0, sticky="nsew")
@@ -720,8 +721,32 @@ class AreaComumFrame(tk.Frame):
             entrada.grid(row=linha, column=col + 1, sticky="w", pady=2, padx=(0, 18))
             self._vincular_campo_numerico(entrada)
 
+        tk.Label(
+            campos,
+            text="Quantitativos calculados automaticamente",
+            bg=fundo,
+            fg=cores.titulo,
+            font=("Segoe UI", 9, "bold"),
+            anchor="w",
+        ).grid(row=10, column=0, columnspan=4, sticky="w", pady=(10, 2))
+        caixas_auto = tk.Frame(campos, bg=fundo)
+        caixas_auto.grid(row=11, column=0, columnspan=4, sticky="ew")
+        self._grade_caixas(
+            caixas_auto,
+            [
+                (self.var_medidas_auto[chave], rotulo)
+                for chave, rotulo in CAMPOS_MEDIDA_AUTO
+            ],
+            colunas=2,
+            compacta=True,
+            wraplength=150,
+        )
+
         lado_desenho = tk.Frame(bloco_qtd, bg=fundo)
         lado_desenho.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        lado_desenho.rowconfigure(1, weight=1)
+        lado_desenho.rowconfigure(3, weight=1)
+        lado_desenho.columnconfigure(0, weight=1)
         criar_botao_ttk_com_icone(
             lado_desenho,
             texto="Abrir ORCCAD",
@@ -730,9 +755,9 @@ class AreaComumFrame(tk.Frame):
             estilo=self._estilos.compacto,
             cor_icone=self._estilos.icone,
             refs=self._refs_icones,
-        ).pack(anchor="w")
-        self.previa_desenho = PreviaDesenho2D(lado_desenho, largura=340, altura=250)
-        self.previa_desenho.pack(fill="both", expand=True, pady=(8, 0))
+        ).grid(row=0, column=0, sticky="w")
+        self.previa_desenho = PreviaDesenho2D(lado_desenho, largura=340, altura=220)
+        self.previa_desenho.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
         tk.Label(
             lado_desenho,
             textvariable=self.var_legenda_desenho,
@@ -742,26 +767,9 @@ class AreaComumFrame(tk.Frame):
             anchor="w",
             justify="left",
             wraplength=340,
-        ).pack(fill="x", pady=(4, 0))
-
-        tk.Label(
-            bloco_qtd,
-            text="Quantitativos calculados automaticamente",
-            bg=fundo,
-            fg=cores.titulo,
-            font=("Segoe UI", 9, "bold"),
-            anchor="w",
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 4))
-        caixas_auto = tk.Frame(bloco_qtd, bg=fundo)
-        caixas_auto.grid(row=2, column=0, columnspan=2, sticky="ew")
-        self._grade_caixas(
-            caixas_auto,
-            [
-                (self.var_medidas_auto[chave], rotulo)
-                for chave, rotulo in CAMPOS_MEDIDA_AUTO
-            ],
-            colunas=5,
-        )
+        ).grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        self.vista_bloco = VistaIsometricaBloco(lado_desenho, largura=340, altura=220)
+        self.vista_bloco.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
 
         titulo_esq = tk.Frame(interior, bg=fundo)
         tk.Label(
@@ -982,16 +990,15 @@ class AreaComumFrame(tk.Frame):
         topo = tk.Frame(aba, bg=fundo)
         topo.pack(fill="x", padx=10, pady=(8, 4))
         # Empacota o botão primeiro (side=right) para não ser empurrado pelo texto.
-        if acesso_area_comum_liberado(offline=self._offline):
-            criar_botao_ttk_com_icone(
-                topo,
-                texto="Configurar",
-                nome_icone="cog-outline",
-                command=self._abrir_config_anomalias,
-                estilo=self._estilos.compacto,
-                cor_icone=self._estilos.icone,
-                refs=self._refs_icones,
-            ).pack(side="right", padx=(8, 0))
+        criar_botao_ttk_com_icone(
+            topo,
+            texto="Configurar",
+            nome_icone="cog-outline",
+            command=self._abrir_config_anomalias,
+            estilo=self._estilos.compacto,
+            cor_icone=self._estilos.icone,
+            refs=self._refs_icones,
+        ).pack(side="right", padx=(8, 0))
         tk.Label(
             topo,
             text=(
@@ -1513,6 +1520,7 @@ class AreaComumFrame(tk.Frame):
         camadas = dict_para_camadas(self._desenho_principal)
         ext_pts, ext_fech = camadas["externa"]
         hall_pts, hall_fech = camadas["hall"]
+        self._atualizar_vista_bloco(ext_pts, ext_fech)
         if len(ext_pts) < 2 and len(hall_pts) < 2:
             self.var_legenda_desenho.set("Ainda não há planta salva.")
             return
@@ -1542,6 +1550,18 @@ class AreaComumFrame(tk.Frame):
                     f"{formatar_decimal_br(res_h.perimetro_m, 2)} m"
                 )
         self.var_legenda_desenho.set("\n".join(partes))
+
+    def _atualizar_vista_bloco(self, pontos=None, fechado=None):
+        if not hasattr(self, "vista_bloco"):
+            return
+        if pontos is None:
+            from core.desenho_geometria import dict_para_camadas
+
+            camadas = dict_para_camadas(self._desenho_principal)
+            pontos, fechado = camadas["externa"]
+        pe = numero(self.var_medidas["pe_direito_m"].get())
+        pav = numero(self.var_medidas["qtd_pavimentos"].get())
+        self.vista_bloco.definir(pontos, bool(fechado), pe, pav)
 
     def _ao_sair_municipio(self, _event=None):
         self._resolver_uf_municipio()
@@ -1702,6 +1722,7 @@ class AreaComumFrame(tk.Frame):
         percentuais = {chave: var.get() for chave, var in self.var_percentuais.items()}
         q = calcular_quantitativos(medidas, esquadrias, percentuais)
         self._quantitativos = q
+        self._atualizar_vista_bloco()
 
         for chave, _rotulo in CAMPOS_MEDIDA_AUTO:
             self.var_medidas_auto[chave].set(
@@ -3689,7 +3710,7 @@ class AreaComumFrame(tk.Frame):
             self.notebook.select(self._aba_orcamento)
         except (tk.TclError, AttributeError):
             pass
-        self._mostrar_feedback("Prévia do orçamento atualizada na aba 3.", "green")
+        self._mostrar_feedback("Orçamento atualizado na aba 3.", "green")
 
     def _salvar_em_customizados(self):
         messagebox.showinfo(

@@ -1,11 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <g transform="translate(0 0) scale(0.64)" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="46">
-    <path d="M380.93 57.37A32 32 0 0 0 358.3 48H94.22A46.21 46.21 0 0 0 48 94.22v323.56A46.21 46.21 0 0 0 94.22 464h323.56A46.36 46.36 0 0 0 464 417.78V153.7a32 32 0 0 0-9.37-22.63z"/>
-    <circle cx="256" cy="352" r="64"/>
-    <path d="M112 80h192v96H112z"/>
-  </g>
-  <g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="30">
-    <rect x="248" y="248" width="176" height="176" rx="32"/>
-    <rect x="318" y="318" width="176" height="176" rx="32"/>
-  </g>
+  <path d="M464 346V153.7a32 32 0 0 0-9.37-22.63L380.93 57.37A32 32 0 0 0 358.3 48H94.22A46.21 46.21 0 0 0 48 94.22v323.56A46.21 46.21 0 0 0 94.22 464H346" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32"/>
+  <path d="M256 416a64 64 0 1 1 64-64 63.92 63.92 0 0 1-64 64m48-224H112a16 16 0 0 1-16-16v-64a16 16 0 0 1 16-16h192a16 16 0 0 1 16 16v64a16 16 0 0 1-16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32"/>
+  <rect x="346" y="346" width="148" height="148" rx="28" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="32"/>
+  <rect x="386" y="386" width="112" height="112" rx="22" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="32"/>
 </svg>

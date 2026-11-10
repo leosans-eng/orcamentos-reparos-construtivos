@@ -117,6 +117,22 @@ def _fmt(valor, casas=2, *, inteiro=False) -> str:
     return formatar_decimal_br(valor, casas)
 
 
+def _numero_br_fixo(valor, casas: int = 2) -> str:
+    """Sempre com as casas pedidas, inclusive zeros à direita."""
+    try:
+        v = float(valor)
+    except (TypeError, ValueError):
+        return str(valor)
+    texto = f"{v:,.{casas}f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _fmt_medida(valor, unidade: str) -> str:
+    if valor is None or valor == 0:
+        return "—"
+    return f"{_numero_br_fixo(valor)} {unidade}"
+
+
 CHAVES_INTEIRAS = {
     "qtd_aptos_por_bloco",
     "qtd_aptos_total",
@@ -313,6 +329,11 @@ class AreaComumFrame(tk.Frame):
         self.var_considerar_sp = tk.BooleanVar(value=True)
         self.var_considerar_entulho = tk.BooleanVar(value=True)
         self.var_considerar_limpeza = tk.BooleanVar(value=True)
+        self.var_valor_etapas = {
+            "servicos_preliminares": tk.StringVar(value="(—)"),
+            "destinacao_entulho": tk.StringVar(value="(—)"),
+            "limpeza_geral": tk.StringVar(value="(—)"),
+        }
         self.var_rotulo_condominio = tk.StringVar(value="")
         self.var_legenda_desenho = tk.StringVar(value="Ainda não há planta salva.")
 
@@ -431,6 +452,16 @@ class AreaComumFrame(tk.Frame):
         )
         btn_salvar.pack(side="left", padx=(4, 0))
         vincular_tooltip(btn_salvar, "Salvar rascunho JSON (Ctrl+S)")
+
+        btn_salvar_como = criar_botao_ttk_so_icone(
+            bloco,
+            nome_icone="save-copy-outline",
+            command=lambda: self._salvar(salvar_como=True),
+            cor_icone=verde_salvar,
+            refs=self._refs_icones,
+        )
+        btn_salvar_como.pack(side="left", padx=(4, 0))
+        vincular_tooltip(btn_salvar_como, "Salvar como — outro arquivo JSON")
 
         self._montar_rotulo_condominio(barra)
 
@@ -684,11 +715,17 @@ class AreaComumFrame(tk.Frame):
         widget.bind("<FocusIn>", _selecionar, add="+")
         widget.bind("<Button-1>", _ao_clicar, add="+")
 
-    def _vincular_campo_numerico(self, widget, *, percentual=False):
+    def _vincular_campo_numerico(self, widget, *, percentual=False, casas=None):
         self._vincular_selecionar_tudo(widget)
-        widget.bind("<FocusOut>", lambda _e, p=percentual: self._resolver_formula(widget, percentual=p), add="+")
+        widget.bind(
+            "<FocusOut>",
+            lambda _e, p=percentual, c=casas: self._resolver_formula(
+                widget, percentual=p, casas=c
+            ),
+            add="+",
+        )
 
-    def _resolver_formula(self, widget, *, percentual=False):
+    def _resolver_formula(self, widget, *, percentual=False, casas=None):
         try:
             bruto = widget.get().strip()
         except tk.TclError:
@@ -700,7 +737,7 @@ class AreaComumFrame(tk.Frame):
         except ValueError:
             return
         valor = numero(bruto, percentual=percentual)
-        novo = formatar_decimal_br(valor)
+        novo = _numero_br_fixo(valor, casas) if casas is not None else formatar_decimal_br(valor)
         if novo == bruto:
             return
         try:
@@ -916,14 +953,14 @@ class AreaComumFrame(tk.Frame):
             for col, chave_e in enumerate(("dim_x", "dim_y", "h_peitoril", "qtd_por_pav"), start=1):
                 entrada_e = ttk.Entry(bloco_esq, textvariable=vars_e[chave_e], width=9)
                 entrada_e.grid(row=indice, column=col, padx=4)
-                self._vincular_campo_numerico(entrada_e)
+                self._vincular_campo_numerico(entrada_e, casas=2)
             for col, chave in enumerate(("perimetro", "pingadeira", "area"), start=5):
                 tk.Label(
                     bloco_esq,
                     textvariable=vars_e[chave],
                     bg=cores.fundo_cartao_off,
                     fg=cores.titulo,
-                    width=10,
+                    width=12,
                     relief="solid",
                     bd=1,
                 ).grid(row=indice, column=col, padx=4, pady=2)
@@ -954,7 +991,7 @@ class AreaComumFrame(tk.Frame):
                 bg=cores.fundo_cartao_off,
                 fg=cores.titulo,
                 font=("Segoe UI", 9, "bold"),
-                width=10,
+                width=12,
                 relief="solid",
                 bd=1,
             ).grid(row=linha_total, column=col, padx=4, pady=(6, 2))
@@ -1116,18 +1153,20 @@ class AreaComumFrame(tk.Frame):
         tabela.pack(fill="both", expand=True, padx=10, pady=(0, 6))
         self.tree_anomalias = ttk.Treeview(
             tabela,
-            columns=("reparo", "percentual", "valor"),
+            columns=("reparo", "percentual", "valor", "valor_atual"),
             show="tree headings",
             selectmode="browse",
         )
         self.tree_anomalias.heading("#0", text="Anomalia")
-        self.tree_anomalias.heading("reparo", text="Reparo")
-        self.tree_anomalias.heading("percentual", text="% qtd.")
-        self.tree_anomalias.heading("valor", text="Valor considerado")
-        self.tree_anomalias.column("#0", width=280)
-        self.tree_anomalias.column("reparo", width=220)
-        self.tree_anomalias.column("percentual", width=80, anchor="e")
+        self.tree_anomalias.heading("reparo", text="Reparo", anchor="center")
+        self.tree_anomalias.heading("percentual", text="% qtd.", anchor="center")
+        self.tree_anomalias.heading("valor", text="Quantitativo considerado", anchor="e")
+        self.tree_anomalias.heading("valor_atual", text="Valor atual", anchor="e")
+        self.tree_anomalias.column("#0", width=260)
+        self.tree_anomalias.column("reparo", width=200, anchor="center")
+        self.tree_anomalias.column("percentual", width=58, anchor="center")
         self.tree_anomalias.column("valor", width=220, anchor="e")
+        self.tree_anomalias.column("valor_atual", width=120, anchor="e")
         self.tree_anomalias.bind("<Button-1>", self._ao_clique_percentual_anomalia, add="+")
         self.tree_anomalias.bind("<Double-1>", self._ao_duplo_clique_anomalia)
         self.tree_anomalias.bind("<Motion>", self._ao_mover_tree_anomalias)
@@ -1170,30 +1209,68 @@ class AreaComumFrame(tk.Frame):
             pady=4,
         )
         caixa_etapas.pack(side="right")
-        ttk.Checkbutton(
+        cor_valor_etapa = "#6e6e6e" if not cores.escuro else "#c4c4c4"
+        self._opcao_etapa_padrao(
             caixa_etapas,
-            text="Serviços Preliminares",
-            variable=self.var_considerar_sp,
-            command=lambda: self._ao_trocar_etapa_fixa(
-                "Serviços preliminares", self.var_considerar_sp
-            ),
+            texto="Serviços Preliminares",
+            variavel=self.var_considerar_sp,
+            var_valor=self.var_valor_etapas["servicos_preliminares"],
+            rotulo="Serviços preliminares",
+            cor_valor=cor_valor_etapa,
+            separador=True,
+        )
+        self._opcao_etapa_padrao(
+            caixa_etapas,
+            texto="Destinação do Entulho",
+            variavel=self.var_considerar_entulho,
+            var_valor=self.var_valor_etapas["destinacao_entulho"],
+            rotulo="Destinação do entulho",
+            cor_valor=cor_valor_etapa,
+            separador=True,
+        )
+        self._opcao_etapa_padrao(
+            caixa_etapas,
+            texto="Limpeza Geral",
+            variavel=self.var_considerar_limpeza,
+            var_valor=self.var_valor_etapas["limpeza_geral"],
+            rotulo="Limpeza geral",
+            cor_valor=cor_valor_etapa,
+            separador=False,
+        )
+
+    def _opcao_etapa_padrao(
+        self,
+        parent,
+        *,
+        texto,
+        variavel,
+        var_valor,
+        rotulo,
+        cor_valor,
+        separador,
+    ):
+        fundo = self._cores.fundo
+        ttk.Checkbutton(
+            parent,
+            text=texto,
+            variable=variavel,
+            command=lambda: self._ao_trocar_etapa_fixa(rotulo, variavel),
         ).pack(side="left")
-        ttk.Checkbutton(
-            caixa_etapas,
-            text="Destinação do Entulho",
-            variable=self.var_considerar_entulho,
-            command=lambda: self._ao_trocar_etapa_fixa(
-                "Destinação do entulho", self.var_considerar_entulho
-            ),
-        ).pack(side="left", padx=(12, 0))
-        ttk.Checkbutton(
-            caixa_etapas,
-            text="Limpeza Geral",
-            variable=self.var_considerar_limpeza,
-            command=lambda: self._ao_trocar_etapa_fixa(
-                "Limpeza geral", self.var_considerar_limpeza
-            ),
-        ).pack(side="left", padx=(12, 0))
+        tk.Label(
+            parent,
+            textvariable=var_valor,
+            bg=fundo,
+            fg=cor_valor,
+            font=("Segoe UI", 9),
+        ).pack(side="left", padx=(4, 0))
+        if separador:
+            tk.Label(
+                parent,
+                text="|",
+                bg=fundo,
+                fg=self._cores.texto,
+                font=("Segoe UI", 9),
+            ).pack(side="left", padx=(8, 8))
 
     def _criar_halo(self, parent, *, padx=3, pady=2):
         return tk.Frame(parent, bg=self._cores.fundo, padx=padx, pady=pady)
@@ -1820,19 +1897,22 @@ class AreaComumFrame(tk.Frame):
         for modelo in ESQUADRIAS_MODELO:
             calc = linhas_esq.get(modelo["id"]) or {}
             vars_e = self.var_esquadrias[modelo["id"]]
-            vars_e["perimetro"].set(_fmt(calc.get("perimetro_pav_m", 0)))
-            vars_e["pingadeira"].set(_fmt(calc.get("pingadeira_pav_m", 0)))
-            vars_e["area"].set(_fmt(calc.get("area_pav_m2", 0)))
+            vars_e["perimetro"].set(_fmt_medida(calc.get("perimetro_pav_m", 0), "m"))
+            vars_e["pingadeira"].set(_fmt_medida(calc.get("pingadeira_pav_m", 0), "m"))
+            vars_e["area"].set(_fmt_medida(calc.get("area_pav_m2", 0), "m²"))
+        qtd_pav = q.get("esquadria_qtd_pav", 0)
         self.var_esquadrias_total["qtd_por_pav"].set(
-            _fmt(q.get("esquadria_qtd_pav", 0), inteiro=True)
+            _numero_br_fixo(qtd_pav) if qtd_pav else "—"
         )
         self.var_esquadrias_total["perimetro"].set(
-            _fmt(q.get("esquadria_perimetro_pav_m", 0))
+            _fmt_medida(q.get("esquadria_perimetro_pav_m", 0), "m")
         )
         self.var_esquadrias_total["pingadeira"].set(
-            _fmt(q.get("esquadria_pingadeira_pav_m", 0))
+            _fmt_medida(q.get("esquadria_pingadeira_pav_m", 0), "m")
         )
-        self.var_esquadrias_total["area"].set(_fmt(q.get("esquadria_area_pav_m2", 0)))
+        self.var_esquadrias_total["area"].set(
+            _fmt_medida(q.get("esquadria_area_pav_m2", 0), "m²")
+        )
 
         self._atualizar_preview_orcamento()
         self._atualizar_valores_anomalias_orcamento()
@@ -1997,10 +2077,14 @@ class AreaComumFrame(tk.Frame):
                 ident = item.get("id")
                 if ident not in self.var_esquadrias:
                     continue
-                self.var_esquadrias[ident]["dim_x"].set(item.get("dim_x", ""))
-                self.var_esquadrias[ident]["dim_y"].set(item.get("dim_y", ""))
-                self.var_esquadrias[ident]["h_peitoril"].set(item.get("h_peitoril", ""))
-                self.var_esquadrias[ident]["qtd_por_pav"].set(item.get("qtd_por_pav", ""))
+                for chave_e in ("dim_x", "dim_y", "h_peitoril", "qtd_por_pav"):
+                    bruto = str(item.get(chave_e, "") or "").strip()
+                    if bruto:
+                        self.var_esquadrias[ident][chave_e].set(
+                            _numero_br_fixo(numero(bruto))
+                        )
+                    else:
+                        self.var_esquadrias[ident][chave_e].set("")
             self._anomalias_orcamento = list(dados.get("anomalias_orcamento") or [])
             if "considerar_servicos_preliminares" in dados:
                 self.var_considerar_sp.set(
@@ -2384,11 +2468,7 @@ class AreaComumFrame(tk.Frame):
                 "end",
                 iid=linha["id"],
                 text=linha.get("nome") or "",
-                values=(
-                    linha.get("reparo_nome") or "Reparo padrão",
-                    f"{linha.get('percentual') or '100'}%",
-                    self._texto_valor_reparo(linha),
-                ),
+                values=self._valores_linha_anomalia(linha),
             )
         for iid in selecao:
             if self.tree_anomalias.exists(iid):
@@ -2397,6 +2477,7 @@ class AreaComumFrame(tk.Frame):
                 break
 
     def _atualizar_valores_anomalias_orcamento(self):
+        self._atualizar_valores_etapas_padrao()
         if not hasattr(self, "tree_anomalias"):
             return
         for iid in self.tree_anomalias.get_children():
@@ -2406,14 +2487,55 @@ class AreaComumFrame(tk.Frame):
             )
             if linha is None:
                 continue
-            self.tree_anomalias.item(
-                iid,
-                values=(
-                    linha.get("reparo_nome") or "Reparo padrão",
-                    f"{linha.get('percentual') or '100'}%",
-                    self._texto_valor_reparo(linha),
-                ),
-            )
+            self.tree_anomalias.item(iid, values=self._valores_linha_anomalia(linha))
+
+    def _valores_linha_anomalia(self, linha) -> tuple:
+        return (
+            linha.get("reparo_nome") or "Reparo padrão",
+            f"{linha.get('percentual') or '100'}%",
+            self._texto_valor_reparo(linha),
+            self._texto_valor_atual_anomalia(linha),
+        )
+
+    def _texto_moeda_grupo(self, grupo) -> str:
+        """Custo do grupo já montado na aba 3, com BDI."""
+        if not grupo:
+            return "—"
+        try:
+            bdi = numero(self.var_bdi.get())
+        except (TypeError, ValueError):
+            bdi = 0.0
+        total = self._subtotal_grupo_calculado(
+            grupo,
+            bdi,
+            self._listar_composicoes(),
+            self._estado_selecionado(),
+        )
+        if abs(total) < 0.005:
+            return "—"
+        return _formatar_moeda(total)
+
+    def _texto_valor_atual_anomalia(self, linha) -> str:
+        aid = str((linha or {}).get("id") or "")
+        grupo = next(
+            (
+                g
+                for g in self.orcamento.grupos
+                if str(g.get("anomalia_id") or "") == aid and g.get("origem") == "anomalia"
+            ),
+            None,
+        )
+        return self._texto_moeda_grupo(grupo)
+
+    def _atualizar_valores_etapas_padrao(self):
+        variaveis = getattr(self, "var_valor_etapas", None)
+        if not variaveis:
+            return
+        por_origem = {
+            str(grupo.get("origem") or ""): grupo for grupo in self.orcamento.grupos
+        }
+        for chave, var in variaveis.items():
+            var.set(f"({self._texto_moeda_grupo(por_origem.get(chave))})")
 
     def _texto_valor_reparo(self, linha) -> str:
         reparo = self._reparo_da_linha(linha)

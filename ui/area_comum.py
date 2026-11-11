@@ -27,6 +27,7 @@ from core.area_comum_anomalias import (
     carregar_catalogo,
     nomes_anomalias,
     obter_reparo,
+    reparo_recomendado,
     valores_considerados_reparo,
 )
 from core.area_comum_calculos import calcular_quantitativos, numero, parse_expressao
@@ -327,10 +328,14 @@ class AreaComumFrame(tk.Frame):
         self.var_total = tk.StringVar(value="Total geral: R$ 0,00")
         self.var_catalogo_anomalia = tk.StringVar()
         self.var_considerar_sp = tk.BooleanVar(value=True)
+        self.var_considerar_pintura = tk.BooleanVar(value=True)
         self.var_considerar_entulho = tk.BooleanVar(value=True)
         self.var_considerar_limpeza = tk.BooleanVar(value=True)
+        self._pintura_fachada_manual = False
+        self.var_percentual_pintura = tk.StringVar(value="—")
         self.var_valor_etapas = {
             "servicos_preliminares": tk.StringVar(value="(—)"),
+            "pintura": tk.StringVar(value="(—)"),
             "destinacao_entulho": tk.StringVar(value="(—)"),
             "limpeza_geral": tk.StringVar(value="(—)"),
         }
@@ -612,9 +617,12 @@ class AreaComumFrame(tk.Frame):
             )
             caixa.valor_un = unidade_lbl
             caixa.folga_un = 4
-            valor.grid(row=0, column=0, sticky="w")
-            unidade_lbl.grid(row=0, column=1, sticky="w", padx=(caixa.folga_un, 0))
-            legenda.grid(row=0, column=2, sticky="ew", padx=(6, 0))
+            valor.configure(anchor="e")
+            unidade_lbl.configure(anchor="w")
+            valor.grid(row=0, column=0, sticky="nes")
+            unidade_lbl.grid(row=0, column=1, sticky="nsw", padx=(caixa.folga_un, 0))
+            legenda.grid(row=0, column=2, sticky="nsw", padx=(6, 0))
+            caixa.rowconfigure(0, weight=1)
             caixa.columnconfigure(2, weight=1)
         else:
             valor.pack()
@@ -825,6 +833,7 @@ class AreaComumFrame(tk.Frame):
             entrada.grid(row=linha, column=col + 1, sticky="w", pady=2, padx=(0, 18))
             self._vincular_campo_numerico(entrada)
 
+        linha_auto = 2 + (len(CAMPOS_MEDIDA_EDITAVEIS) + 1) // 2
         tk.Label(
             campos,
             text="Quantitativos calculados automaticamente",
@@ -832,9 +841,9 @@ class AreaComumFrame(tk.Frame):
             fg=cores.titulo,
             font=("Segoe UI", 9, "bold"),
             anchor="w",
-        ).grid(row=10, column=0, columnspan=4, sticky="w", pady=(10, 2))
+        ).grid(row=linha_auto, column=0, columnspan=4, sticky="w", pady=(10, 2))
         caixas_auto = tk.Frame(campos, bg=fundo)
-        caixas_auto.grid(row=11, column=0, columnspan=4, sticky="ew")
+        caixas_auto.grid(row=linha_auto + 1, column=0, columnspan=4, sticky="ew")
         self._grade_caixas(
             caixas_auto,
             [
@@ -968,12 +977,19 @@ class AreaComumFrame(tk.Frame):
         linha_total = len(ESQUADRIAS_MODELO) + 1
         tk.Label(
             bloco_esq,
-            text="TOTAL",
+            text="TOTAL POR PAVIMENTO",
             bg=fundo,
             fg=cores.titulo,
             font=("Segoe UI", 9, "bold"),
             anchor="w",
-        ).grid(row=linha_total, column=0, sticky="w", padx=4, pady=(6, 2))
+        ).grid(
+            row=linha_total,
+            column=0,
+            columnspan=4,
+            sticky="w",
+            padx=4,
+            pady=(6, 2),
+        )
         tk.Label(
             bloco_esq,
             textvariable=self.var_esquadrias_total["qtd_por_pav"],
@@ -1103,6 +1119,7 @@ class AreaComumFrame(tk.Frame):
         fundo = cores.fundo
         aba = ttk.Frame(self.notebook)
         self.notebook.add(aba, text="2. Anomalias")
+        self._aba_anomalias = aba
 
         topo = tk.Frame(aba, bg=fundo)
         topo.pack(fill="x", padx=10, pady=(8, 4))
@@ -1116,18 +1133,6 @@ class AreaComumFrame(tk.Frame):
             cor_icone=self._estilos.icone,
             refs=self._refs_icones,
         ).pack(side="right", padx=(8, 0))
-        tk.Label(
-            topo,
-            text=(
-                "Anomalias cadastradas (cada uma aponta para itens SINAPI ou para uma "
-                "etapa pré-definida). Passe o mouse sobre a porcentagem para editá-la."
-            ),
-            bg=fundo,
-            fg=cores.texto_suave,
-            wraplength=820,
-            justify="left",
-            anchor="w",
-        ).pack(side="left", fill="x", expand=True)
 
         form = tk.Frame(aba, bg=fundo)
         form.pack(fill="x", padx=10, pady=(0, 6))
@@ -1151,12 +1156,16 @@ class AreaComumFrame(tk.Frame):
 
         tabela = tk.Frame(aba, bg=fundo)
         tabela.pack(fill="both", expand=True, padx=10, pady=(0, 6))
+        self._estilizar_tree_anomalias()
         self.tree_anomalias = ttk.Treeview(
             tabela,
             columns=("reparo", "percentual", "valor", "valor_atual"),
             show="tree headings",
             selectmode="browse",
+            style="Anomalias.Treeview",
         )
+        self.tree_anomalias.tag_configure("par", background=self._cor_linha_par)
+        self.tree_anomalias.tag_configure("impar", background=self._cor_linha_impar)
         self.tree_anomalias.heading("#0", text="Anomalia")
         self.tree_anomalias.heading("reparo", text="Reparo", anchor="center")
         self.tree_anomalias.heading("percentual", text="% qtd.", anchor="center")
@@ -1171,6 +1180,10 @@ class AreaComumFrame(tk.Frame):
         self.tree_anomalias.bind("<Double-1>", self._ao_duplo_clique_anomalia)
         self.tree_anomalias.bind("<Motion>", self._ao_mover_tree_anomalias)
         self.tree_anomalias.bind("<Leave>", lambda _e: self.tree_anomalias.configure(cursor=""))
+        self.tree_anomalias.bind("<Escape>", self._limpar_selecao_anomalias)
+        janela = self.winfo_toplevel()
+        janela.bind("<Escape>", self._ao_esc_anomalias, add="+")
+        janela.bind("<Button-1>", self._ao_clique_fora_anomalias, add="+")
 
         scroll = ttk.Scrollbar(tabela, orient="vertical", command=self.tree_anomalias.yview)
         self.tree_anomalias.configure(yscrollcommand=scroll.set)
@@ -1221,6 +1234,16 @@ class AreaComumFrame(tk.Frame):
         )
         self._opcao_etapa_padrao(
             caixa_etapas,
+            texto="Pintura",
+            variavel=self.var_considerar_pintura,
+            var_valor=self.var_valor_etapas["pintura"],
+            var_extra=self.var_percentual_pintura,
+            rotulo="Pintura",
+            cor_valor=cor_valor_etapa,
+            separador=True,
+        )
+        self._opcao_etapa_padrao(
+            caixa_etapas,
             texto="Destinação do Entulho",
             variavel=self.var_considerar_entulho,
             var_valor=self.var_valor_etapas["destinacao_entulho"],
@@ -1248,6 +1271,7 @@ class AreaComumFrame(tk.Frame):
         rotulo,
         cor_valor,
         separador,
+        var_extra=None,
     ):
         fundo = self._cores.fundo
         ttk.Checkbutton(
@@ -1256,6 +1280,14 @@ class AreaComumFrame(tk.Frame):
             variable=variavel,
             command=lambda: self._ao_trocar_etapa_fixa(rotulo, variavel),
         ).pack(side="left")
+        if var_extra is not None:
+            tk.Label(
+                parent,
+                textvariable=var_extra,
+                bg=fundo,
+                fg=cor_valor,
+                font=("Segoe UI", 9),
+            ).pack(side="left", padx=(6, 0))
         tk.Label(
             parent,
             textvariable=var_valor,
@@ -1862,6 +1894,7 @@ class AreaComumFrame(tk.Frame):
 
     def _recalcular(self):
         self._job_calculo = None
+        self._sincronizar_percentual_pintura_fachada()
         medidas = {chave: var.get() for chave, var in self.var_medidas.items()}
         esquadrias = []
         for modelo in ESQUADRIAS_MODELO:
@@ -1885,8 +1918,10 @@ class AreaComumFrame(tk.Frame):
             self.var_medidas_auto[chave].set(
                 _fmt(q.get(chave, 0), inteiro=chave in CHAVES_INTEIRAS)
             )
-        for chave, _rotulo, _un in CAMPOS_RESUMO_FACHADA:
-            self.var_resumo[chave].set(_fmt(q.get(chave, 0)))
+        for chave, _rotulo, unidade in CAMPOS_RESUMO_FACHADA:
+            self.var_resumo[chave].set(
+                _fmt(q.get(chave, 0), inteiro=not unidade)
+            )
         for chave, _rotulo, _padrao, qtd_chave, unidade in PERCENTUAIS_MODELO:
             texto = _fmt(q.get(qtd_chave, 0))
             if texto != "—":
@@ -1958,6 +1993,8 @@ class AreaComumFrame(tk.Frame):
         dados["esquadrias"] = esquadrias
         dados["anomalias_orcamento"] = list(self._anomalias_orcamento)
         dados["considerar_servicos_preliminares"] = bool(self.var_considerar_sp.get())
+        dados["considerar_pintura"] = bool(self.var_considerar_pintura.get())
+        dados["pintura_fachada_manual"] = bool(self._pintura_fachada_manual)
         dados["considerar_destinacao_entulho"] = bool(self.var_considerar_entulho.get())
         dados["considerar_limpeza_geral"] = bool(self.var_considerar_limpeza.get())
         dados["extras_orcamento"] = []
@@ -2092,6 +2129,14 @@ class AreaComumFrame(tk.Frame):
                 )
             else:
                 self.var_considerar_sp.set(True)
+            if "considerar_pintura" in dados:
+                self.var_considerar_pintura.set(bool(dados.get("considerar_pintura")))
+            else:
+                self.var_considerar_pintura.set(True)
+            if "pintura_fachada_manual" in dados:
+                self._pintura_fachada_manual = bool(dados.get("pintura_fachada_manual"))
+            else:
+                self._pintura_fachada_manual = self._pintura_diverge_do_maximo()
             if "considerar_destinacao_entulho" in dados:
                 self.var_considerar_entulho.set(
                     bool(dados.get("considerar_destinacao_entulho"))
@@ -2330,9 +2375,33 @@ class AreaComumFrame(tk.Frame):
         nomes = nomes_anomalias(self._catalogo)
         if hasattr(self, "campo_catalogo"):
             self.campo_catalogo.definir_opcoes(nomes)
+        self._sincronizar_nomes_reparos_orcamento()
         self._carregar_etapas()
         self._recalcular()
         self._redesenhar_anomalias_orcamento()
+
+    def _sincronizar_nomes_reparos_orcamento(self):
+        """Atualiza o nome exibido das anomalias já adicionadas após renomear o reparo."""
+        anomalias = (self._catalogo or {}).get("anomalias") or {}
+        alterou = False
+        for linha in self._anomalias_orcamento:
+            cadastro = anomalias.get(linha.get("nome") or "")
+            if not isinstance(cadastro, dict):
+                continue
+            rid = str(linha.get("reparo_id") or "")
+            reparos = [r for r in (cadastro.get("reparos") or []) if isinstance(r, dict)]
+            reparo = next(
+                (item for item in reparos if str(item.get("id") or "") == rid),
+                None,
+            )
+            if reparo is None:
+                continue
+            nome = str(reparo.get("nome") or "").strip()
+            if nome and nome != (linha.get("reparo_nome") or ""):
+                linha["reparo_nome"] = nome
+                alterou = True
+        if alterou:
+            self._marcar_sujo()
 
     def _abrir_config_anomalias(self):
         DialogoConfigAnomaliasAreaComum(
@@ -2341,7 +2410,7 @@ class AreaComumFrame(tk.Frame):
             on_salvo=self._recarregar_catalogo_anomalias,
         )
 
-    def _escolher_lista(self, titulo, mensagem, opcoes):
+    def _escolher_lista(self, titulo, mensagem, opcoes, *, dica="", selecionar=None):
         from ui.temas import aplicar_chrome_dialogo
         from ui.widgets import (
             aplicar_icone_janela,
@@ -2372,12 +2441,25 @@ class AreaComumFrame(tk.Frame):
             wraplength=380,
             anchor="w",
         ).pack(fill="x", pady=(0, 8))
+        if dica:
+            tk.Label(
+                painel,
+                text=dica,
+                bg=fundo,
+                fg=cores.texto_suave,
+                justify="left",
+                wraplength=380,
+                anchor="w",
+            ).pack(fill="x", pady=(0, 8))
         lista = tk.Listbox(painel, exportselection=False)
         lista.pack(fill="both", expand=True)
         for opcao in opcoes:
             lista.insert("end", opcao)
         if opcoes:
-            lista.selection_set(0)
+            indice = opcoes.index(selecionar) if selecionar in opcoes else 0
+            lista.selection_set(indice)
+            lista.activate(indice)
+            lista.see(indice)
 
         def confirmar():
             sel = lista.curselection()
@@ -2412,17 +2494,28 @@ class AreaComumFrame(tk.Frame):
         reparo = reparos[0]
         if len(reparos) > 1:
             nomes = [r.get("nome") or f"Reparo {i+1}" for i, r in enumerate(reparos)]
+            sugerido, dica = reparo_recomendado(
+                anomalias[nome],
+                tipo_estrutura=estado_do_combo(self.var_tipo_estrutura.get()),
+                tipo_cobertura=estado_do_combo(self.var_tipo_cobertura.get()),
+            )
+            selecionar = None
+            if sugerido is not None:
+                for indice, item in enumerate(reparos):
+                    if item.get("id") == sugerido.get("id"):
+                        selecionar = nomes[indice]
+                        break
             escolhido = self._escolher_lista(
                 "Escolher reparo",
                 f"A anomalia '{nome}' tem mais de um reparo.\nQual deve ser usado?",
                 nomes,
+                dica=dica,
+                selecionar=selecionar,
             )
             if not escolhido:
                 return
             reparo = reparos[nomes.index(escolhido)]
-        percentual = self._perguntar_percentual_anomalia(nome)
-        if percentual is None:
-            return
+        percentual = "100"
         nova = nova_anomalia_orcamento(
             nome=nome,
             reparo_id=reparo.get("id"),
@@ -2462,13 +2555,14 @@ class AreaComumFrame(tk.Frame):
         selecao = list(self.tree_anomalias.selection())
         for item in self.tree_anomalias.get_children():
             self.tree_anomalias.delete(item)
-        for linha in self._anomalias_orcamento:
+        for indice, linha in enumerate(self._anomalias_orcamento):
             self.tree_anomalias.insert(
                 "",
                 "end",
                 iid=linha["id"],
                 text=linha.get("nome") or "",
                 values=self._valores_linha_anomalia(linha),
+                tags=("par" if indice % 2 else "impar",),
             )
         for iid in selecao:
             if self.tree_anomalias.exists(iid):
@@ -2536,6 +2630,7 @@ class AreaComumFrame(tk.Frame):
         }
         for chave, var in variaveis.items():
             var.set(f"({self._texto_moeda_grupo(por_origem.get(chave))})")
+        self._atualizar_rotulo_percentual_pintura()
 
     def _texto_valor_reparo(self, linha) -> str:
         reparo = self._reparo_da_linha(linha)
@@ -2594,7 +2689,11 @@ class AreaComumFrame(tk.Frame):
         origem_nome,
         excluir_id=None,
     ) -> bool:
-        chaves = [c for c in (chaves or []) if c in self.var_percentuais]
+        chaves = [
+            c
+            for c in (chaves or [])
+            if c in self.var_percentuais and c != "pintura_fachada"
+        ]
         if not chaves:
             return False
         novo_fmt = formatar_decimal_br(numero(percentual_texto, percentual=True))
@@ -2642,32 +2741,128 @@ class AreaComumFrame(tk.Frame):
             self._sincronizando_percentuais = False
         return mudou
 
-    def _coluna_percentual_tree(self, event) -> bool:
+    def _estilizar_tree_anomalias(self):
+        """Faixas alternadas. No tema do Windows a cor da tag só vale sem o fundo travado."""
+        cores = self._cores
+        self._cor_linha_par = cores.fundo_cartao
+        self._cor_linha_impar = (
+            cores.fundo_cartao_off if cores.escuro else cores.fundo_destaque
+        )
+        selecao = "#9ec4d6" if not cores.escuro else cores.fundo_hover
+        estilo = ttk.Style(self)
+        nome = "Anomalias.Treeview"
+
+        def _sem_trava(opcao):
+            return [
+                item
+                for item in estilo.map("Treeview", query_opt=opcao)
+                if item[:2] != ("!disabled", "!selected")
+            ]
+
+        estilo.configure(
+            nome,
+            rowheight=30,
+            background=self._cor_linha_par,
+            fieldbackground=self._cor_linha_par,
+            font=("Segoe UI", 9),
+        )
+        estilo.map(
+            nome,
+            background=[("selected", selecao), *_sem_trava("background")],
+            foreground=[("selected", cores.texto), *_sem_trava("foreground")],
+        )
+
+    def _coluna_tree_anomalias(self, event) -> str:
         try:
             coluna = self.tree_anomalias.identify_column(event.x)
             linha = self.tree_anomalias.identify_row(event.y)
         except tk.TclError:
-            return False
-        return bool(linha) and coluna == "#2"
+            return ""
+        if not linha:
+            return ""
+        return coluna
 
     def _ao_mover_tree_anomalias(self, event):
-        if self._coluna_percentual_tree(event):
+        coluna = self._coluna_tree_anomalias(event)
+        if coluna in ("#1", "#2"):
             self.tree_anomalias.configure(cursor="hand2")
         else:
             self.tree_anomalias.configure(cursor="")
 
-    def _ao_clique_percentual_anomalia(self, event):
-        if not self._coluna_percentual_tree(event):
+    def _limpar_selecao_anomalias(self, _event=None):
+        tree = getattr(self, "tree_anomalias", None)
+        if tree is None:
+            return "break"
+        selecionados = tree.selection()
+        if selecionados:
+            tree.selection_remove(selecionados)
+        return "break"
+
+    def _aba_anomalias_visivel(self) -> bool:
+        aba = getattr(self, "_aba_anomalias", None)
+        if aba is None or not hasattr(self, "notebook"):
+            return False
+        try:
+            return str(self.notebook.select()) == str(aba)
+        except tk.TclError:
+            return False
+
+    def _widget_dentro(self, widget, ancestral) -> bool:
+        atual = widget
+        while atual is not None:
+            if atual == ancestral:
+                return True
+            atual = getattr(atual, "master", None)
+        return False
+
+    def _ao_esc_anomalias(self, _event=None):
+        if not self._aba_anomalias_visivel():
             return
-        row = self.tree_anomalias.identify_row(event.y)
+        try:
+            if self.winfo_toplevel().grab_current():
+                return
+        except tk.TclError:
+            return
+        self._limpar_selecao_anomalias()
+
+    def _ao_clique_fora_anomalias(self, event):
+        if not self._aba_anomalias_visivel():
+            return
+        try:
+            if self.winfo_toplevel().grab_current():
+                return
+        except tk.TclError:
+            return
+        widget = event.widget
+        if self._widget_dentro(widget, getattr(self, "tree_anomalias", None)):
+            return
+        if isinstance(
+            widget,
+            (ttk.Button, ttk.Checkbutton, ttk.Entry, ttk.Combobox, tk.Button),
+        ):
+            return
+        self._limpar_selecao_anomalias()
+
+    def _ao_clique_percentual_anomalia(self, event):
+        try:
+            row = self.tree_anomalias.identify_row(event.y)
+        except tk.TclError:
+            return
         if not row:
+            self._limpar_selecao_anomalias()
+            return
+        coluna = self._coluna_tree_anomalias(event)
+        if coluna not in ("#1", "#2"):
             return
         self.tree_anomalias.selection_set(row)
-        self.after_idle(lambda: self._alterar_percentual_anomalia(row))
+        if coluna == "#1":
+            self.after_idle(lambda: self._alterar_reparo_anomalia(row))
+        else:
+            self.after_idle(lambda: self._alterar_percentual_anomalia(row))
         return "break"
 
     def _ao_duplo_clique_anomalia(self, event=None):
-        if event is not None and not self._coluna_percentual_tree(event):
+        if event is not None and self._coluna_tree_anomalias(event) != "#2":
             return
         selecao = self.tree_anomalias.selection()
         if not selecao:
@@ -2740,6 +2935,58 @@ class AreaComumFrame(tk.Frame):
             self.tree_anomalias.selection_set(item_id)
             self.tree_anomalias.see(item_id)
 
+    def _alterar_reparo_anomalia(self, item_id):
+        linha = next(
+            (item for item in self._anomalias_orcamento if item.get("id") == item_id),
+            None,
+        )
+        if linha is None:
+            return
+        nome = linha.get("nome") or ""
+        cadastro = ((self._catalogo or {}).get("anomalias") or {}).get(nome) or {}
+        reparos = [r for r in (cadastro.get("reparos") or []) if isinstance(r, dict)]
+        if not reparos:
+            self._mostrar_feedback("Essa anomalia não tem reparo cadastrado.", "orange")
+            return
+        if len(reparos) == 1:
+            self._mostrar_feedback(
+                "Essa anomalia tem apenas um reparo cadastrado.", "orange"
+            )
+            return
+        nomes = [r.get("nome") or f"Reparo {i + 1}" for i, r in enumerate(reparos)]
+        atual = linha.get("reparo_nome") or ""
+        selecionar = atual if atual in nomes else None
+        _sugerido, dica = reparo_recomendado(
+            cadastro,
+            tipo_estrutura=estado_do_combo(self.var_tipo_estrutura.get()),
+            tipo_cobertura=estado_do_combo(self.var_tipo_cobertura.get()),
+        )
+        escolhido = self._escolher_lista(
+            "Trocar reparo",
+            f"Qual reparo usar em '{nome}'?",
+            nomes,
+            dica=dica,
+            selecionar=selecionar,
+        )
+        if not escolhido or escolhido == atual:
+            return
+        reparo = reparos[nomes.index(escolhido)]
+        linha["reparo_id"] = reparo.get("id") or ""
+        linha["reparo_nome"] = reparo.get("nome") or escolhido
+        self._aplicar_percentuais_aba1(
+            list(reparo.get("percentuais_aba1") or []),
+            linha.get("percentual") or "100",
+            origem_nome=nome,
+            excluir_id=linha.get("id"),
+        )
+        self._marcar_sujo()
+        self._registrar_historico("Alterar reparo da anomalia")
+        self._recalcular()
+        self._redesenhar_anomalias_orcamento()
+        if hasattr(self, "tree_anomalias") and self.tree_anomalias.exists(item_id):
+            self.tree_anomalias.selection_set(item_id)
+            self.tree_anomalias.see(item_id)
+
     def _ao_focar_percentual(self, chave):
         self._pct_em_edicao[chave] = self.var_percentuais[chave].get()
 
@@ -2760,6 +3007,11 @@ class AreaComumFrame(tk.Frame):
             and str(anterior or "").strip()
             and self._percentuais_iguais(atual, anterior)
         ):
+            return
+        if chave == "pintura_fachada":
+            self._pintura_fachada_manual = bool(str(atual or "").strip())
+            self._marcar_sujo()
+            self._agendar_calculo()
             return
         ligadas = self._anomalias_que_usam_percentual(chave)
         if not ligadas:
@@ -2787,6 +3039,60 @@ class AreaComumFrame(tk.Frame):
             self._marcar_sujo()
             self._registrar_historico("Sincronizar percentual da anomalia")
             self._recalcular()
+
+    def _percentuais_pintura_das_anomalias(self) -> list[float]:
+        valores = []
+        for linha in self._anomalias_orcamento:
+            if "pintura_fachada" not in self._chaves_percentuais_linha(linha):
+                continue
+            try:
+                valores.append(numero(linha.get("percentual") or "100", percentual=True))
+            except (TypeError, ValueError):
+                continue
+        return valores
+
+    def _pintura_diverge_do_maximo(self) -> bool:
+        valores = self._percentuais_pintura_das_anomalias()
+        if not valores:
+            return False
+        atual = (self.var_percentuais["pintura_fachada"].get() or "").strip()
+        if not atual:
+            return False
+        try:
+            return not self._percentuais_iguais(atual, max(valores))
+        except (TypeError, ValueError):
+            return True
+
+    def _sincronizar_percentual_pintura_fachada(self):
+        if self._pintura_fachada_manual:
+            return
+        valores = self._percentuais_pintura_das_anomalias()
+        if not valores:
+            return
+        fmt = formatar_decimal_br(max(valores))
+        var = self.var_percentuais["pintura_fachada"]
+        atual = (var.get() or "").strip()
+        if atual and self._percentuais_iguais(atual, fmt):
+            return
+        self._sincronizando_percentuais = True
+        try:
+            var.set(fmt)
+        finally:
+            self._sincronizando_percentuais = False
+
+    def _atualizar_rotulo_percentual_pintura(self):
+        if not hasattr(self, "var_percentual_pintura"):
+            return
+        bruto = (self.var_percentuais["pintura_fachada"].get() or "").strip()
+        if not bruto:
+            self.var_percentual_pintura.set("—")
+            return
+        try:
+            texto = formatar_decimal_br(numero(bruto, percentual=True))
+        except (TypeError, ValueError):
+            self.var_percentual_pintura.set("—")
+            return
+        self.var_percentual_pintura.set(f"{texto}%")
 
     def _perguntar_percentual_anomalia(self, nome: str, valor_inicial: str = "100"):
         texto = perguntar_texto(
@@ -3746,6 +4052,7 @@ class AreaComumFrame(tk.Frame):
             sinapi=self.ctx.sinapi,
             uf=uf,
             considerar_servicos_preliminares=bool(self.var_considerar_sp.get()),
+            considerar_pintura=bool(self.var_considerar_pintura.get()),
             considerar_destinacao_entulho=bool(self.var_considerar_entulho.get()),
             considerar_limpeza_geral=bool(self.var_considerar_limpeza.get()),
         )

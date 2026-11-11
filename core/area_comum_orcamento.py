@@ -300,12 +300,14 @@ def _montar_grupo_servicos_preliminares(
 def _flags_etapas_fixas(
     *,
     considerar_servicos_preliminares: bool = True,
+    considerar_pintura: bool = True,
     considerar_destinacao_entulho: bool = True,
     considerar_limpeza_geral: bool = True,
     considerar_etapas_fixas: dict | None = None,
 ) -> dict[str, bool]:
     flags = {
         "servicos_preliminares": bool(considerar_servicos_preliminares),
+        "pintura": bool(considerar_pintura),
         "destinacao_entulho": bool(considerar_destinacao_entulho),
         "limpeza_geral": bool(considerar_limpeza_geral),
     }
@@ -327,17 +329,19 @@ def sincronizar_grupos_anomalias(
     uf: str,
     catalogo_composicoes=None,
     considerar_servicos_preliminares: bool = True,
+    considerar_pintura: bool = True,
     considerar_destinacao_entulho: bool = True,
     considerar_limpeza_geral: bool = True,
     considerar_etapas_fixas: dict | None = None,
 ) -> None:
-    """Reconstrói grupos auto (SP / anomalias / entulho / limpeza) e preserva manuais.
+    """Reconstrói grupos auto (SP / anomalias / pintura / entulho / limpeza) e preserva manuais.
 
     Ordem final: etapas de início → anomalias → manuais → etapas de fim.
     """
     catalogo_composicoes = _catalogo_composicoes(catalogo_composicoes)
     flags = _flags_etapas_fixas(
         considerar_servicos_preliminares=considerar_servicos_preliminares,
+        considerar_pintura=considerar_pintura,
         considerar_destinacao_entulho=considerar_destinacao_entulho,
         considerar_limpeza_geral=considerar_limpeza_geral,
         considerar_etapas_fixas=considerar_etapas_fixas,

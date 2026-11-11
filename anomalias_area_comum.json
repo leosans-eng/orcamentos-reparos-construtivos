@@ -1,83 +1,6 @@
 {
   "versao": 1,
   "anomalias": {
-    "Desplacamento de pisos cerâmicos": {
-      "reparos": [
-        {
-          "id": "abd99789-560c-4186-ae93-141f78bd9d73",
-          "nome": "Reparo padrão",
-          "origem": "etapa_predefinida",
-          "etapa_predefinida_id": "95a7b460-ebbe-4b34-a22d-18e3597327be",
-          "etapa_nome": "SUBSTITUIÇÃO DOS PISOS CERÂMICOS (DESPLACAMENTO/HALL)",
-          "tipo_calculo_etapa": "area_piso_hall_total",
-          "titulo_orcamento": "anomalia_reparo",
-          "titulo_personalizado": "",
-          "percentuais_aba1": [],
-          "itens": [
-            {
-              "id": "09780deb-0618-4420-8767-1b2a6a7780d4",
-              "tipo": "sinapi",
-              "codigo_sinapi": "97633",
-              "unidade": "M2",
-              "da_etapa": true,
-              "fatores": [
-                {
-                  "tipo_calculo": "area_piso_hall_total",
-                  "coeficiente": 1.0
-                }
-              ],
-              "tipo_calculo": "area_piso_hall_total",
-              "coeficiente": 1.0
-            },
-            {
-              "id": "e19c8abe-592b-4410-9080-9568baed8f11",
-              "tipo": "sinapi",
-              "codigo_sinapi": "87256",
-              "unidade": "M2",
-              "da_etapa": true,
-              "fatores": [
-                {
-                  "tipo_calculo": "area_piso_hall_total",
-                  "coeficiente": 1.0
-                }
-              ],
-              "tipo_calculo": "area_piso_hall_total",
-              "coeficiente": 1.0
-            },
-            {
-              "id": "f03099ce-1e64-4a37-a71a-05944c7fb0d1",
-              "tipo": "sinapi",
-              "codigo_sinapi": "97632",
-              "unidade": "M",
-              "da_etapa": true,
-              "fatores": [
-                {
-                  "tipo_calculo": "area_piso_hall_total",
-                  "coeficiente": 1.0
-                }
-              ],
-              "tipo_calculo": "area_piso_hall_total",
-              "coeficiente": 1.0
-            },
-            {
-              "id": "d7c96205-efcf-4fe4-ae77-72f720c8c5e3",
-              "tipo": "sinapi",
-              "codigo_sinapi": "88650",
-              "unidade": "M",
-              "da_etapa": true,
-              "fatores": [
-                {
-                  "tipo_calculo": "area_piso_hall_total",
-                  "coeficiente": 1.0
-                }
-              ],
-              "tipo_calculo": "area_piso_hall_total",
-              "coeficiente": 1.0
-            }
-          ]
-        }
-      ]
-    },
     "TESTE": {
       "reparos": [
         {
@@ -104,13 +27,20 @@
           "percentuais_aba1": [],
           "itens": []
         }
-      ]
+      ],
+      "recomendacao": {
+        "criterio": "tipo_estrutura",
+        "por_opcao": {
+          "Alvenaria Convencional": "e9c10a56-5fd3-4f68-9cdc-d3a589d6cbd8",
+          "Alvenaria Estrutural": "6cd1df7e-8222-441d-8d55-f2ed58548b32"
+        }
+      }
     },
     "Umidade em frisos da fachada": {
       "reparos": [
         {
           "id": "216f8bbe-4011-4182-9f40-e35b0ad48b56",
-          "nome": "Reparo padrão",
+          "nome": "Impermeabilização nos frisos",
           "origem": "etapa_predefinida",
           "etapa_predefinida_id": "896af35a-5dd1-4154-9ba0-8d73d5e882fb",
           "etapa_nome": "IMPERMEABILIZAÇÃO DE MOLDURAS (FACHADAS)",
@@ -125,18 +55,23 @@
               "codigo_sinapi": "99814",
               "unidade": "M2",
               "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "",
               "fatores": [
                 {
                   "tipo_calculo": "perimetro_paredes_externas_bloco",
-                  "coeficiente": 1.0
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
                 },
                 {
                   "tipo_calculo": "pavimentos_friso",
-                  "coeficiente": 1.0
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
                 },
                 {
                   "tipo_calculo": "por_bloco",
-                  "coeficiente": 0.2
+                  "coeficiente": 0.2,
+                  "operacao": "multiplicar"
                 }
               ],
               "tipo_calculo": "perimetro_paredes_externas_bloco",
@@ -148,18 +83,23 @@
               "codigo_sinapi": "98556",
               "unidade": "M2",
               "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "",
               "fatores": [
                 {
                   "tipo_calculo": "perimetro_paredes_externas_bloco",
-                  "coeficiente": 1.0
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
                 },
                 {
                   "tipo_calculo": "pavimentos_friso",
-                  "coeficiente": 1.0
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
                 },
                 {
                   "tipo_calculo": "por_bloco",
-                  "coeficiente": 0.2
+                  "coeficiente": 0.2,
+                  "operacao": "multiplicar"
                 }
               ],
               "tipo_calculo": "perimetro_paredes_externas_bloco",
@@ -171,18 +111,23 @@
               "codigo_sinapi": "102489",
               "unidade": "M2",
               "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "",
               "fatores": [
                 {
                   "tipo_calculo": "perimetro_paredes_externas_bloco",
-                  "coeficiente": 1.0
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
                 },
                 {
                   "tipo_calculo": "pavimentos_friso",
-                  "coeficiente": 1.0
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
                 },
                 {
                   "tipo_calculo": "por_bloco",
-                  "coeficiente": 0.2
+                  "coeficiente": 0.2,
+                  "operacao": "multiplicar"
                 }
               ],
               "tipo_calculo": "perimetro_paredes_externas_bloco",
@@ -190,7 +135,507 @@
             }
           ]
         }
-      ]
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Falta de calhas e faixa de umidade": {
+      "reparos": [
+        {
+          "id": "8e02afe7-2779-443a-b67a-c389063ae604",
+          "nome": "Calha e faixa impermeável",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "8be6e8ca-a663-4cec-9caf-b952ccfbfae8",
+          "etapa_nome": "SISTEMA DE CAPTAÇÃO PLUVIAL (CALHAS BEIRAL) E FAIXA IMPERMEÁVEL",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "b5c65d9e-c69f-4a20-bb26-353f762d8744",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94228",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "perimetro_beiral",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "perimetro_beiral",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "d22a3518-f897-41e3-a793-9a22994027b7",
+              "tipo": "sinapi",
+              "codigo_sinapi": "89578",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "qtd_aguas_telhado",
+                  "coeficiente": 2.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "pe_direito",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "por_pavimento",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "qtd_aguas_telhado",
+              "coeficiente": 2.0
+            },
+            {
+              "id": "2d0e6e45-ee0c-4034-9589-5b6c23121ce8",
+              "tipo": "propria",
+              "composicao_catalogo_id": "6fb8952e-ed0e-4d4f-8279-45a530ae7de6",
+              "codigo": "0033",
+              "nome": "CAIXA DE AREIA 40X40X40CM EM ALVENARIA - EXECUÇÃO",
+              "unidade": "UN",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "fatores": [
+                {
+                  "tipo_calculo": "qtd_aguas_telhado",
+                  "coeficiente": 2.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "pe_direito",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "por_pavimento",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "qtd_aguas_telhado",
+              "coeficiente": 2.0
+            },
+            {
+              "id": "7591bed4-6010-4b19-9b33-8d188f28a002",
+              "tipo": "sinapi",
+              "codigo_sinapi": "89512",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 8.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "qtd_aguas_telhado",
+                  "coeficiente": 2.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "pe_direito",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "por_pavimento",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                },
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "qtd_aguas_telhado",
+              "coeficiente": 2.0
+            },
+            {
+              "id": "9e0db0af-f9d5-4df6-bd92-74fa0436abab",
+              "tipo": "sinapi",
+              "codigo_sinapi": "99814",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "perimetro_paredes_externas_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "perimetro_paredes_externas_total",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "da2e7d36-c13b-4ddb-a596-e2e26648fad6",
+              "tipo": "sinapi",
+              "codigo_sinapi": "98556",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "perimetro_paredes_externas_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "perimetro_paredes_externas_total",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "04aeae48-8319-4115-b2ca-3c849188f40f",
+              "tipo": "sinapi",
+              "codigo_sinapi": "102489",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "perimetro_paredes_externas_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "perimetro_paredes_externas_total",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Falha de peitoris/pingadeiras das janelas": {
+      "reparos": [
+        {
+          "id": "735561c0-5342-4b6f-b92e-898dc8020e20",
+          "nome": "Troca de peitoris",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "c578cda6-0830-4509-bde6-959097a909ba",
+          "etapa_nome": "SUBSTITUIÇÃO DOS PEITORIS/PINGADEIRAS DAS JANELAS",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "1d3e095f-0c24-4a69-aed2-048187aedbbe",
+              "tipo": "sinapi",
+              "codigo_sinapi": "88309",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pingadeira_total",
+                  "coeficiente": 0.8,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pingadeira_total",
+              "coeficiente": 0.8
+            },
+            {
+              "id": "da223866-8593-458b-9c78-b09539750495",
+              "tipo": "sinapi",
+              "codigo_sinapi": "101965",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pingadeira_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pingadeira_total",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Falta de peitoris/pingadeiras nas janelas": {
+      "reparos": [
+        {
+          "id": "89a63161-449a-41fb-a78d-875a4ed5fa73",
+          "nome": "Instalação de pingadeira",
+          "origem": "itens",
+          "etapa_predefinida_id": "",
+          "etapa_nome": "",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "personalizado",
+          "titulo_personalizado": "INSTALAÇÃO DE PEITORIS/PINGADEIRAS NAS JANELAS",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "0e37b227-447f-4e7a-afb2-565ff972f701",
+              "tipo": "sinapi",
+              "codigo_sinapi": "101965",
+              "unidade": "M",
+              "da_etapa": false,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pingadeira_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pingadeira_total",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Infiltração pelas esquadrias": {
+      "reparos": [
+        {
+          "id": "2af42f44-fd84-473e-9b1e-c562624c31b5",
+          "nome": "Reinstalação das janelas e vedação",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "6856c9eb-fb36-4ac7-8d4c-525513982a6a",
+          "etapa_nome": "REINSTALAÇÃO E VEDAÇÃO DE JANELAS",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "143b83a4-5fba-4ae4-b0ba-ae9b5361b6d8",
+              "tipo": "sinapi",
+              "codigo_sinapi": "4750",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "I",
+              "fatores": [
+                {
+                  "tipo_calculo": "esquadria_qtd_janelas",
+                  "coeficiente": 0.8,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "esquadria_qtd_janelas",
+              "coeficiente": 0.8
+            },
+            {
+              "id": "525c3717-e921-451b-98fc-6d3350897e53",
+              "tipo": "sinapi",
+              "codigo_sinapi": "6127",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "I",
+              "fatores": [
+                {
+                  "tipo_calculo": "esquadria_qtd_janelas",
+                  "coeficiente": 0.8,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "esquadria_qtd_janelas",
+              "coeficiente": 0.8
+            },
+            {
+              "id": "86d31ab2-3a60-4c5f-82e1-3a7e24a6dbd9",
+              "tipo": "propria",
+              "composicao_catalogo_id": "8eb3a911-15dd-4705-a1ee-9f52f354d258",
+              "codigo": "0024",
+              "nome": "VEDAÇÃO DE JANELAS COM SELANTE À BASE DE POLIURETANO",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "fatores": [
+                {
+                  "tipo_calculo": "esquadria_perimetro_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "esquadria_perimetro_total",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Janelas não estanques": {
+      "reparos": [
+        {
+          "id": "6c8abf4f-9386-434b-98e4-57ef74e89bf1",
+          "nome": "Veneziana",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "215caa8f-b233-4072-b07e-0cd2c506cb55",
+          "etapa_nome": "SUBSTITUIÇÃO DE ESQUADRIAS NÃO ESTANQUES",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "6ea467d2-094f-44a6-a0d0-be5dc6185df9",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97645",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "esquadria_area_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "esquadria_area_total",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "31341c6e-84ad-4624-93c9-c42744baeea8",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94572",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "esquadria_area_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "esquadria_area_total",
+              "coeficiente": 1.0
+            }
+          ]
+        },
+        {
+          "id": "147b142d-f7fa-450b-958d-e18b241025e8",
+          "nome": "Vidro",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "215caa8f-b233-4072-b07e-0cd2c506cb55",
+          "etapa_nome": "SUBSTITUIÇÃO DE ESQUADRIAS NÃO ESTANQUES",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "f9bf9232-aebd-4c1e-a1d9-48ac86cb04e8",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97645",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "esquadria_area_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "esquadria_area_total",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "f842fe27-c6e5-4d26-9278-1cca861f3f96",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94570",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "esquadria_area_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "esquadria_area_total",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Infiltração pelos cobogós": {
+      "reparos": [
+        {
+          "id": "65f89c49-f0e7-4449-8d36-49958edda1ae",
+          "nome": "Instalação de janelas",
+          "origem": "itens",
+          "etapa_predefinida_id": "",
+          "etapa_nome": "",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "anomalia_reparo",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": []
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
     }
   },
   "servicos_preliminares": {
@@ -204,10 +649,12 @@
         "nome": "PROJETOS E LAUDOS DE REFORMA",
         "unidade": "H",
         "da_etapa": true,
+        "multiplicador": 1.0,
         "fatores": [
           {
             "tipo_calculo": "por_bloco",
-            "coeficiente": 2.0
+            "coeficiente": 2.0,
+            "operacao": "multiplicar"
           }
         ],
         "tipo_calculo": "por_bloco",
@@ -221,18 +668,22 @@
         "nome": "ADMINISTRAÇÃO LOCAL",
         "unidade": "H",
         "da_etapa": true,
+        "multiplicador": 1.0,
         "fatores": [
           {
             "tipo_calculo": "por_bloco",
-            "coeficiente": 0.8
+            "coeficiente": 0.8,
+            "operacao": "multiplicar"
           },
           {
             "tipo_calculo": "fixo",
-            "coeficiente": 20.0
+            "coeficiente": 20.0,
+            "operacao": "multiplicar"
           },
           {
             "tipo_calculo": "fixo",
-            "coeficiente": 4.0
+            "coeficiente": 4.0,
+            "operacao": "multiplicar"
           }
         ],
         "tipo_calculo": "por_bloco",
@@ -246,14 +697,17 @@
         "nome": "ALUGUEL DE ANDAIME FACHADEIRO",
         "unidade": "M²xMês",
         "da_etapa": true,
+        "multiplicador": 1.0,
         "fatores": [
           {
             "tipo_calculo": "por_bloco",
-            "coeficiente": 1.0
+            "coeficiente": 1.0,
+            "operacao": "multiplicar"
           },
           {
             "tipo_calculo": "area_fachada_bloco",
-            "coeficiente": 0.8
+            "coeficiente": 0.8,
+            "operacao": "multiplicar"
           }
         ],
         "tipo_calculo": "por_bloco",
@@ -265,14 +719,130 @@
         "codigo_sinapi": "10775",
         "unidade": "MES",
         "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "",
         "fatores": [
           {
             "tipo_calculo": "por_bloco",
-            "coeficiente": 0.8
+            "coeficiente": 0.8,
+            "operacao": "multiplicar"
           }
         ],
         "tipo_calculo": "por_bloco",
         "coeficiente": 0.8
+      }
+    ]
+  },
+  "pintura": {
+    "nome": "PINTURA EM FACHADAS E HALL POR CONSEQUÊNCIAS DAS INTERVENÇÕES NECESSÁRIAS PARA REPARO DOS VÍCIOS CONSTRUTIVOS",
+    "itens": [
+      {
+        "id": "a897204b-1b10-49a9-b962-56bd2d628c0a",
+        "tipo": "sinapi",
+        "codigo_sinapi": "88411",
+        "unidade": "M2",
+        "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "C",
+        "fatores": [
+          {
+            "tipo_calculo": "pct_pintura_fachada",
+            "coeficiente": 2.0,
+            "operacao": "multiplicar"
+          }
+        ],
+        "tipo_calculo": "pct_pintura_fachada",
+        "coeficiente": 2.0
+      },
+      {
+        "id": "266bca53-c7f5-4fe8-8dc0-8affb828057b",
+        "tipo": "sinapi",
+        "codigo_sinapi": "88424",
+        "unidade": "M2",
+        "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "C",
+        "fatores": [
+          {
+            "tipo_calculo": "pct_pintura_fachada",
+            "coeficiente": 1.0,
+            "operacao": "multiplicar"
+          }
+        ],
+        "tipo_calculo": "pct_pintura_fachada",
+        "coeficiente": 1.0
+      },
+      {
+        "id": "ba6474b9-2381-47b4-b9b1-c4035588bc07",
+        "tipo": "sinapi",
+        "codigo_sinapi": "88485",
+        "unidade": "M2",
+        "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "C",
+        "fatores": [
+          {
+            "tipo_calculo": "pct_pintura_fachada",
+            "coeficiente": 2.0,
+            "operacao": "multiplicar"
+          }
+        ],
+        "tipo_calculo": "pct_pintura_fachada",
+        "coeficiente": 2.0
+      },
+      {
+        "id": "8a9d6daa-0ced-410f-bf7a-40405d5c9962",
+        "tipo": "sinapi",
+        "codigo_sinapi": "104642",
+        "unidade": "M2",
+        "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "C",
+        "fatores": [
+          {
+            "tipo_calculo": "pct_pintura_fachada",
+            "coeficiente": 1.0,
+            "operacao": "multiplicar"
+          }
+        ],
+        "tipo_calculo": "pct_pintura_fachada",
+        "coeficiente": 1.0
+      },
+      {
+        "id": "548b1150-0e21-4607-a22a-fad4833dddb9",
+        "tipo": "sinapi",
+        "codigo_sinapi": "88484",
+        "unidade": "M2",
+        "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "C",
+        "fatores": [
+          {
+            "tipo_calculo": "pct_pintura_fachada",
+            "coeficiente": 2.0,
+            "operacao": "multiplicar"
+          }
+        ],
+        "tipo_calculo": "pct_pintura_fachada",
+        "coeficiente": 2.0
+      },
+      {
+        "id": "d9a8ee7b-3190-4479-a165-ceb2735e0114",
+        "tipo": "sinapi",
+        "codigo_sinapi": "104640",
+        "unidade": "M2",
+        "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "C",
+        "fatores": [
+          {
+            "tipo_calculo": "pct_pintura_fachada",
+            "coeficiente": 1.0,
+            "operacao": "multiplicar"
+          }
+        ],
+        "tipo_calculo": "pct_pintura_fachada",
+        "coeficiente": 1.0
       }
     ]
   },
@@ -285,14 +855,77 @@
         "codigo_sinapi": "100981",
         "unidade": "M3",
         "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "",
         "fatores": [
           {
-            "tipo_calculo": "fixo",
-            "coeficiente": 1.0
+            "tipo_calculo": "pct_troca_estrutura_cobertura",
+            "coeficiente": 0.03,
+            "operacao": "multiplicar"
+          },
+          {
+            "tipo_calculo": "pct_troca_telhas_cobertura",
+            "coeficiente": 0.02,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pingadeira_total",
+            "coeficiente": 0.006,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_pisos_hall",
+            "coeficiente": 0.02,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_rodape_hall",
+            "coeficiente": 0.0014,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_revestimento_fachada",
+            "coeficiente": 0.02,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_revestimento_paredes_hall",
+            "coeficiente": 0.02,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_pintura_fachada",
+            "coeficiente": 0.01,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_pintura_paredes_hall",
+            "coeficiente": 0.01,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_pintura_teto_hall",
+            "coeficiente": 0.01,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_calcadas",
+            "coeficiente": 1.0,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_tampas_inspecao",
+            "coeficiente": 0.07,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_tampas_gordura",
+            "coeficiente": 0.02826,
+            "operacao": "somar"
           }
         ],
-        "tipo_calculo": "fixo",
-        "coeficiente": 1.0
+        "tipo_calculo": "pct_troca_estrutura_cobertura",
+        "coeficiente": 0.03
       },
       {
         "id": "0b161929-4cc0-4334-afb7-972d5a381f2c",
@@ -300,14 +933,77 @@
         "codigo_sinapi": "97914",
         "unidade": "M3XKM",
         "da_etapa": true,
+        "multiplicador": 30.0,
+        "tipo_sinapi": "",
         "fatores": [
           {
-            "tipo_calculo": "fixo",
-            "coeficiente": 1.0
+            "tipo_calculo": "pct_troca_estrutura_cobertura",
+            "coeficiente": 0.03,
+            "operacao": "multiplicar"
+          },
+          {
+            "tipo_calculo": "pct_troca_telhas_cobertura",
+            "coeficiente": 0.02,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pingadeira_total",
+            "coeficiente": 0.006,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_pisos_hall",
+            "coeficiente": 0.02,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_rodape_hall",
+            "coeficiente": 0.0014,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_revestimento_fachada",
+            "coeficiente": 0.02,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_revestimento_paredes_hall",
+            "coeficiente": 0.02,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_pintura_fachada",
+            "coeficiente": 0.01,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_pintura_paredes_hall",
+            "coeficiente": 0.01,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_pintura_teto_hall",
+            "coeficiente": 0.01,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_calcadas",
+            "coeficiente": 1.0,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_tampas_inspecao",
+            "coeficiente": 0.07,
+            "operacao": "somar"
+          },
+          {
+            "tipo_calculo": "pct_troca_tampas_gordura",
+            "coeficiente": 0.02826,
+            "operacao": "somar"
           }
         ],
-        "tipo_calculo": "fixo",
-        "coeficiente": 1.0
+        "tipo_calculo": "pct_troca_estrutura_cobertura",
+        "coeficiente": 0.03
       }
     ]
   },
@@ -320,14 +1016,22 @@
         "codigo_sinapi": "99811",
         "unidade": "M2",
         "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "",
         "fatores": [
           {
-            "tipo_calculo": "fixo",
-            "coeficiente": 1.0
+            "tipo_calculo": "perimetro_paredes_externas_total",
+            "coeficiente": 0.5,
+            "operacao": "multiplicar"
+          },
+          {
+            "tipo_calculo": "area_laje_hall_total",
+            "coeficiente": 1.0,
+            "operacao": "somar"
           }
         ],
-        "tipo_calculo": "fixo",
-        "coeficiente": 1.0
+        "tipo_calculo": "perimetro_paredes_externas_total",
+        "coeficiente": 0.5
       },
       {
         "id": "ad38f557-6b2b-4e84-985d-f71eba157176",
@@ -335,14 +1039,17 @@
         "codigo_sinapi": "101452",
         "unidade": "MES",
         "da_etapa": true,
+        "multiplicador": 1.0,
+        "tipo_sinapi": "",
         "fatores": [
           {
-            "tipo_calculo": "fixo",
-            "coeficiente": 1.0
+            "tipo_calculo": "por_bloco",
+            "coeficiente": 0.8,
+            "operacao": "multiplicar"
           }
         ],
-        "tipo_calculo": "fixo",
-        "coeficiente": 1.0
+        "tipo_calculo": "por_bloco",
+        "coeficiente": 0.8
       }
     ]
   }

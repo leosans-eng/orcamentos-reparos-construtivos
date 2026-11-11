@@ -49,6 +49,8 @@ CAMPOS_MEDIDA_EDITAVEIS = (
     ("altura_platibanda_m", "Altura da platibanda (m)"),
     ("caixas_inspecao_bloco", "Caixas de inspeção (um bloco)"),
     ("caixas_gordura_bloco", "Caixas de gordura (um bloco)"),
+    ("calcadas_caminhos_m2", "Calçadas e caminhos (m²)"),
+    ("fissuras_m", "Fissuras/trincas/rachaduras (m)"),
 )
 
 CAMPOS_MEDIDA_AUTO = (
@@ -70,7 +72,9 @@ CAMPOS_RESUMO_FACHADA = (
     ("esquadria_area_pav_m2", "Área de esquadrias (por pavimento)", "m²"),
     ("esquadria_area_total_m2", "Área de esquadrias (total)", "m²"),
     ("esquadria_perimetro_pav_m", "Perímetro de esquadrias (por pavimento)", "m"),
+    ("esquadria_perimetro_total_m", "Perímetro de esquadrias (total)", "m"),
     ("pingadeira_total_m", "Pingadeira (total)", "m"),
+    ("esquadria_qtd_janelas_total", "Quantidade de esquadrias (janelas, total)", ""),
     ("area_fachada_bloco_m2", "Área de fachada (por bloco, sem esquadrias)", "m²"),
     ("area_fachada_total_m2", "Área de fachada (total, sem esquadrias)", "m²"),
 )
@@ -158,6 +162,27 @@ PERCENTUAIS_MODELO = (
         "Pintura do teto do hall",
         "",
         "pct_pintura_teto_hall_m2",
+        "m²",
+    ),
+    (
+        "troca_tampas_inspecao",
+        "Troca de tampas das caixas de inspeção",
+        "",
+        "pct_troca_tampas_inspecao_un",
+        "un",
+    ),
+    (
+        "troca_tampas_gordura",
+        "Troca de tampas das caixas de gordura",
+        "",
+        "pct_troca_tampas_gordura_un",
+        "un",
+    ),
+    (
+        "troca_calcadas",
+        "Troca de calçadas e caminhos",
+        "",
+        "pct_troca_calcadas_m2",
         "m²",
     ),
 )
@@ -314,6 +339,8 @@ def novo_rascunho() -> dict:
         "esquadrias": [esquadria_vazia(item) for item in ESQUADRIAS_MODELO],
         "anomalias_orcamento": [],
         "considerar_servicos_preliminares": True,
+        "considerar_pintura": True,
+        "pintura_fachada_manual": False,
         "considerar_destinacao_entulho": True,
         "considerar_limpeza_geral": True,
         "extras_orcamento": [],
@@ -445,6 +472,12 @@ def normalizar_rascunho(dados) -> dict:
         )
     else:
         base["considerar_servicos_preliminares"] = True
+    if "considerar_pintura" in dados:
+        base["considerar_pintura"] = bool(dados.get("considerar_pintura"))
+    else:
+        base["considerar_pintura"] = True
+    if "pintura_fachada_manual" in dados:
+        base["pintura_fachada_manual"] = bool(dados.get("pintura_fachada_manual"))
     if "considerar_destinacao_entulho" in dados:
         base["considerar_destinacao_entulho"] = bool(
             dados.get("considerar_destinacao_entulho")

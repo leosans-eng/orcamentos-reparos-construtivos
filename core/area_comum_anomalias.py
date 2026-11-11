@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -11,16 +12,21 @@ from app_paths import (
     anomalias_area_comum_path,
     anomalias_area_comum_path_gravacao,
 )
-from core.area_comum import PERCENTUAIS_MODELO, novo_id
+from core.area_comum import PERCENTUAIS_MODELO, TIPOS_COBERTURA, TIPOS_ESTRUTURA, novo_id
 from core.area_comum_calculos import numero
 from core.etapas_predefinidas import TIPO_ITEM_PROPRIA, TIPO_ITEM_SINAPI
 
 VERSAO_CATALOGO = 1
 
+CRITERIO_NENHUM = ""
+CRITERIO_ESTRUTURA = "tipo_estrutura"
+CRITERIO_COBERTURA = "tipo_cobertura"
+
 ORIGEM_ITENS = "itens"
 ORIGEM_ETAPA = "etapa_predefinida"
 
 CHAVE_SERVICOS_PRELIMINARES = "servicos_preliminares"
+CHAVE_PINTURA = "pintura"
 CHAVE_DESTINACAO_ENTULHO = "destinacao_entulho"
 CHAVE_LIMPEZA_GERAL = "limpeza_geral"
 
@@ -32,10 +38,11 @@ TIPO_ITEM_CATALOGO_SINAPI = TIPO_ITEM_SINAPI
 TIPO_ITEM_CATALOGO_PROPRIA = TIPO_ITEM_PROPRIA
 
 NOME_SERVICOS_PRELIMINARES = "SERVIÇOS PRELIMINARES"
+NOME_PINTURA = "PINTURA"
 NOME_DESTINACAO_ENTULHO = "DESTINAÇÃO DO ENTULHO"
 NOME_LIMPEZA_GERAL = "LIMPEZA GERAL"
 
-# Etapas fixas do orçamento: início (SP) e fim (entulho, limpeza).
+# Etapas fixas do orçamento: início (SP) e fim (pintura, entulho, limpeza).
 ETAPAS_ORCAMENTO_FIXAS = (
     {
         "chave": CHAVE_SERVICOS_PRELIMINARES,
@@ -45,18 +52,25 @@ ETAPAS_ORCAMENTO_FIXAS = (
         "ordem": 0,
     },
     {
+        "chave": CHAVE_PINTURA,
+        "nome": NOME_PINTURA,
+        "rotulo": "Pintura",
+        "posicao": "fim",
+        "ordem": 0,
+    },
+    {
         "chave": CHAVE_DESTINACAO_ENTULHO,
         "nome": NOME_DESTINACAO_ENTULHO,
         "rotulo": "Destinação do entulho",
         "posicao": "fim",
-        "ordem": 0,
+        "ordem": 1,
     },
     {
         "chave": CHAVE_LIMPEZA_GERAL,
         "nome": NOME_LIMPEZA_GERAL,
         "rotulo": "Limpeza geral",
         "posicao": "fim",
-        "ordem": 1,
+        "ordem": 2,
     },
 )
 ORIGENS_ETAPAS_FIXAS = {item["chave"] for item in ETAPAS_ORCAMENTO_FIXAS}
@@ -95,6 +109,8 @@ TIPOS_CALCULO = (
     "perimetro_beiral",
     "pingadeira_total",
     "esquadria_area_total",
+    "esquadria_perimetro_total",
+    "esquadria_qtd_janelas",
     "pct_troca_revestimento_fachada",
     "pct_troca_revestimento_paredes_hall",
     "pct_troca_revestimento_tetos_hall",
@@ -107,6 +123,13 @@ TIPOS_CALCULO = (
     "pct_pintura_fachada",
     "pct_pintura_paredes_hall",
     "pct_pintura_teto_hall",
+    "pct_troca_tampas_inspecao",
+    "pct_troca_tampas_gordura",
+    "pct_troca_calcadas",
+    "calcadas_caminhos",
+    "fissuras",
+    "qtd_aguas_telhado",
+    "pe_direito",
     "por_bloco",
     "por_pavimento",
     "pavimentos_friso",
@@ -128,6 +151,8 @@ ROTULOS_TIPO_CALCULO = {
     "perimetro_beiral": "Perímetro de beiral (calha)",
     "pingadeira_total": "Pingadeira (total)",
     "esquadria_area_total": "Área de esquadrias (total)",
+    "esquadria_perimetro_total": "Perímetro das janelas",
+    "esquadria_qtd_janelas": "Quantidade de janelas",
     "pct_troca_revestimento_fachada": "% Troca de revestimento da fachada",
     "pct_troca_revestimento_paredes_hall": "% Troca de revestimento das paredes dos halls",
     "pct_troca_revestimento_tetos_hall": "% Troca de revestimento dos tetos dos halls",
@@ -140,6 +165,13 @@ ROTULOS_TIPO_CALCULO = {
     "pct_pintura_fachada": "% Pintura da fachada",
     "pct_pintura_paredes_hall": "% Pintura das paredes do hall",
     "pct_pintura_teto_hall": "% Pintura do teto do hall",
+    "pct_troca_tampas_inspecao": "% Troca de tampas das caixas de inspeção",
+    "pct_troca_tampas_gordura": "% Troca de tampas das caixas de gordura",
+    "pct_troca_calcadas": "% Troca de calçadas e caminhos",
+    "calcadas_caminhos": "Calçadas e caminhos",
+    "fissuras": "Fissuras/trincas/rachaduras",
+    "qtd_aguas_telhado": "Quantidade de águas do telhado",
+    "pe_direito": "Pé-direito",
     "por_bloco": "Por bloco",
     "por_pavimento": "Por pavimento",
     "pavimentos_friso": "Pavimentos − 1",
@@ -161,6 +193,8 @@ ROTULOS_CURTOS_TIPO_CALCULO = {
     "perimetro_beiral": "beiral",
     "pingadeira_total": "pingadeira",
     "esquadria_area_total": "esquadrias",
+    "esquadria_perimetro_total": "perím. janelas",
+    "esquadria_qtd_janelas": "janelas",
     "pct_troca_revestimento_fachada": "% revest. fachada",
     "pct_troca_revestimento_paredes_hall": "% revest. paredes",
     "pct_troca_revestimento_tetos_hall": "% revest. tetos",
@@ -173,6 +207,13 @@ ROTULOS_CURTOS_TIPO_CALCULO = {
     "pct_pintura_fachada": "% pintura fachada",
     "pct_pintura_paredes_hall": "% pintura paredes",
     "pct_pintura_teto_hall": "% pintura teto",
+    "pct_troca_tampas_inspecao": "% tampas inspeção",
+    "pct_troca_tampas_gordura": "% tampas gordura",
+    "pct_troca_calcadas": "% calçadas",
+    "calcadas_caminhos": "calçadas",
+    "fissuras": "fissuras",
+    "qtd_aguas_telhado": "águas",
+    "pe_direito": "pé-direito",
     "por_bloco": "blocos",
     "por_pavimento": "pavimentos",
     "pavimentos_friso": "pavimentos−1",
@@ -194,6 +235,8 @@ MAPA_TIPO_QUANTITATIVO = {
     "perimetro_beiral": "perimetro_beiral_m",
     "pingadeira_total": "pingadeira_total_m",
     "esquadria_area_total": "esquadria_area_total_m2",
+    "esquadria_perimetro_total": "esquadria_perimetro_total_m",
+    "esquadria_qtd_janelas": "esquadria_qtd_janelas_total",
     "pct_troca_revestimento_fachada": "pct_troca_revestimento_fachada_m2",
     "pct_troca_revestimento_paredes_hall": "pct_troca_revestimento_paredes_hall_m2",
     "pct_troca_revestimento_tetos_hall": "pct_troca_revestimento_tetos_hall_m2",
@@ -206,6 +249,13 @@ MAPA_TIPO_QUANTITATIVO = {
     "pct_pintura_fachada": "pct_pintura_fachada_m2",
     "pct_pintura_paredes_hall": "pct_pintura_paredes_hall_m2",
     "pct_pintura_teto_hall": "pct_pintura_teto_hall_m2",
+    "pct_troca_tampas_inspecao": "pct_troca_tampas_inspecao_un",
+    "pct_troca_tampas_gordura": "pct_troca_tampas_gordura_un",
+    "pct_troca_calcadas": "pct_troca_calcadas_m2",
+    "calcadas_caminhos": "calcadas_caminhos_m2",
+    "fissuras": "fissuras_m",
+    "qtd_aguas_telhado": "qtd_aguas_telhado",
+    "pe_direito": "pe_direito_m",
     "por_bloco": "qtd_blocos",
     "por_pavimento": "qtd_pavimentos",
     "pavimentos_friso": "pavimentos_friso",
@@ -254,15 +304,24 @@ def _coeficiente_item(coeficiente) -> float:
         return 1.0
 
 
+OPERACAO_MULTIPLICAR = "multiplicar"
+OPERACAO_SOMAR = "somar"
+
+
 def novo_fator(
     *,
     tipo_calculo: str = "fixo",
     coeficiente: float = 1.0,
+    operacao: str = OPERACAO_MULTIPLICAR,
 ) -> dict[str, Any]:
     tipo = str(tipo_calculo or "fixo")
+    junta = str(operacao or OPERACAO_MULTIPLICAR)
+    if junta not in (OPERACAO_MULTIPLICAR, OPERACAO_SOMAR):
+        junta = OPERACAO_MULTIPLICAR
     return {
         "tipo_calculo": tipo if tipo in TIPOS_CALCULO else "fixo",
         "coeficiente": _coeficiente_item(coeficiente),
+        "operacao": junta,
     }
 
 
@@ -279,9 +338,11 @@ def normalizar_fatores(bruto) -> list[dict[str, Any]]:
                     novo_fator(
                         tipo_calculo=item.get("tipo_calculo") or "fixo",
                         coeficiente=item.get("coeficiente", 1),
+                        operacao=item.get("operacao") or OPERACAO_MULTIPLICAR,
                     )
                 )
             if fatores:
+                fatores[0]["operacao"] = OPERACAO_MULTIPLICAR
                 return fatores
         return [
             novo_fator(
@@ -298,9 +359,11 @@ def normalizar_fatores(bruto) -> list[dict[str, Any]]:
                 novo_fator(
                     tipo_calculo=item.get("tipo_calculo") or "fixo",
                     coeficiente=item.get("coeficiente", 1),
+                    operacao=item.get("operacao") or OPERACAO_MULTIPLICAR,
                 )
             )
         if fatores:
+            fatores[0]["operacao"] = OPERACAO_MULTIPLICAR
             return fatores
     return [novo_fator()]
 
@@ -314,6 +377,38 @@ def _aplicar_fatores_no_item(item: dict[str, Any], fatores: list[dict[str, Any]]
     return item
 
 
+def _multiplicador_item(valor) -> float:
+    try:
+        numero = float(valor if valor not in (None, "") else 1)
+    except (TypeError, ValueError):
+        return 1.0
+    return numero
+
+
+def _letra_tipo_sinapi(valor) -> str:
+    letra = str(valor or "").strip().upper()[:1]
+    return letra if letra in ("I", "C") else ""
+
+
+def rotulo_tipo_item_catalogo(item, sinapi=None) -> str:
+    """Rótulo da coluna Tipo: composição própria ou SINAPI insumo/composição."""
+    dados = item or {}
+    if str(dados.get("tipo") or "") == TIPO_ITEM_CATALOGO_PROPRIA:
+        return "Composição própria"
+    letra = _letra_tipo_sinapi(dados.get("tipo_sinapi"))
+    if not letra and sinapi is not None:
+        codigo = dados.get("codigo_sinapi") or dados.get("codigo") or ""
+        try:
+            letra = _letra_tipo_sinapi(sinapi.obter_tipo(str(codigo)))
+        except (AttributeError, TypeError, ValueError):
+            letra = ""
+    if letra == "I":
+        return "SINAPI · Insumo"
+    if letra == "C":
+        return "SINAPI · Composição"
+    return "SINAPI"
+
+
 def novo_item_sinapi(
     *,
     codigo_sinapi: str = "",
@@ -322,6 +417,8 @@ def novo_item_sinapi(
     coeficiente: float = 1.0,
     fatores: list | None = None,
     da_etapa: bool = False,
+    multiplicador: float = 1.0,
+    tipo_sinapi: str = "",
 ) -> dict[str, Any]:
     item = {
         "id": novo_id(),
@@ -329,6 +426,8 @@ def novo_item_sinapi(
         "codigo_sinapi": str(codigo_sinapi).strip(),
         "unidade": str(unidade or "m²").strip(),
         "da_etapa": bool(da_etapa),
+        "multiplicador": _multiplicador_item(multiplicador),
+        "tipo_sinapi": _letra_tipo_sinapi(tipo_sinapi),
     }
     return _aplicar_fatores_no_item(
         item,
@@ -348,6 +447,7 @@ def novo_item_composicao_propria(
     coeficiente: float = 1.0,
     fatores: list | None = None,
     da_etapa: bool = False,
+    multiplicador: float = 1.0,
 ) -> dict[str, Any]:
     item = {
         "id": novo_id(),
@@ -357,6 +457,7 @@ def novo_item_composicao_propria(
         "nome": str(nome or "").strip(),
         "unidade": str(unidade or "un").strip(),
         "da_etapa": bool(da_etapa),
+        "multiplicador": _multiplicador_item(multiplicador),
     }
     return _aplicar_fatores_no_item(
         item,
@@ -386,6 +487,7 @@ def _normalizar_item_catalogo(bruto: dict) -> dict[str, Any] | None:
             unidade=bruto.get("unidade") or "un",
             fatores=fatores,
             da_etapa=bool(bruto.get("da_etapa")),
+            multiplicador=bruto.get("multiplicador", 1),
         )
     else:
         novo = novo_item_sinapi(
@@ -393,6 +495,8 @@ def _normalizar_item_catalogo(bruto: dict) -> dict[str, Any] | None:
             unidade=bruto.get("unidade") or "m²",
             fatores=fatores,
             da_etapa=bool(bruto.get("da_etapa")),
+            multiplicador=bruto.get("multiplicador", 1),
+            tipo_sinapi=bruto.get("tipo_sinapi", ""),
         )
     if bruto.get("id"):
         novo["id"] = str(bruto.get("id"))
@@ -465,6 +569,10 @@ def itens_servicos_da_etapa(
                 unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
                 fatores=fatores,
                 da_etapa=True,
+                multiplicador=(anterior or {}).get("multiplicador", 1),
+                tipo_sinapi=(anterior or {}).get("tipo_sinapi")
+                or ref.get("tipo_sinapi")
+                or "",
             )
             if anterior and anterior.get("id"):
                 novo["id"] = str(anterior.get("id"))
@@ -486,6 +594,7 @@ def itens_servicos_da_etapa(
                 unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
                 fatores=fatores,
                 da_etapa=True,
+                multiplicador=(anterior or {}).get("multiplicador", 1),
             )
             if anterior and anterior.get("id"):
                 novo["id"] = str(anterior.get("id"))
@@ -520,9 +629,80 @@ def novo_reparo(*, nome: str = "Reparo padrão", origem: str = ORIGEM_ITENS) -> 
     }
 
 
+def recomendacao_vazia() -> dict[str, Any]:
+    return {"criterio": CRITERIO_NENHUM, "por_opcao": {}}
+
+
+def opcoes_do_criterio(criterio: str) -> tuple[str, ...]:
+    if criterio == CRITERIO_ESTRUTURA:
+        return TIPOS_ESTRUTURA
+    if criterio == CRITERIO_COBERTURA:
+        return TIPOS_COBERTURA
+    return ()
+
+
+def normalizar_recomendacao(bruto, reparos) -> dict[str, Any]:
+    ids = {
+        str(reparo.get("id") or "")
+        for reparo in reparos or []
+        if isinstance(reparo, dict) and reparo.get("id")
+    }
+    criterio = CRITERIO_NENHUM
+    por_bruto: dict = {}
+    if isinstance(bruto, dict):
+        candidato = str(bruto.get("criterio") or "")
+        if candidato in (CRITERIO_ESTRUTURA, CRITERIO_COBERTURA):
+            criterio = candidato
+        origem = bruto.get("por_opcao")
+        if isinstance(origem, dict):
+            por_bruto = origem
+    por_opcao = {}
+    for opcao in opcoes_do_criterio(criterio):
+        reparo_id = str(por_bruto.get(opcao) or "")
+        if reparo_id in ids:
+            por_opcao[opcao] = reparo_id
+    return {"criterio": criterio, "por_opcao": por_opcao}
+
+
+def reparo_recomendado(
+    anomalia: dict | None,
+    *,
+    tipo_estrutura: str = "",
+    tipo_cobertura: str = "",
+) -> tuple[dict | None, str]:
+    """Reparo sugerido e o texto da dica. Sem critério, a dica fica vazia."""
+    if not isinstance(anomalia, dict):
+        return None, ""
+    rec = normalizar_recomendacao(
+        anomalia.get("recomendacao"), anomalia.get("reparos") or []
+    )
+    criterio = rec.get("criterio") or CRITERIO_NENHUM
+    if criterio == CRITERIO_ESTRUTURA:
+        campo = "Tipo de estrutura"
+        valor = str(tipo_estrutura or "").strip()
+    elif criterio == CRITERIO_COBERTURA:
+        campo = "Tipo de cobertura"
+        valor = str(tipo_cobertura or "").strip()
+    else:
+        return None, ""
+    if not valor:
+        return None, f"Defina o {campo} na aba 1 para indicar o reparo recomendado."
+    reparo_id = str((rec.get("por_opcao") or {}).get(valor) or "")
+    reparos = [r for r in (anomalia.get("reparos") or []) if isinstance(r, dict)]
+    reparo = next(
+        (item for item in reparos if str(item.get("id") or "") == reparo_id),
+        None,
+    )
+    if reparo is None:
+        return None, f"Não há reparo recomendado para {valor}."
+    nome = str(reparo.get("nome") or "Reparo").strip() or "Reparo"
+    return reparo, f"Reparo recomendado para {valor}: {nome}."
+
+
 def nova_anomalia(nome: str) -> dict[str, Any]:
     return {
         "reparos": [novo_reparo(nome="Reparo padrão")],
+        "recomendacao": recomendacao_vazia(),
     }
 
 
@@ -666,7 +846,12 @@ def normalizar_catalogo(dados) -> dict[str, Any]:
                 reparos.append(reparo)
         if not reparos:
             reparos = [novo_reparo(nome="Reparo padrão")]
-        base["anomalias"][titulo] = {"reparos": reparos}
+        base["anomalias"][titulo] = {
+            "reparos": reparos,
+            "recomendacao": normalizar_recomendacao(
+                bruto.get("recomendacao"), reparos
+            ),
+        }
     return base
 
 
@@ -683,9 +868,15 @@ def obter_servicos_preliminares(dados: dict | None = None) -> dict[str, Any]:
     return obter_etapa_orcamento_fixa(CHAVE_SERVICOS_PRELIMINARES, dados)
 
 
+def _chave_ordem_alfabetica(nome: str) -> str:
+    base = unicodedata.normalize("NFD", str(nome).casefold())
+    return "".join(c for c in base if unicodedata.category(c) != "Mn")
+
+
 def nomes_anomalias(dados: dict | None = None) -> list[str]:
     origem = dados if dados is not None else carregar_catalogo()
-    return list((origem.get("anomalias") or {}).keys())
+    nomes = list((origem.get("anomalias") or {}).keys())
+    return sorted(nomes, key=_chave_ordem_alfabetica)
 
 
 def obter_anomalia(nome: str, dados: dict | None = None) -> dict | None:
@@ -767,56 +958,12 @@ def itens_sinapi_da_etapa(
     *,
     tipo_calculo_padrao: str = "fixo",
 ) -> list[dict[str, Any]]:
-    """Copia só os códigos SINAPI da etapa; preserva cálculo/coeficiente já definidos."""
-    padrao = tipo_calculo_padrao if tipo_calculo_padrao in TIPOS_CALCULO else "fixo"
-    atuais = [i for i in (itens_atuais or []) if isinstance(i, dict)]
-    novos: list[dict[str, Any]] = []
-    usados_ids: set[str] = set()
-    vistos_codigos: set[str] = set()
-    for ref in (etapa or {}).get("itens") or []:
-        if not isinstance(ref, dict):
-            continue
-        if str(ref.get("tipo") or "") != TIPO_ITEM_SINAPI:
-            continue
-        codigo = str(ref.get("codigo") or "").strip()
-        if not codigo or codigo in vistos_codigos:
-            continue
-        vistos_codigos.add(codigo)
-        anterior = next(
-            (
-                item
-                for item in atuais
-                if str(item.get("codigo_sinapi") or "").strip() == codigo
-            ),
-            None,
-        )
-        if anterior:
-            fatores = normalizar_fatores(anterior)
-        else:
-            fatores = [novo_fator(tipo_calculo=padrao, coeficiente=1)]
-        novo = novo_item_sinapi(
-            codigo_sinapi=codigo,
-            unidade=(anterior or {}).get("unidade") or ref.get("unidade") or "un",
-            fatores=fatores,
-            da_etapa=True,
-        )
-        if anterior and anterior.get("id"):
-            novo["id"] = str(anterior.get("id"))
-            usados_ids.add(novo["id"])
-        novos.append(novo)
-    for item in atuais:
-        ident = str(item.get("id") or "")
-        if ident and ident in usados_ids:
-            continue
-        if item.get("da_etapa"):
-            continue
-        codigo = str(item.get("codigo_sinapi") or "").strip()
-        if codigo and codigo in vistos_codigos:
-            continue
-        extra = _normalizar_item_catalogo(deepcopy(item)) or deepcopy(item)
-        extra["da_etapa"] = False
-        novos.append(extra)
-    return novos
+    """Copia SINAPI e composições próprias da etapa, preservando o cálculo já definido."""
+    return itens_servicos_da_etapa(
+        etapa,
+        itens_atuais,
+        tipo_calculo_padrao=tipo_calculo_padrao,
+    )
 
 
 def itens_efetivos_reparo(
@@ -864,7 +1011,12 @@ def valores_considerados_reparo(
         unid = str(item.get("unidade") or "").strip() or "un"
         marca = (
             tuple(
-                (f["tipo_calculo"], round(float(f["coeficiente"]), 6)) for f in fatores
+                (
+                    f["tipo_calculo"],
+                    round(float(f["coeficiente"]), 6),
+                    f.get("operacao") or OPERACAO_MULTIPLICAR,
+                )
+                for f in fatores
             ),
             unid,
         )
@@ -898,15 +1050,21 @@ def quantidade_item(tipo_calculo: str, coeficiente: float, quantitativos: dict) 
 
 
 def quantidade_de_item(item: dict | None, quantitativos: dict | None) -> float:
-    """Produto dos fatores do item (ex.: fachada/bloco × blocos × 2)."""
-    total = 1.0
+    """Combina os fatores com × ou +, na ordem em que foram cadastrados."""
+    total = None
     for fator in normalizar_fatores(item or {}):
-        total *= quantidade_item(
+        parcela = quantidade_item(
             fator.get("tipo_calculo") or "fixo",
             fator.get("coeficiente") or 1,
             quantitativos or {},
         )
-    return total
+        if total is None or fator.get("operacao") != OPERACAO_SOMAR:
+            total = parcela if total is None else total * parcela
+        else:
+            total += parcela
+    if total is None:
+        return 0.0
+    return total * _multiplicador_item((item or {}).get("multiplicador", 1))
 
 
 def _fmt_coef_curto(valor: float) -> str:
@@ -921,18 +1079,25 @@ def _fmt_coef_curto(valor: float) -> str:
 
 
 def rotulo_fatores(item_ou_fatores) -> str:
-    """Resumo curto da fórmula, ex.: «fachada/bloco × blocos × 2»."""
+    """Resumo curto da fórmula, ex.: «perím. paredes×0,5 + piso hall»."""
     fatores = normalizar_fatores(item_ou_fatores)
-    partes = []
-    for fator in fatores:
+    texto = ""
+    for indice, fator in enumerate(fatores):
         tipo = fator.get("tipo_calculo") or "fixo"
         coef = _coeficiente_item(fator.get("coeficiente") or 1)
         if tipo == "fixo":
-            partes.append(_fmt_coef_curto(coef))
-            continue
-        base = ROTULOS_CURTOS_TIPO_CALCULO.get(tipo) or tipo
-        if abs(coef - 1.0) < 1e-9:
-            partes.append(base)
+            parte = _fmt_coef_curto(coef)
         else:
-            partes.append(f"{base}×{_fmt_coef_curto(coef)}")
-    return " × ".join(partes) if partes else "—"
+            base = ROTULOS_CURTOS_TIPO_CALCULO.get(tipo) or tipo
+            parte = base if abs(coef - 1.0) < 1e-9 else f"{base}×{_fmt_coef_curto(coef)}"
+        if indice == 0:
+            texto = parte
+        elif fator.get("operacao") == OPERACAO_SOMAR:
+            texto = f"{texto} + {parte}"
+        else:
+            texto = f"{texto} × {parte}"
+    if isinstance(item_ou_fatores, dict):
+        multiplicador = _multiplicador_item(item_ou_fatores.get("multiplicador", 1))
+        if texto and abs(multiplicador - 1.0) > 1e-9:
+            texto = f"({texto}) × {_fmt_coef_curto(multiplicador)}"
+    return texto or "—"

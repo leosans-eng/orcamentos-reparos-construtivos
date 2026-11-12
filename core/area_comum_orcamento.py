@@ -9,10 +9,12 @@ from core.area_comum_anomalias import (
     NOMES_ETAPAS_FIXAS,
     ORIGENS_ETAPAS_FIXAS,
     TIPO_ITEM_CATALOGO_PROPRIA,
+    ajustar_demaos_fundo_selador,
     itens_efetivos_reparo,
     normalizar_etapa_orcamento_fixa,
     obter_anomalia,
     quantidade_de_item,
+    limitar_revestimento_fachada,
     titulo_grupo_orcamento,
 )
 from core.area_comum_calculos import numero
@@ -197,6 +199,8 @@ def _montar_grupo_itens_sinapi(
     sinapi,
     uf: str,
     catalogo_composicoes=None,
+    variaveis=None,
+    quantidades_por_id=None,
 ) -> dict:
     tmp = OrcamentoCustomizado()
     grupo_id = tmp.adicionar_grupo(nome)
@@ -204,7 +208,11 @@ def _montar_grupo_itens_sinapi(
     catalogo_composicoes = _catalogo_composicoes(catalogo_composicoes)
     for item in itens or []:
         tipo = str(item.get("tipo") or "")
-        qtd = quantidade_de_item(item, quantitativos) * fator
+        item_id = str(item.get("id") or "")
+        if quantidades_por_id and item_id in quantidades_por_id:
+            qtd = float(quantidades_por_id[item_id])
+        else:
+            qtd = quantidade_de_item(item, quantitativos, variaveis) * fator
         if qtd < 0:
             qtd = 0.0
         if tipo == TIPO_ITEM_CATALOGO_PROPRIA:
@@ -254,6 +262,7 @@ def _montar_grupo_etapa_fixa(
     sinapi,
     uf: str,
     catalogo_composicoes,
+    duas_demaos_fundo_selador: bool = True,
 ) -> dict | None:
     if chave not in ORIGENS_ETAPAS_FIXAS:
         return None
@@ -261,6 +270,10 @@ def _montar_grupo_etapa_fixa(
     itens = list(etapa.get("itens") or [])
     if not itens:
         return None
+    if chave == "pintura":
+        itens = ajustar_demaos_fundo_selador(
+            itens, duas_demaos=bool(duas_demaos_fundo_selador)
+        )
     nome_padrao = NOMES_ETAPAS_FIXAS.get(chave) or chave
     nome = str(etapa.get("nome") or "").strip() or nome_padrao
     grupo = _montar_grupo_itens_sinapi(
@@ -333,6 +346,7 @@ def sincronizar_grupos_anomalias(
     considerar_destinacao_entulho: bool = True,
     considerar_limpeza_geral: bool = True,
     considerar_etapas_fixas: dict | None = None,
+    duas_demaos_fundo_selador: bool = True,
 ) -> None:
     """Reconstrói grupos auto (SP / anomalias / pintura / entulho / limpeza) e preserva manuais.
 
@@ -359,12 +373,19 @@ def sincronizar_grupos_anomalias(
             sinapi=sinapi,
             uf=uf,
             catalogo_composicoes=catalogo_composicoes,
+            duas_demaos_fundo_selador=duas_demaos_fundo_selador,
         )
         if grupo is None:
             continue
         por_origem_fixa[chave] = grupo
 
     grupos_anomalia: list[dict] = []
+    limites_fachada, _avisos_fachada = limitar_revestimento_fachada(
+        anomalias,
+        catalogo,
+        quantitativos,
+        etapas_por_id,
+    )
     for anomalia in anomalias or []:
         nome = str(anomalia.get("nome") or "").strip()
         if not nome:
@@ -386,6 +407,8 @@ def sincronizar_grupos_anomalias(
             sinapi=sinapi,
             uf=uf,
             catalogo_composicoes=catalogo_composicoes,
+            variaveis=anomalia.get("variaveis"),
+            quantidades_por_id=limites_fachada.get(str(anomalia.get("id") or "")),
         )
         grupo["origem"] = "anomalia"
         grupo["anomalia_id"] = str(anomalia.get("id") or "")

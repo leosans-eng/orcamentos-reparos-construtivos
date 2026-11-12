@@ -29,6 +29,8 @@ ESQUADRIAS_MODELO = (
     {"id": "j5", "rotulo": "J5"},
     {"id": "j_hall_1", "rotulo": "J. Hall 1"},
     {"id": "j_hall_2", "rotulo": "J. Hall 2"},
+    {"id": "cobogo_1", "rotulo": "Cobogó 1", "cobogo": True},
+    {"id": "cobogo_2", "rotulo": "Cobogó 2", "cobogo": True},
     {"id": "porta_hall", "rotulo": "Porta do hall", "sem_perimetro": True},
 )
 
@@ -49,8 +51,6 @@ CAMPOS_MEDIDA_EDITAVEIS = (
     ("altura_platibanda_m", "Altura da platibanda (m)"),
     ("caixas_inspecao_bloco", "Caixas de inspeção (um bloco)"),
     ("caixas_gordura_bloco", "Caixas de gordura (um bloco)"),
-    ("calcadas_caminhos_m2", "Calçadas e caminhos (m²)"),
-    ("fissuras_m", "Fissuras/trincas/rachaduras (m)"),
 )
 
 CAMPOS_MEDIDA_AUTO = (
@@ -71,8 +71,14 @@ CAMPOS_MEDIDA_AUTO = (
 CAMPOS_RESUMO_FACHADA = (
     ("esquadria_area_pav_m2", "Área de esquadrias (por pavimento)", "m²"),
     ("esquadria_area_total_m2", "Área de esquadrias (total)", "m²"),
+    ("janela_area_pav_m2", "Área de janelas (por pavimento)", "m²"),
+    ("janela_area_total_m2", "Área de janelas (total)", "m²"),
     ("esquadria_perimetro_pav_m", "Perímetro de esquadrias (por pavimento)", "m"),
     ("esquadria_perimetro_total_m", "Perímetro de esquadrias (total)", "m"),
+    ("cobogo_area_pav_m2", "Área de cobogós (por pavimento)", "m²"),
+    ("cobogo_area_total_m2", "Área de cobogós (total)", "m²"),
+    ("cobogo_perimetro_pav_m", "Perímetro de cobogós (por pavimento)", "m"),
+    ("cobogo_perimetro_total_m", "Perímetro de cobogós (total)", "m"),
     ("pingadeira_total_m", "Pingadeira (total)", "m"),
     ("esquadria_qtd_janelas_total", "Quantidade de esquadrias (janelas, total)", ""),
     ("area_fachada_bloco_m2", "Área de fachada (por bloco, sem esquadrias)", "m²"),
@@ -248,6 +254,7 @@ def esquadria_vazia(modelo: dict) -> dict:
         "id": modelo["id"],
         "rotulo": modelo["rotulo"],
         "sem_perimetro": bool(modelo.get("sem_perimetro")),
+        "cobogo": bool(modelo.get("cobogo")),
         "dim_x": "",
         "dim_y": "",
         "h_peitoril": "",
@@ -276,15 +283,40 @@ def novo_item_anomalia_nova(
 
 
 def nova_anomalia_orcamento(
-    *, nome="", reparo_id="", reparo_nome="", percentual="100"
+    *, nome="", reparo_id="", reparo_nome="", percentual="100", variaveis=None
 ) -> dict:
-    return {
+    linha = {
         "id": novo_id(),
         "nome": str(nome or "").strip(),
         "reparo_id": str(reparo_id or "").strip(),
         "reparo_nome": str(reparo_nome or "").strip(),
         "percentual": str(percentual if percentual is not None else "100").strip() or "100",
     }
+    guardadas = _variaveis_normalizadas(variaveis)
+    if guardadas:
+        linha["variaveis"] = guardadas
+    return linha
+
+
+def _variaveis_normalizadas(origem) -> list[dict]:
+    saida = []
+    if not isinstance(origem, list):
+        return saida
+    for item in origem:
+        if not isinstance(item, dict):
+            continue
+        pergunta = str(item.get("pergunta") or "").strip()
+        if not pergunta:
+            continue
+        saida.append(
+            {
+                "pergunta": pergunta,
+                "valor": str(
+                    item.get("valor") if item.get("valor") is not None else ""
+                ).strip(),
+            }
+        )
+    return saida
 
 
 def novo_extra_orcamento(
@@ -341,6 +373,7 @@ def novo_rascunho() -> dict:
         "considerar_servicos_preliminares": True,
         "considerar_pintura": True,
         "pintura_fachada_manual": False,
+        "duas_demaos_fundo_selador": True,
         "considerar_destinacao_entulho": True,
         "considerar_limpeza_geral": True,
         "extras_orcamento": [],
@@ -355,6 +388,8 @@ def _esquadrias_normalizadas(origem) -> list[dict]:
         for item in origem:
             if isinstance(item, dict) and _texto(item.get("id")):
                 por_id[_texto(item.get("id"))] = item
+    if "cobogo" in por_id and "cobogo_1" not in por_id:
+        por_id["cobogo_1"] = por_id["cobogo"]
     saida = []
     for modelo in ESQUADRIAS_MODELO:
         base = esquadria_vazia(modelo)
@@ -461,6 +496,7 @@ def normalizar_rascunho(dados) -> dict:
             reparo_id=item.get("reparo_id"),
             reparo_nome=item.get("reparo_nome"),
             percentual=item.get("percentual") or "100",
+            variaveis=item.get("variaveis"),
         )
         if _texto(item.get("id")):
             linha["id"] = _texto(item.get("id"))
@@ -478,6 +514,8 @@ def normalizar_rascunho(dados) -> dict:
         base["considerar_pintura"] = True
     if "pintura_fachada_manual" in dados:
         base["pintura_fachada_manual"] = bool(dados.get("pintura_fachada_manual"))
+    if "duas_demaos_fundo_selador" in dados:
+        base["duas_demaos_fundo_selador"] = bool(dados.get("duas_demaos_fundo_selador"))
     if "considerar_destinacao_entulho" in dados:
         base["considerar_destinacao_entulho"] = bool(
             dados.get("considerar_destinacao_entulho")

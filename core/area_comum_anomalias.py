@@ -109,8 +109,10 @@ TIPOS_CALCULO = (
     "perimetro_beiral",
     "pingadeira_total",
     "esquadria_area_total",
+    "janela_area_total",
     "esquadria_perimetro_total",
     "esquadria_qtd_janelas",
+    "cobogo_area_total",
     "pct_troca_revestimento_fachada",
     "pct_troca_revestimento_paredes_hall",
     "pct_troca_revestimento_tetos_hall",
@@ -126,14 +128,13 @@ TIPOS_CALCULO = (
     "pct_troca_tampas_inspecao",
     "pct_troca_tampas_gordura",
     "pct_troca_calcadas",
-    "calcadas_caminhos",
-    "fissuras",
     "qtd_aguas_telhado",
     "pe_direito",
     "por_bloco",
     "por_pavimento",
     "pavimentos_friso",
     "por_apartamento",
+    "variavel",
     "fixo",
 )
 
@@ -151,8 +152,10 @@ ROTULOS_TIPO_CALCULO = {
     "perimetro_beiral": "Perímetro de beiral (calha)",
     "pingadeira_total": "Pingadeira (total)",
     "esquadria_area_total": "Área de esquadrias (total)",
+    "janela_area_total": "Área de janelas (total)",
     "esquadria_perimetro_total": "Perímetro das janelas",
     "esquadria_qtd_janelas": "Quantidade de janelas",
+    "cobogo_area_total": "Área dos cobogós (total)",
     "pct_troca_revestimento_fachada": "% Troca de revestimento da fachada",
     "pct_troca_revestimento_paredes_hall": "% Troca de revestimento das paredes dos halls",
     "pct_troca_revestimento_tetos_hall": "% Troca de revestimento dos tetos dos halls",
@@ -168,14 +171,13 @@ ROTULOS_TIPO_CALCULO = {
     "pct_troca_tampas_inspecao": "% Troca de tampas das caixas de inspeção",
     "pct_troca_tampas_gordura": "% Troca de tampas das caixas de gordura",
     "pct_troca_calcadas": "% Troca de calçadas e caminhos",
-    "calcadas_caminhos": "Calçadas e caminhos",
-    "fissuras": "Fissuras/trincas/rachaduras",
     "qtd_aguas_telhado": "Quantidade de águas do telhado",
     "pe_direito": "Pé-direito",
     "por_bloco": "Por bloco",
     "por_pavimento": "Por pavimento",
     "pavimentos_friso": "Pavimentos − 1",
     "por_apartamento": "Por apartamento",
+    "variavel": "Variável",
     "fixo": "Quantidade fixa",
 }
 
@@ -193,8 +195,10 @@ ROTULOS_CURTOS_TIPO_CALCULO = {
     "perimetro_beiral": "beiral",
     "pingadeira_total": "pingadeira",
     "esquadria_area_total": "esquadrias",
+    "janela_area_total": "área janelas",
     "esquadria_perimetro_total": "perím. janelas",
     "esquadria_qtd_janelas": "janelas",
+    "cobogo_area_total": "cobogós",
     "pct_troca_revestimento_fachada": "% revest. fachada",
     "pct_troca_revestimento_paredes_hall": "% revest. paredes",
     "pct_troca_revestimento_tetos_hall": "% revest. tetos",
@@ -210,14 +214,13 @@ ROTULOS_CURTOS_TIPO_CALCULO = {
     "pct_troca_tampas_inspecao": "% tampas inspeção",
     "pct_troca_tampas_gordura": "% tampas gordura",
     "pct_troca_calcadas": "% calçadas",
-    "calcadas_caminhos": "calçadas",
-    "fissuras": "fissuras",
     "qtd_aguas_telhado": "águas",
     "pe_direito": "pé-direito",
     "por_bloco": "blocos",
     "por_pavimento": "pavimentos",
     "pavimentos_friso": "pavimentos−1",
     "por_apartamento": "apartamentos",
+    "variavel": "variável",
     "fixo": "fixo",
 }
 
@@ -235,8 +238,10 @@ MAPA_TIPO_QUANTITATIVO = {
     "perimetro_beiral": "perimetro_beiral_m",
     "pingadeira_total": "pingadeira_total_m",
     "esquadria_area_total": "esquadria_area_total_m2",
+    "janela_area_total": "janela_area_total_m2",
     "esquadria_perimetro_total": "esquadria_perimetro_total_m",
     "esquadria_qtd_janelas": "esquadria_qtd_janelas_total",
+    "cobogo_area_total": "cobogo_area_total_m2",
     "pct_troca_revestimento_fachada": "pct_troca_revestimento_fachada_m2",
     "pct_troca_revestimento_paredes_hall": "pct_troca_revestimento_paredes_hall_m2",
     "pct_troca_revestimento_tetos_hall": "pct_troca_revestimento_tetos_hall_m2",
@@ -252,8 +257,6 @@ MAPA_TIPO_QUANTITATIVO = {
     "pct_troca_tampas_inspecao": "pct_troca_tampas_inspecao_un",
     "pct_troca_tampas_gordura": "pct_troca_tampas_gordura_un",
     "pct_troca_calcadas": "pct_troca_calcadas_m2",
-    "calcadas_caminhos": "calcadas_caminhos_m2",
-    "fissuras": "fissuras_m",
     "qtd_aguas_telhado": "qtd_aguas_telhado",
     "pe_direito": "pe_direito_m",
     "por_bloco": "qtd_blocos",
@@ -313,16 +316,20 @@ def novo_fator(
     tipo_calculo: str = "fixo",
     coeficiente: float = 1.0,
     operacao: str = OPERACAO_MULTIPLICAR,
+    pergunta: str = "",
 ) -> dict[str, Any]:
     tipo = str(tipo_calculo or "fixo")
     junta = str(operacao or OPERACAO_MULTIPLICAR)
     if junta not in (OPERACAO_MULTIPLICAR, OPERACAO_SOMAR):
         junta = OPERACAO_MULTIPLICAR
-    return {
+    fator = {
         "tipo_calculo": tipo if tipo in TIPOS_CALCULO else "fixo",
         "coeficiente": _coeficiente_item(coeficiente),
         "operacao": junta,
     }
+    if fator["tipo_calculo"] == "variavel":
+        fator["pergunta"] = str(pergunta or "").strip()
+    return fator
 
 
 def normalizar_fatores(bruto) -> list[dict[str, Any]]:
@@ -339,6 +346,7 @@ def normalizar_fatores(bruto) -> list[dict[str, Any]]:
                         tipo_calculo=item.get("tipo_calculo") or "fixo",
                         coeficiente=item.get("coeficiente", 1),
                         operacao=item.get("operacao") or OPERACAO_MULTIPLICAR,
+                        pergunta=item.get("pergunta") or "",
                     )
                 )
             if fatores:
@@ -360,6 +368,7 @@ def normalizar_fatores(bruto) -> list[dict[str, Any]]:
                     tipo_calculo=item.get("tipo_calculo") or "fixo",
                     coeficiente=item.get("coeficiente", 1),
                     operacao=item.get("operacao") or OPERACAO_MULTIPLICAR,
+                    pergunta=item.get("pergunta") or "",
                 )
             )
         if fatores:
@@ -467,6 +476,15 @@ def novo_item_composicao_propria(
     )
 
 
+def _definir_fundo_selador(item: dict, valor) -> dict:
+    """Grava a marca só quando é fundo selador. A ausência vale como falso."""
+    if valor:
+        item["fundo_selador"] = True
+    else:
+        item.pop("fundo_selador", None)
+    return item
+
+
 def _normalizar_item_catalogo(bruto: dict) -> dict[str, Any] | None:
     if not isinstance(bruto, dict):
         return None
@@ -500,6 +518,7 @@ def _normalizar_item_catalogo(bruto: dict) -> dict[str, Any] | None:
         )
     if bruto.get("id"):
         novo["id"] = str(bruto.get("id"))
+    _definir_fundo_selador(novo, bruto.get("fundo_selador"))
     return novo
 
 
@@ -577,6 +596,7 @@ def itens_servicos_da_etapa(
             if anterior and anterior.get("id"):
                 novo["id"] = str(anterior.get("id"))
                 usados_ids.add(novo["id"])
+            _definir_fundo_selador(novo, (anterior or {}).get("fundo_selador"))
             novos.append(novo)
         elif tipo == TIPO_ITEM_PROPRIA:
             catalogo_id = str(ref.get("composicao_catalogo_id") or "").strip()
@@ -599,6 +619,7 @@ def itens_servicos_da_etapa(
             if anterior and anterior.get("id"):
                 novo["id"] = str(anterior.get("id"))
                 usados_ids.add(novo["id"])
+            _definir_fundo_selador(novo, (anterior or {}).get("fundo_selador"))
             novos.append(novo)
 
     for item in atuais:
@@ -993,11 +1014,174 @@ def fator_percentual_anomalia(percentual) -> float:
     return valor / 100.0
 
 
+_TIPO_REVESTIMENTO_FACHADA = "pct_troca_revestimento_fachada"
+_TIPOS_FAIXA_FACHADA = frozenset(
+    {
+        "perimetro_paredes_externas_total",
+        "por_bloco",
+    }
+)
+
+
+def _unidade_area(item) -> bool:
+    texto = str((item or {}).get("unidade") or "").strip().casefold().replace("²", "2")
+    return texto in {"m2"}
+
+
+def _e_faixa_sobre_fachada(item) -> bool:
+    """Área já executada na fachada: faixa do perímetro ou quantidade por bloco, em m²."""
+    tipos = _tipos_fator(item) - {"fixo"}
+    return bool(tipos) and tipos <= _TIPOS_FAIXA_FACHADA and _unidade_area(item)
+
+
+def _codigo_item_catalogo(item) -> str:
+    return str((item or {}).get("codigo_sinapi") or (item or {}).get("codigo") or "").strip()
+
+
+def _tipos_fator(item) -> set[str]:
+    return {
+        str(fator.get("tipo_calculo") or "")
+        for fator in normalizar_fatores(item)
+    }
+
+
+def _quantidade_efetiva(item, quantitativos, variaveis, percentual) -> float:
+    return quantidade_de_item(item, quantitativos, variaveis) * fator_percentual_anomalia(
+        percentual
+    )
+
+
+def _metros_do_fator(item, tipo, quantitativos) -> float:
+    total = 0.0
+    for fator in normalizar_fatores(item):
+        if str(fator.get("tipo_calculo") or "") != tipo:
+            continue
+        total += quantidade_item(tipo, fator.get("coeficiente") or 1, quantitativos or {})
+    return total
+
+
+def _item_com_fator_escalado(item, tipo, razao) -> dict:
+    ajustado = deepcopy(item)
+    fatores = []
+    for fator in normalizar_fatores(ajustado):
+        fator = dict(fator)
+        if str(fator.get("tipo_calculo") or "") == tipo:
+            fator["coeficiente"] = _coeficiente_item(fator.get("coeficiente") or 1) * razao
+        fatores.append(fator)
+    return _aplicar_fatores_no_item(ajustado, fatores)
+
+
+def limitar_revestimento_fachada(
+    anomalias,
+    catalogo,
+    quantitativos,
+    etapas_por_id=None,
+) -> tuple[dict[str, dict[str, float]], dict[str, tuple[str, ...]]]:
+    """Corta o reboco da fachada só quando a soma passa da área total.
+
+    A faixa do perímetro e a área por bloco, em m², ocupam a fachada quando
+    repetem alguma composição do reboco. Essa área vale para todas as camadas
+    do mesmo revestimento: demolição, chapisco e emboço cobrem os mesmos metros.
+    Camadas da mesma anomalia não se somam; usa-se a maior. Itens de hall ficam inteiros.
+    """
+    quantitativos = quantitativos or {}
+    teto = float(quantitativos.get("area_fachada_total_m2") or 0)
+    doadores: dict[str, dict] = {}
+    fachadas: dict[str, list[dict]] = {}
+    for linha in anomalias or []:
+        if not isinstance(linha, dict):
+            continue
+        nome = str(linha.get("nome") or "").strip()
+        if not nome:
+            continue
+        reparo = obter_reparo(nome, linha.get("reparo_id") or "", catalogo)
+        if not reparo:
+            continue
+        percentual = linha.get("percentual")
+        variaveis = linha.get("variaveis")
+        ident = str(linha.get("id") or "")
+        for indice, item in enumerate(itens_efetivos_reparo(reparo, etapas_por_id)):
+            codigo = _codigo_item_catalogo(item)
+            if not codigo:
+                continue
+            tipos = _tipos_fator(item)
+            item_id = str(item.get("id") or f"{codigo}#{indice}")
+            if _e_faixa_sobre_fachada(item):
+                faixa = max(
+                    0.0,
+                    _quantidade_efetiva(item, quantitativos, variaveis, percentual),
+                )
+                reg = doadores.setdefault(ident, {"nome": nome, "areas": {}})
+                reg["areas"][codigo] = reg["areas"].get(codigo, 0.0) + faixa
+                continue
+            if _TIPO_REVESTIMENTO_FACHADA not in tipos:
+                continue
+            reivindicado = _metros_do_fator(
+                item, _TIPO_REVESTIMENTO_FACHADA, quantitativos
+            )
+            reivindicado *= fator_percentual_anomalia(percentual)
+            fachadas.setdefault(codigo, []).append(
+                {
+                    "anomalia_id": ident,
+                    "item_id": item_id,
+                    "item": item,
+                    "percentual": percentual,
+                    "variaveis": variaveis,
+                    "reivindicado": max(0.0, reivindicado),
+                }
+            )
+
+    codigos_receptor = set(fachadas)
+    ocupada = 0.0
+    origens: set[str] = set()
+    for reg in doadores.values():
+        relevantes = [
+            qtd
+            for cod, qtd in reg["areas"].items()
+            if cod in codigos_receptor and qtd > 0
+        ]
+        if not relevantes:
+            continue
+        ocupada += max(relevantes)
+        origens.add(reg["nome"])
+
+    ajustes: dict[str, dict[str, float]] = {}
+    avisos: dict[str, set[str]] = {}
+    if ocupada <= 1e-9 or not origens:
+        return ajustes, {}
+    for _codigo, pedidos in fachadas.items():
+        restante = teto - ocupada
+        for pedido in pedidos:
+            reivindicado = pedido["reivindicado"]
+            if reivindicado <= restante + 1e-9:
+                restante -= reivindicado
+                continue
+            mantido = max(0.0, restante)
+            restante = 0.0
+            razao = 0.0 if reivindicado <= 1e-12 else mantido / reivindicado
+            ajustado = _item_com_fator_escalado(
+                pedido["item"], _TIPO_REVESTIMENTO_FACHADA, razao
+            )
+            qtd = _quantidade_efetiva(
+                ajustado,
+                quantitativos,
+                pedido["variaveis"],
+                pedido["percentual"],
+            )
+            ajustes.setdefault(pedido["anomalia_id"], {})[pedido["item_id"]] = qtd
+            avisos.setdefault(pedido["anomalia_id"], set()).update(origens)
+    return ajustes, {
+        chave: tuple(sorted(nomes)) for chave, nomes in avisos.items() if nomes
+    }
+
+
 def valores_considerados_reparo(
     reparo: dict | None,
     quantitativos: dict | None,
     percentual,
     etapas_por_id: dict | None = None,
+    variaveis=None,
+    quantidades_por_id=None,
 ) -> list[tuple[float, str]]:
     """Quantidades efetivas do reparo (únicas por fórmula/unidade)."""
     reparo = reparo or {}
@@ -1005,9 +1189,13 @@ def valores_considerados_reparo(
     fator = fator_percentual_anomalia(percentual)
     resultado: list[tuple[float, str]] = []
     vistos: set[tuple] = set()
-    for item in itens_efetivos_reparo(reparo, etapas_por_id):
+    for indice, item in enumerate(itens_efetivos_reparo(reparo, etapas_por_id)):
         fatores = normalizar_fatores(item)
-        qtd = quantidade_de_item(item, quantitativos) * fator
+        item_id = str(item.get("id") or f"{_codigo_item_catalogo(item)}#{indice}")
+        if quantidades_por_id and item_id in quantidades_por_id:
+            qtd = float(quantidades_por_id[item_id])
+        else:
+            qtd = quantidade_de_item(item, quantitativos, variaveis) * fator
         unid = str(item.get("unidade") or "").strip() or "un"
         marca = (
             tuple(
@@ -1015,10 +1203,12 @@ def valores_considerados_reparo(
                     f["tipo_calculo"],
                     round(float(f["coeficiente"]), 6),
                     f.get("operacao") or OPERACAO_MULTIPLICAR,
+                    _chave_pergunta(f.get("pergunta")),
                 )
                 for f in fatores
             ),
             unid,
+            round(float(qtd), 4),
         )
         if marca in vistos:
             continue
@@ -1038,6 +1228,74 @@ def valores_considerados_reparo(
     return resultado
 
 
+def ajustar_demaos_fundo_selador(itens, *, duas_demaos: bool = True) -> list:
+    """Com uma demão, o coeficiente 2 dos itens marcados como fundo selador vira 1."""
+    origem = list(itens or [])
+    if duas_demaos:
+        return origem
+    saida = []
+    for item in origem:
+        if not isinstance(item, dict):
+            saida.append(item)
+            continue
+        if not item.get("fundo_selador"):
+            saida.append(item)
+            continue
+        copia = deepcopy(item)
+        fatores = normalizar_fatores(copia)
+        for fator in fatores:
+            coef = _coeficiente_item(fator.get("coeficiente") or 0)
+            if abs(coef - 2.0) < 1e-9:
+                fator["coeficiente"] = 1.0
+        _aplicar_fatores_no_item(copia, fatores)
+        saida.append(copia)
+    return saida
+
+
+def _texto_pergunta(fator) -> str:
+    return str((fator or {}).get("pergunta") or "").strip() or "Informe o valor."
+
+
+def _chave_pergunta(texto) -> str:
+    return str(texto or "").strip().casefold()
+
+
+def perguntas_variaveis_itens(itens) -> list[dict[str, str]]:
+    """Perguntas distintas dos fatores variáveis, na ordem em que aparecem."""
+    saida: list[dict[str, str]] = []
+    vistas: set[str] = set()
+    for item in itens or []:
+        unidade = str((item or {}).get("unidade") or "").strip()
+        for fator in normalizar_fatores(item):
+            if fator.get("tipo_calculo") != "variavel":
+                continue
+            pergunta = _texto_pergunta(fator)
+            chave = _chave_pergunta(pergunta)
+            if chave in vistas:
+                continue
+            vistas.add(chave)
+            saida.append({"pergunta": pergunta, "unidade": unidade})
+    return saida
+
+
+def perguntas_variaveis_reparo(
+    reparo: dict | None, etapas_por_id: dict | None = None
+) -> list[dict[str, str]]:
+    return perguntas_variaveis_itens(itens_efetivos_reparo(reparo, etapas_por_id))
+
+
+def mapa_variaveis(variaveis) -> dict[str, float]:
+    mapa: dict[str, float] = {}
+    for item in variaveis or []:
+        if not isinstance(item, dict):
+            continue
+        chave = _chave_pergunta(item.get("pergunta"))
+        if not chave:
+            continue
+        mapa[chave] = numero(item.get("valor"))
+    return mapa
+
+
 def quantidade_item(tipo_calculo: str, coeficiente: float, quantitativos: dict) -> float:
     coef = float(coeficiente or 0)
     if tipo_calculo == "fixo":
@@ -1049,15 +1307,25 @@ def quantidade_item(tipo_calculo: str, coeficiente: float, quantitativos: dict) 
     return base * coef
 
 
-def quantidade_de_item(item: dict | None, quantitativos: dict | None) -> float:
+def quantidade_de_item(
+    item: dict | None,
+    quantitativos: dict | None,
+    variaveis=None,
+) -> float:
     """Combina os fatores com × ou +, na ordem em que foram cadastrados."""
+    respostas = mapa_variaveis(variaveis)
     total = None
     for fator in normalizar_fatores(item or {}):
-        parcela = quantidade_item(
-            fator.get("tipo_calculo") or "fixo",
-            fator.get("coeficiente") or 1,
-            quantitativos or {},
-        )
+        tipo = fator.get("tipo_calculo") or "fixo"
+        if tipo == "variavel":
+            coef = _coeficiente_item(fator.get("coeficiente") or 1)
+            parcela = float(respostas.get(_chave_pergunta(_texto_pergunta(fator))) or 0) * coef
+        else:
+            parcela = quantidade_item(
+                tipo,
+                fator.get("coeficiente") or 1,
+                quantitativos or {},
+            )
         if total is None or fator.get("operacao") != OPERACAO_SOMAR:
             total = parcela if total is None else total * parcela
         else:
@@ -1087,6 +1355,12 @@ def rotulo_fatores(item_ou_fatores) -> str:
         coef = _coeficiente_item(fator.get("coeficiente") or 1)
         if tipo == "fixo":
             parte = _fmt_coef_curto(coef)
+        elif tipo == "variavel":
+            pergunta = str(fator.get("pergunta") or "").strip()
+            base = pergunta if pergunta else "variável"
+            if len(base) > 42:
+                base = base[:41].rstrip() + "…"
+            parte = base if abs(coef - 1.0) < 1e-9 else f"{base}×{_fmt_coef_curto(coef)}"
         else:
             base = ROTULOS_CURTOS_TIPO_CALCULO.get(tipo) or tipo
             parte = base if abs(coef - 1.0) < 1e-9 else f"{base}×{_fmt_coef_curto(coef)}"

@@ -178,15 +178,47 @@ class GradeOrcamento(tk.Frame):
     def salvar_fracao_scroll(self):
         return self._fracao_scroll_salva
 
-    def _ao_redimensionar_canvas(self, event):
-        largura = max(event.width, 400)
-        self.canvas.itemconfig(self._janela_canvas, width=largura)
-        peso_desc = next(p for _k, _t, _m, _a, p in COLUNAS if _k == "descricao")
-        fixo = sum(m for _k, _t, m, _a, p in COLUNAS if p == 0) + len(COLUNAS)
-        self._largura_descricao = max(120, largura - fixo - 24)
+    def _soma_colunas_fixas(self) -> int:
+        total = 0
+        for col, (_chave, _titulo, largura_min, _anchor, peso) in enumerate(COLUNAS):
+            if peso:
+                continue
+            info = self.cabecalho.grid_columnconfigure(col)
+            minsize = int(info.get("minsize") or largura_min)
+            total += max(largura_min, minsize)
+        return total + len(COLUNAS)
+
+    def _aplicar_largura_descricao(self, largura_canvas: int):
+        largura = max(int(largura_canvas), 400)
+        self._largura_descricao = max(120, largura - self._soma_colunas_fixas() - 24)
         for linha in self._linhas:
             if linha.get("lbl_descricao"):
                 linha["lbl_descricao"].config(wraplength=self._largura_descricao)
+
+    def _uniformizar_colunas(
+        self,
+        chaves=("quantidade", "unidade", "custo_unit", "custo_bdi", "total"),
+    ):
+        """A mesma largura em todas as linhas, para um texto longo não empurrar a quantidade."""
+        self.update_idletasks()
+        for chave in chaves:
+            col = next(i for i, item in enumerate(COLUNAS) if item[0] == chave)
+            _chave, _titulo, minimo, _anchor, peso = COLUNAS[col]
+            largura = minimo
+            for lbl in self.cabecalho.grid_slaves(row=0, column=col):
+                largura = max(largura, lbl.winfo_reqwidth())
+            for linha in self._linhas:
+                for lbl in linha["frame"].grid_slaves(row=0, column=col):
+                    largura = max(largura, lbl.winfo_reqwidth())
+            largura += 2
+            self.cabecalho.columnconfigure(col, minsize=largura, weight=peso)
+            for linha in self._linhas:
+                linha["frame"].columnconfigure(col, minsize=largura, weight=peso)
+
+    def _ao_redimensionar_canvas(self, event):
+        largura = max(event.width, 400)
+        self.canvas.itemconfig(self._janela_canvas, width=largura)
+        self._aplicar_largura_descricao(largura)
         self._atualizar_scrollregion()
 
     def limpar(self):
@@ -240,6 +272,8 @@ class GradeOrcamento(tk.Frame):
     def finalizar_reconstrucao(self, fracao_top=None, metas_selecionadas=None):
         if fracao_top is None:
             fracao_top = self._fracao_scroll_salva
+        self._uniformizar_colunas()
+        self._aplicar_largura_descricao(self.canvas.winfo_width())
         self._reconstruindo = False
         self.restaurar_fracao_scroll(fracao_top)
         if metas_selecionadas is not None:

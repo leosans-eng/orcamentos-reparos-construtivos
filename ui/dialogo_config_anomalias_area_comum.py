@@ -11,6 +11,7 @@ from core.area_comum import PERCENTUAIS_MODELO
 from core.area_comum_anomalias import (
     CRITERIO_COBERTURA,
     CRITERIO_ESTRUTURA,
+    CHAVE_PINTURA,
     ETAPAS_ORCAMENTO_FIXAS,
     NOMES_ETAPAS_FIXAS,
     OPERACAO_SOMAR,
@@ -25,6 +26,7 @@ from core.area_comum_anomalias import (
     UNIDADES_COMUNS,
     carregar_catalogo,
     chave_titulo_orcamento,
+    _definir_fundo_selador,
     itens_servicos_da_etapa,
     itens_sinapi_da_etapa,
     meta_etapa_fixa,
@@ -207,8 +209,10 @@ class EditorFatoresCalculo(tk.Frame):
     def _adicionar(self, fator=None):
         fator = fator or novo_fator()
         fundo = self.cget("bg")
-        linha = tk.Frame(self._lista, bg=fundo)
-        linha.pack(fill="x", pady=2)
+        bloco = tk.Frame(self._lista, bg=fundo)
+        bloco.pack(fill="x", pady=2)
+        linha = tk.Frame(bloco, bg=fundo)
+        linha.pack(fill="x")
 
         tipo = str(fator.get("tipo_calculo") or "fixo")
         rotulo = f"{tipo} — {ROTULOS_TIPO_CALCULO.get(tipo, tipo)}"
@@ -221,6 +225,7 @@ class EditorFatoresCalculo(tk.Frame):
         var_juncao = tk.StringVar(
             value="+" if fator.get("operacao") == OPERACAO_SOMAR else "×"
         )
+        var_pergunta = tk.StringVar(value=str(fator.get("pergunta") or ""))
         combo_juncao = ttk.Combobox(
             linha,
             textvariable=var_juncao,
@@ -232,7 +237,7 @@ class EditorFatoresCalculo(tk.Frame):
         campo = CampoListaPesquisavel(
             linha,
             textvariable=var_tipo,
-            on_escolher=lambda _v: self._atualizar_resumo(),
+            on_escolher=lambda _v, alvo=bloco: self._ao_escolher_tipo(alvo),
             largura_minima_lista=420,
             altura_lista=10,
             bg=fundo,
@@ -245,6 +250,14 @@ class EditorFatoresCalculo(tk.Frame):
         entrada = ttk.Entry(linha, textvariable=var_coef, width=8)
         entrada.pack(side="left")
         var_coef.trace_add("write", lambda *_a: self._atualizar_resumo())
+        extra = tk.Frame(bloco, bg=fundo)
+        tk.Label(
+            extra, text="Pergunta", bg=fundo, fg=self._cores.texto_suave
+        ).pack(side="left")
+        ttk.Entry(extra, textvariable=var_pergunta).pack(
+            side="left", fill="x", expand=True, padx=(6, 0)
+        )
+        var_pergunta.trace_add("write", lambda *_a: self._atualizar_resumo())
         criar_botao_ttk_com_icone(
             linha,
             texto="",
@@ -262,17 +275,35 @@ class EditorFatoresCalculo(tk.Frame):
         ).pack(side="left", padx=(4, 0))
 
         registro = {
-            "frame": linha,
+            "frame": bloco,
             "var_tipo": var_tipo,
             "var_coef": var_coef,
             "var_juncao": var_juncao,
+            "var_pergunta": var_pergunta,
             "combo_juncao": combo_juncao,
             "campo": campo,
+            "extra": extra,
         }
         self._linhas.append(registro)
+        self._mostrar_pergunta(registro)
         self._atualizar_juncoes()
         self._atualizar_resumo()
         self._avisar_mudanca()
+
+    def _ao_escolher_tipo(self, bloco):
+        for registro in self._linhas:
+            if registro["frame"] is bloco:
+                self._mostrar_pergunta(registro)
+                break
+        self._atualizar_resumo()
+
+    def _mostrar_pergunta(self, registro):
+        extra = registro["extra"]
+        if _chave_tipo_calculo(registro["var_tipo"].get()) == "variavel":
+            if not extra.winfo_ismapped():
+                extra.pack(fill="x", pady=(2, 0))
+        elif extra.winfo_ismapped():
+            extra.pack_forget()
 
     def _atualizar_juncoes(self):
         for indice, registro in enumerate(self._linhas):
@@ -322,7 +353,12 @@ class EditorFatoresCalculo(tk.Frame):
                 else "multiplicar"
             )
             fatores.append(
-                novo_fator(tipo_calculo=tipo, coeficiente=coef, operacao=operacao)
+                novo_fator(
+                    tipo_calculo=tipo,
+                    coeficiente=coef,
+                    operacao=operacao,
+                    pergunta=registro["var_pergunta"].get(),
+                )
             )
         return normalizar_fatores(fatores)
 
@@ -489,7 +525,15 @@ class DialogoItemSinapiAreaComum(tk.Toplevel):
 class DialogoCoefCalculoItem(tk.Toplevel):
     """Edita os fatores de cálculo de um item (SINAPI ou composição)."""
 
-    def __init__(self, parent, item=None, on_confirmar=None, *, titulo="Editar quantitativo"):
+    def __init__(
+        self,
+        parent,
+        item=None,
+        on_confirmar=None,
+        *,
+        titulo="Editar quantitativo",
+        pedir_troca=None,
+    ):
         super().__init__(parent)
         preparar_toplevel(self)
         cores, estilos = aplicar_chrome_dialogo(self)
@@ -505,21 +549,38 @@ class DialogoCoefCalculoItem(tk.Toplevel):
 
         painel = tk.Frame(self, bg=fundo, padx=16, pady=14)
         painel.pack(fill="both", expand=True)
+        self._pedir_troca = pedir_troca
+        self._composicao_trocada = None
+        codigo = str(item.get("codigo") or "").strip()
         nome = (
             item.get("nome")
             or item.get("codigo_sinapi")
-            or item.get("codigo")
+            or codigo
             or "Item"
         )
-        tk.Label(
-            painel,
-            text=str(nome),
+        texto_nome = f"{codigo} — {nome}" if codigo and nome != codigo else str(nome)
+        linha_nome = tk.Frame(painel, bg=fundo)
+        linha_nome.pack(fill="x", pady=(0, 8))
+        self._rotulo_nome = tk.Label(
+            linha_nome,
+            text=texto_nome,
             bg=fundo,
             fg=cores.texto,
             anchor="w",
-            wraplength=520,
+            wraplength=460,
             justify="left",
-        ).pack(fill="x", pady=(0, 8))
+        )
+        self._rotulo_nome.pack(side="left", fill="x", expand=True)
+        if pedir_troca is not None:
+            criar_botao_ttk_com_icone(
+                linha_nome,
+                texto="Trocar",
+                nome_icone="search-outline",
+                command=self._trocar_composicao,
+                estilo=estilos.compacto,
+                cor_icone=estilos.icone,
+                refs=self._refs_icones,
+            ).pack(side="right", padx=(8, 0))
 
         self.editor_fatores = EditorFatoresCalculo(
             painel,
@@ -549,6 +610,19 @@ class DialogoCoefCalculoItem(tk.Toplevel):
         centralizar_janela(self, parent)
         self.after_idle(lambda: _ajustar_janela_ao_conteudo(self))
 
+    def _trocar_composicao(self):
+        if self._pedir_troca is None:
+            return
+
+        def ao_escolher(composicao, _quantidade=1.0):
+            self._composicao_trocada = composicao
+            codigo = str(composicao.get("codigo") or "").strip()
+            nome = str(composicao.get("nome") or "Composição")
+            texto = f"{codigo} — {nome}" if codigo else nome
+            self._rotulo_nome.configure(text=texto)
+
+        self._pedir_troca(self, ao_escolher)
+
     def _confirmar(self):
         try:
             fatores = self.editor_fatores.obter()
@@ -557,7 +631,10 @@ class DialogoCoefCalculoItem(tk.Toplevel):
             messagebox.showwarning("Item", "Coeficiente ou multiplicador inválido.", parent=self)
             return
         if self.on_confirmar:
-            self.on_confirmar({"fatores": fatores, "multiplicador": multiplicador})
+            payload = {"fatores": fatores, "multiplicador": multiplicador}
+            if self._composicao_trocada:
+                payload["composicao"] = self._composicao_trocada
+            self.on_confirmar(payload)
         self.destroy()
 
 
@@ -1035,7 +1112,9 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             refs=self._refs_icones,
         ).pack(side="left", padx=(8, 0))
 
-        colunas = ("tipo", "codigo", "unidade", "formula")
+        colunas = ["tipo", "codigo", "unidade", "formula"]
+        if chave == CHAVE_PINTURA:
+            colunas.append("selador")
         tree = ttk.Treeview(aba, columns=colunas, show="headings", height=10)
         tree.heading("tipo", text="Tipo")
         tree.heading("codigo", text="Código")
@@ -1045,8 +1124,18 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         tree.column("codigo", width=72, minwidth=64, stretch=False, anchor="center")
         tree.column("unidade", width=64, minwidth=52, stretch=False, anchor="center")
         tree.column("formula", width=280, stretch=True, anchor="w")
+        if chave == CHAVE_PINTURA:
+            tree.heading("selador", text="Fundo selador")
+            tree.column("selador", width=110, minwidth=96, stretch=False, anchor="center")
+            tree.bind(
+                "<Button-1>",
+                lambda e, c=chave: self._ao_clique_fundo_selador(e, c),
+            )
         tree.grid(row=1, column=0, sticky="nsew", padx=10)
-        tree.bind("<Double-1>", lambda _e, c=chave: self._editar_item_etapa_fixa(c))
+        tree.bind(
+            "<Double-1>",
+            lambda e, c=chave: self._ao_duplo_item_etapa_fixa(e, c),
+        )
 
         botoes = tk.Frame(aba, bg=fundo)
         botoes.grid(row=2, column=0, sticky="e", padx=10, pady=(6, 8))
@@ -1613,17 +1702,15 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
                     codigo = item.get("codigo") or ""
                 else:
                     codigo = item.get("codigo_sinapi") or item.get("codigo") or ""
-                tree.insert(
-                    "",
-                    "end",
-                    iid=item.get("id"),
-                    values=(
-                        rotulo_tipo_item_catalogo(item, sinapi),
-                        codigo,
-                        item.get("unidade") or "",
-                        rotulo_fatores(item),
-                    ),
-                )
+                valores = [
+                    rotulo_tipo_item_catalogo(item, sinapi),
+                    codigo,
+                    item.get("unidade") or "",
+                    rotulo_fatores(item),
+                ]
+                if chave == CHAVE_PINTURA:
+                    valores.append("Sim" if item.get("fundo_selador") else "—")
+                tree.insert("", "end", iid=item.get("id"), values=valores)
         finally:
             self._carregando = False
 
@@ -1659,7 +1746,14 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
 
         DialogoItemSinapiAreaComum(self, on_confirmar=ao_confirmar, ctx=self.ctx)
 
-    def _pedir_composicao_propria(self, ao_escolher):
+    def _pedir_composicao_propria(
+        self,
+        ao_escolher,
+        *,
+        parent=None,
+        titulo="Adicionar composição própria",
+        texto_confirmar="Usar composição",
+    ):
         from ui.orcamento_customizado import DialogoBuscaComposicaoPropria
 
         try:
@@ -1672,19 +1766,19 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             messagebox.showinfo(
                 "Composição própria",
                 "Nenhuma composição cadastrada.",
-                parent=self,
+                parent=parent or self,
             )
             return
         estados = self.ctx.obter_estados() if self.ctx is not None else []
         DialogoBuscaComposicaoPropria(
-            self,
+            parent or self,
             self.ctx,
             catalogo,
             estados[0] if estados else "",
             ao_escolher,
             mostrar_quantidade=False,
-            titulo="Adicionar composição própria",
-            texto_confirmar="Usar composição",
+            titulo=titulo,
+            texto_confirmar=texto_confirmar,
         )
 
     def _editar_composicao_item(self, atual, *, ao_aplicar):
@@ -1694,13 +1788,29 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             atual["tipo_calculo"] = fatores[0]["tipo_calculo"]
             atual["coeficiente"] = fatores[0]["coeficiente"]
             atual["multiplicador"] = valores.get("multiplicador", 1)
+            composicao = valores.get("composicao")
+            if composicao:
+                atual["composicao_catalogo_id"] = str(composicao.get("id") or "").strip()
+                atual["codigo"] = str(composicao.get("codigo") or "").strip()
+                atual["nome"] = str(composicao.get("nome") or "").strip()
+                if composicao.get("unidade"):
+                    atual["unidade"] = str(composicao.get("unidade")).strip()
             ao_aplicar()
+
+        def pedir_troca(dialogo, ao_escolher):
+            self._pedir_composicao_propria(
+                ao_escolher,
+                parent=dialogo,
+                titulo="Trocar composição própria",
+                texto_confirmar="Usar composição",
+            )
 
         DialogoCoefCalculoItem(
             self,
             item=atual,
             on_confirmar=ao_confirmar_calc,
             titulo="Editar composição",
+            pedir_troca=pedir_troca,
         )
 
     def _adicionar_item_etapa_propria(self, chave: str):
@@ -1720,6 +1830,40 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
             self._redesenhar_etapa_fixa(chave)
 
         self._pedir_composicao_propria(ao_escolher)
+
+    def _ao_clique_fundo_selador(self, event, chave: str):
+        if chave != CHAVE_PINTURA:
+            return
+        tree = self._ui_etapa_fixa(chave).get("tree")
+        if tree is None or tree.identify_region(event.x, event.y) != "cell":
+            return
+        if tree.identify_column(event.x) != "#5":
+            return
+        item_id = tree.identify_row(event.y)
+        if not item_id:
+            return
+        etapa = self._etapa_fixa(chave)
+        atual = next(
+            (i for i in etapa.get("itens") or [] if i.get("id") == item_id), None
+        )
+        if atual is None:
+            return
+        _definir_fundo_selador(atual, not bool(atual.get("fundo_selador")))
+        self._redesenhar_etapa_fixa(chave)
+        if tree.exists(item_id):
+            tree.selection_set(item_id)
+            tree.focus(item_id)
+        return "break"
+
+    def _ao_duplo_item_etapa_fixa(self, event, chave: str):
+        tree = self._ui_etapa_fixa(chave).get("tree")
+        if (
+            chave == CHAVE_PINTURA
+            and tree is not None
+            and tree.identify_column(event.x) == "#5"
+        ):
+            return "break"
+        self._editar_item_etapa_fixa(chave)
 
     def _editar_item_etapa_fixa(self, chave: str):
         etapa = self._etapa_fixa(chave)
@@ -1746,6 +1890,7 @@ class DialogoConfigAnomaliasAreaComum(tk.Toplevel):
         def ao_confirmar(item):
             item["id"] = item_id
             item["da_etapa"] = bool(atual.get("da_etapa"))
+            _definir_fundo_selador(item, atual.get("fundo_selador"))
             item["tipo"] = TIPO_ITEM_CATALOGO_SINAPI
             for i, existente in enumerate(etapa["itens"]):
                 if existente.get("id") == item_id:

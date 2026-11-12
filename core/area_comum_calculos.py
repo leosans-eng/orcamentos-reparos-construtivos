@@ -92,11 +92,12 @@ def calcular_linha_esquadria(linha: dict) -> dict[str, float]:
     dim_y = numero(linha.get("dim_y"))
     qtd = numero(linha.get("qtd_por_pav"))
     area = dim_x * dim_y * qtd
-    pingadeira = (FOLGA_PINGADEIRA_M + dim_x) * qtd if (dim_x or qtd) else 0.0
-    if linha.get("sem_perimetro"):
-        perimetro = 0.0
+    # Porta do hall e cobogós não têm pingadeira.
+    if linha.get("sem_perimetro") or linha.get("cobogo"):
+        pingadeira = 0.0
     else:
-        perimetro = 2.0 * (dim_x + dim_y) * qtd
+        pingadeira = (FOLGA_PINGADEIRA_M + dim_x) * qtd if (dim_x or qtd) else 0.0
+    perimetro = 2.0 * (dim_x + dim_y) * qtd
     return {
         "perimetro_pav_m": perimetro,
         "pingadeira_pav_m": pingadeira,
@@ -129,8 +130,6 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
     alt_plat = numero(m.get("altura_platibanda_m"))
     cx_insp_bloco = numero(m.get("caixas_inspecao_bloco"))
     cx_gord_bloco = numero(m.get("caixas_gordura_bloco"))
-    calcadas = numero(m.get("calcadas_caminhos_m2"))
-    fissuras = numero(m.get("fissuras_m"))
 
     aptos_bloco = aptos_pav * pavimentos
     aptos_total = aptos_bloco * blocos
@@ -151,6 +150,9 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
     esq_perimetro_pav = 0.0
     esq_pingadeira_pav = 0.0
     esq_area_pav = 0.0
+    janela_area_pav = 0.0
+    cob_area_pav = 0.0
+    cob_perimetro_pav = 0.0
     linhas_esq = {}
     for linha in esquadrias or []:
         ident = str(linha.get("id") or "")
@@ -159,14 +161,23 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
         calc["qtd_por_pav"] = qtd_linha
         linhas_esq[ident] = calc
         esq_qtd_pav += qtd_linha
-        if not linha.get("sem_perimetro"):
-            esq_qtd_janelas_pav += qtd_linha
-        esq_perimetro_pav += calc["perimetro_pav_m"]
-        esq_pingadeira_pav += calc["pingadeira_pav_m"]
         esq_area_pav += calc["area_pav_m2"]
+        esq_pingadeira_pav += calc["pingadeira_pav_m"]
+        if linha.get("cobogo"):
+            cob_area_pav += calc["area_pav_m2"]
+            cob_perimetro_pav += calc["perimetro_pav_m"]
+            continue
+        if linha.get("sem_perimetro"):
+            continue
+        esq_qtd_janelas_pav += qtd_linha
+        esq_perimetro_pav += calc["perimetro_pav_m"]
+        janela_area_pav += calc["area_pav_m2"]
 
     esq_area_total = esq_area_pav * pavimentos * blocos
     esq_perimetro_total = esq_perimetro_pav * pavimentos * blocos
+    janela_area_total = janela_area_pav * pavimentos * blocos
+    cob_area_total = cob_area_pav * pavimentos * blocos
+    cob_perimetro_total = cob_perimetro_pav * pavimentos * blocos
     esq_qtd_janelas_total = esq_qtd_janelas_pav * pavimentos * blocos
     pingadeira_bloco = esq_pingadeira_pav * pavimentos
     pingadeira_total = pingadeira_bloco * blocos
@@ -218,8 +229,6 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
         "caixas_inspecao_total": cx_insp_total,
         "caixas_gordura_bloco": cx_gord_bloco,
         "caixas_gordura_total": cx_gord_total,
-        "calcadas_caminhos_m2": calcadas,
-        "fissuras_m": fissuras,
         "esquadria_qtd_pav": esq_qtd_pav,
         "esquadria_perimetro_pav_m": esq_perimetro_pav,
         "esquadria_perimetro_total_m": esq_perimetro_total,
@@ -227,6 +236,12 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
         "esquadria_pingadeira_pav_m": esq_pingadeira_pav,
         "esquadria_area_pav_m2": esq_area_pav,
         "esquadria_area_total_m2": esq_area_total,
+        "janela_area_pav_m2": janela_area_pav,
+        "janela_area_total_m2": janela_area_total,
+        "cobogo_area_pav_m2": cob_area_pav,
+        "cobogo_area_total_m2": cob_area_total,
+        "cobogo_perimetro_pav_m": cob_perimetro_pav,
+        "cobogo_perimetro_total_m": cob_perimetro_total,
         "pingadeira_bloco_m": pingadeira_bloco,
         "pingadeira_total_m": pingadeira_total,
         "area_fachada_bloco_m2": area_fachada_bloco,
@@ -254,7 +269,7 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
         "pct_pintura_teto_hall_m2": pct("pintura_teto_hall") * area_laje_total,
         "pct_troca_tampas_inspecao_un": pct("troca_tampas_inspecao") * cx_insp_total,
         "pct_troca_tampas_gordura_un": pct("troca_tampas_gordura") * cx_gord_total,
-        "pct_troca_calcadas_m2": pct("troca_calcadas") * calcadas,
+        "pct_troca_calcadas_m2": 0.0,
     }
     q["esquadrias"] = linhas_esq
     return q

@@ -260,8 +260,7 @@ class AreaComumFrame(tk.Frame):
         self._carregando = False
         self._sincronizando_percentuais = False
         self._pct_em_edicao = {}
-        self._cursor_espera_nivel = 0
-        self._cursores_anteriores = []
+        self._painel_carregamento = None
         self._perguntando_uf = False
         self._aplicando_historico = False
         self._caminho_arquivo = None
@@ -2156,57 +2155,97 @@ class AreaComumFrame(tk.Frame):
                 uf=estado_do_combo(self.var_uf.get()),
             )
 
-    def _widgets_da_janela(self, raiz=None):
-        if raiz is None:
-            raiz = self.winfo_toplevel()
-        yield raiz
-        try:
-            filhos = raiz.winfo_children()
-        except tk.TclError:
+    def _mostrar_painel_carregamento(self, texto):
+        """Janela própria, desenhada antes do trabalho. Continua visível com a principal congelada."""
+        if self._painel_carregamento is not None:
             return
-        for filho in filhos:
-            if isinstance(filho, tk.Toplevel):
-                continue
-            yield from self._widgets_da_janela(filho)
+        from ui.widgets import aplicar_icone_janela, centralizar_janela, preparar_toplevel
 
-    def _iniciar_cursor_espera(self):
-        self._cursor_espera_nivel += 1
-        if self._cursor_espera_nivel > 1:
-            return
-        self._cursores_anteriores = []
-        for widget in self._widgets_da_janela():
-            try:
-                atual = str(widget.cget("cursor") or "")
-            except tk.TclError:
-                continue
-            self._cursores_anteriores.append((widget, atual))
-            try:
-                widget.configure(cursor="watch")
-            except tk.TclError:
-                pass
         topo = self.winfo_toplevel()
+        painel = tk.Toplevel(topo)
+        preparar_toplevel(painel)
+        painel.title("Carregando")
+        painel.transient(topo)
+        painel.resizable(False, False)
+        painel.configure(bg=self._cores.fundo, cursor="watch")
+        aplicar_icone_janela(painel)
+        painel.protocol("WM_DELETE_WINDOW", lambda: None)
+        corpo = tk.Frame(painel, bg=self._cores.fundo, padx=28, pady=18)
+        corpo.pack()
+        tk.Label(
+            corpo,
+            text=texto,
+            bg=self._cores.fundo,
+            fg=self._cores.texto,
+            font=("Arial", 12, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            corpo,
+            text="Aguarde. A janela principal pode parar de responder.",
+            bg=self._cores.fundo,
+            fg=self._cores.texto_suave,
+            font=("Arial", 9),
+        ).pack(anchor="w", pady=(6, 0))
+        self._painel_carregamento = painel
+        self._carregando = True
+        centralizar_janela(painel, topo)
         try:
-            topo.update_idletasks()
-            topo.update()
+            painel.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        try:
+            painel.grab_set()
+        except tk.TclError:
+            pass
+        painel.lift()
+        try:
+            painel.update()
         except tk.TclError:
             pass
 
-    def _encerrar_cursor_espera(self):
-        if self._cursor_espera_nivel <= 0:
-            return
-        self._cursor_espera_nivel -= 1
-        if self._cursor_espera_nivel:
-            return
-        for widget, cursor in self._cursores_anteriores:
+    def _ocultar_painel_carregamento(self, ao_terminar=None):
+        self._carregando = True
+        painel = self._painel_carregamento
+        if painel is not None:
             try:
-                widget.configure(cursor=cursor)
+                painel.lift()
             except tk.TclError:
                 pass
-        self._cursores_anteriores = []
+        try:
+            self.update_idletasks()
+        except tk.TclError:
+            pass
+
+        def fechar():
+            painel = self._painel_carregamento
+            self._painel_carregamento = None
+            self._carregando = False
+            if painel is not None:
+                try:
+                    painel.grab_release()
+                except tk.TclError:
+                    pass
+                try:
+                    painel.destroy()
+                except tk.TclError:
+                    pass
+            if ao_terminar is not None:
+                ao_terminar()
+
+        try:
+            self.after(1, fechar)
+        except tk.TclError:
+            fechar()
+
+    def _executar_com_carregamento(self, texto, acao, ao_terminar=None):
+        self._mostrar_painel_carregamento(texto)
+        try:
+            acao()
+        finally:
+            self._ocultar_painel_carregamento(ao_terminar)
 
     def _aplicar_rascunho(self, dados: dict, *, caminho=None):
         self._carregando = True
-        self._iniciar_cursor_espera()
         dados = normalizar_rascunho(dados)
         try:
             self.var_nome.set(dados["condominio"].get("nome", ""))
@@ -2296,8 +2335,8 @@ class AreaComumFrame(tk.Frame):
                 except (tk.TclError, ValueError):
                     pass
                 self._job_municipio = None
-            self._encerrar_cursor_espera()
-            self._carregando = False
+            if self._painel_carregamento is None:
+                self._carregando = False
 
     def _capturar_snapshot(self):
         return deepcopy(self._coletar_rascunho())
@@ -2430,6 +2469,8 @@ class AreaComumFrame(tk.Frame):
         self._mostrar_feedback("Novo rascunho iniciado.", "green")
 
     def _abrir(self):
+        if self._carregando:
+            return
         if self._sujo and not self._confirmar_saida(
             "Há alterações não salvas.\n"
             "Deseja salvar o rascunho JSON antes de abrir outro?"
@@ -2448,12 +2489,20 @@ class AreaComumFrame(tk.Frame):
         except RascunhoAreaComumError as exc:
             messagebox.showerror("Abrir rascunho", str(exc), parent=self.winfo_toplevel())
             return
-        self._mostrar_feedback("Carregando rascunho…", "gray", temporario=False)
-        self._aplicar_rascunho(dados, caminho=caminho)
-        self._historico_undo.clear()
-        self._historico_redo.clear()
-        self._iniciar_historico()
-        self._mostrar_feedback(f"Rascunho aberto: {Path(caminho).name}", "green")
+
+        def carregar():
+            self._aplicar_rascunho(dados, caminho=caminho)
+            self._historico_undo.clear()
+            self._historico_redo.clear()
+            self._iniciar_historico()
+
+        self._executar_com_carregamento(
+            "Carregando rascunho…",
+            carregar,
+            lambda: self._mostrar_feedback(
+                f"Rascunho aberto: {Path(caminho).name}", "green"
+            ),
+        )
 
     def _salvar(self, *, salvar_como=False) -> bool:
         caminho = None if salvar_como else self._caminho_arquivo
@@ -2495,12 +2544,17 @@ class AreaComumFrame(tk.Frame):
             parent=self.winfo_toplevel(),
         ):
             return
-        self._mostrar_feedback("Carregando rascunho…", "gray", temporario=False)
-        self._aplicar_rascunho(dados)
-        self._sujo = True
-        self._atualizar_rotulo_arquivo()
-        self._iniciar_historico()
-        self._mostrar_feedback("Rascunho automático restaurado.", "green")
+        def restaurar():
+            self._aplicar_rascunho(dados)
+            self._sujo = True
+            self._atualizar_rotulo_arquivo()
+            self._iniciar_historico()
+
+        self._executar_com_carregamento(
+            "Carregando rascunho…",
+            restaurar,
+            lambda: self._mostrar_feedback("Rascunho automático restaurado.", "green"),
+        )
 
     def _recarregar_catalogo_anomalias(self):
         self._catalogo = carregar_catalogo()

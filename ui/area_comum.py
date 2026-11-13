@@ -281,8 +281,7 @@ class AreaComumFrame(tk.Frame):
         self._carregando = False
         self._sincronizando_percentuais = False
         self._pct_em_edicao = {}
-        self._painel_carregamento = None
-        self._lbl_etapa_carregamento = None
+        self._ocupado = False
         self._composicoes_ciclo = None
         self._avisos_ultima_carga = []
         self._total_geral_ultimo = None
@@ -2236,121 +2235,61 @@ class AreaComumFrame(tk.Frame):
                 uf=estado_do_combo(self.var_uf.get()),
             )
 
-    def _mostrar_painel_carregamento(self, texto):
-        """Janela própria, desenhada antes do trabalho. Continua visível com a principal congelada."""
-        if self._painel_carregamento is not None:
-            return
-        from ui.widgets import aplicar_icone_janela, centralizar_janela, preparar_toplevel
+    def _executar_com_carregamento(self, texto, acao, ao_terminar=None):
+        """Executa uma operação demorada com um aviso discreto.
 
-        topo = self.winfo_toplevel()
-        painel = tk.Toplevel(topo)
-        preparar_toplevel(painel)
-        painel.title("Carregando")
-        painel.transient(topo)
-        painel.resizable(False, False)
-        painel.configure(bg=self._cores.fundo, cursor="watch")
-        aplicar_icone_janela(painel)
-        painel.protocol("WM_DELETE_WINDOW", lambda: None)
-        corpo = tk.Frame(painel, bg=self._cores.fundo, padx=28, pady=18)
-        corpo.pack()
-        tk.Label(
-            corpo,
-            text=texto,
-            bg=self._cores.fundo,
-            fg=self._cores.texto,
-            font=("Arial", 12, "bold"),
-        ).pack(anchor="w")
-        # Etapa atual; largura fixa para a janela não mudar de tamanho a cada etapa.
-        self._lbl_etapa_carregamento = tk.Label(
-            corpo,
-            text="",
-            width=36,
-            anchor="w",
-            bg=self._cores.fundo,
-            fg=self._cores.texto,
-            font=("Arial", 10),
-        )
-        self._lbl_etapa_carregamento.pack(anchor="w", pady=(8, 0))
-        tk.Label(
-            corpo,
-            text="Aguarde. A janela principal pode parar de responder.",
-            bg=self._cores.fundo,
-            fg=self._cores.texto_suave,
-            font=("Arial", 9),
-        ).pack(anchor="w", pady=(6, 0))
-        self._painel_carregamento = painel
-        self._carregando = True
-        centralizar_janela(painel, topo)
-        try:
-            painel.attributes("-topmost", True)
-        except tk.TclError:
-            pass
-        try:
-            painel.grab_set()
-        except tk.TclError:
-            pass
-        painel.lift()
-        try:
-            painel.update()
-        except tk.TclError:
-            pass
-
-    def _ocultar_painel_carregamento(self, ao_terminar=None):
-        self._carregando = True
-        painel = self._painel_carregamento
-        if painel is not None:
-            try:
-                painel.lift()
-            except tk.TclError:
-                pass
-        try:
-            self.update_idletasks()
-        except tk.TclError:
-            pass
-
-        def fechar():
-            painel = self._painel_carregamento
-            self._painel_carregamento = None
-            self._lbl_etapa_carregamento = None
-            self._carregando = False
-            if painel is not None:
-                try:
-                    painel.grab_release()
-                except tk.TclError:
-                    pass
-                try:
-                    painel.destroy()
-                except tk.TclError:
-                    pass
+        texto aparece na barra de mensagens do módulo (None = só o cursor de
+        espera). Durante a operação, `tk busy` cobre a janela com uma camada
+        invisível: mostra o cursor de espera e descarta cliques feitos
+        enquanto a tela está ocupada, para não serem executados depois sobre
+        uma tela que já mudou.
+        """
+        if self._ocupado:
+            acao()  # já dentro de outra operação ocupada
             if ao_terminar is not None:
                 ao_terminar()
-
-        try:
-            self.after(1, fechar)
-        except tk.TclError:
-            fechar()
-
-    def _etapa_carregamento(self, texto):
-        """Mostra a etapa atual na janela "Carregando", se ela estiver aberta.
-
-        Só update_idletasks (redesenho), sem processar eventos: a carga
-        continua atômica e o usuário não consegue interagir no meio dela.
-        """
-        rotulo = self._lbl_etapa_carregamento
-        if rotulo is None or self._painel_carregamento is None:
             return
+        self._ocupado = True
+        self._carregando = True
+        if texto:
+            self._mostrar_feedback(texto, "gray", temporario=False)
+        topo = self.winfo_toplevel()
         try:
-            rotulo.configure(text=texto)
-            self._painel_carregamento.update_idletasks()
+            self.tk.call("tk", "busy", "hold", topo)
+            bloqueado = True
+        except tk.TclError:
+            bloqueado = False
+        try:
+            self.update_idletasks()  # desenha a mensagem e o cursor antes do trabalho
         except tk.TclError:
             pass
-
-    def _executar_com_carregamento(self, texto, acao, ao_terminar=None):
-        self._mostrar_painel_carregamento(texto)
         try:
             acao()
         finally:
-            self._ocultar_painel_carregamento(ao_terminar)
+            try:
+                self.update_idletasks()
+            except tk.TclError:
+                pass
+
+            def liberar():
+                # Roda depois dos cliques que chegaram durante a operação:
+                # eles caem na camada do tk busy e são ignorados.
+                if bloqueado:
+                    try:
+                        self.tk.call("tk", "busy", "forget", topo)
+                    except tk.TclError:
+                        pass
+                self._ocupado = False
+                self._carregando = False
+                if texto and self.var_feedback.get() == texto:
+                    self.var_feedback.set("")
+                if ao_terminar is not None:
+                    ao_terminar()
+
+            try:
+                self.after(1, liberar)
+            except tk.TclError:
+                liberar()
 
     def _aplicar_rascunho(
         self, dados: dict, *, caminho=None, normalizar=True, verificar_mudancas=False
@@ -2366,7 +2305,6 @@ class AreaComumFrame(tk.Frame):
         if normalizar:
             dados = normalizar_rascunho(dados)
         try:
-            self._etapa_carregamento("Aplicando dados iniciais…")
             self.var_nome.set(dados["condominio"].get("nome", ""))
             self.var_municipio.set(dados["condominio"].get("municipio", ""))
             uf = dados["condominio"].get("uf", "")
@@ -2417,7 +2355,6 @@ class AreaComumFrame(tk.Frame):
             self.var_duas_demaos_selador.set(bool(dados["duas_demaos_fundo_selador"]))
             self.var_considerar_entulho.set(bool(dados["considerar_destinacao_entulho"]))
             self.var_considerar_limpeza.set(bool(dados["considerar_limpeza_geral"]))
-            self._etapa_carregamento("Montando orçamento…")
             self._carregar_orcamento_rascunho(dados)
             self._redesenhar_anomalias_orcamento(com_valores=False)
             self.texto_obs.delete("1.0", "end")
@@ -2438,7 +2375,6 @@ class AreaComumFrame(tk.Frame):
                     self._composicoes_para_calculo(),
                     estado_do_combo(self.var_uf.get()),
                 )
-            self._etapa_carregamento("Calculando quantitativos e preços…")
             self._recalcular()
             if verificar_mudancas:
                 self._avisos_ultima_carga = self._verificar_mudancas_carga(total_salvo)
@@ -2449,7 +2385,7 @@ class AreaComumFrame(tk.Frame):
                 except (tk.TclError, ValueError):
                     pass
                 self._job_municipio = None
-            if self._painel_carregamento is None:
+            if not self._ocupado:
                 self._carregando = False
 
     def _verificar_mudancas_carga(self, total_salvo) -> list[dict]:
@@ -2724,7 +2660,7 @@ class AreaComumFrame(tk.Frame):
             else:
                 self._mostrar_feedback("Novo rascunho iniciado.", "green")
 
-        self._executar_com_carregamento("Iniciando novo rascunho…", limpar, ao_terminar)
+        self._executar_com_carregamento("Começando um rascunho novo…", limpar, ao_terminar)
 
     def _abrir(self):
         if self._carregando:
@@ -2748,8 +2684,6 @@ class AreaComumFrame(tk.Frame):
         erros = []
 
         def carregar():
-            # A leitura acontece com o painel já visível (arquivo grande ou em rede).
-            self._etapa_carregamento(f"Lendo {nome_arquivo}…")
             try:
                 dados = carregar_rascunho(caminho)
             except RascunhoAreaComumError as exc:
@@ -2769,7 +2703,7 @@ class AreaComumFrame(tk.Frame):
             self._marcar_sujo_se_carga_alterou()
 
         def ao_terminar():
-            # Só depois de fechar o painel: ele é topmost e esconderia a mensagem.
+            # Depois de liberar a tela, para a mensagem não abrir com ela ocupada.
             if erro_leitura:
                 messagebox.showerror(
                     "Abrir rascunho", erro_leitura[0], parent=self.winfo_toplevel()
@@ -2782,7 +2716,7 @@ class AreaComumFrame(tk.Frame):
                 self._mostrar_feedback(f"Rascunho aberto: {nome_arquivo}", "green")
                 self._mostrar_avisos_carga("Abrir rascunho")
 
-        self._executar_com_carregamento("Carregando rascunho…", carregar, ao_terminar)
+        self._executar_com_carregamento("Abrindo rascunho…", carregar, ao_terminar)
 
     def _salvar(self, *, salvar_como=False) -> bool:
         caminho = None if salvar_como else self._caminho_arquivo
@@ -2854,7 +2788,9 @@ class AreaComumFrame(tk.Frame):
                 self._mostrar_feedback("Rascunho automático restaurado.", "green")
                 self._mostrar_avisos_carga("Rascunho automático")
 
-        self._executar_com_carregamento("Carregando rascunho…", restaurar, ao_terminar)
+        self._executar_com_carregamento(
+            "Restaurando o rascunho automático…", restaurar, ao_terminar
+        )
 
     def _marcar_sujo_se_carga_alterou(self):
         """Se a carga mudou valores (ex.: SINAPI nova), salvar grava algo
@@ -5021,7 +4957,13 @@ class AreaComumFrame(tk.Frame):
             self._grade_pendente = True
             return
         self._grade_pendente = False
+        # Com muitos itens, refazer a grade ainda leva ~1,5 s: mostra o cursor
+        # de espera (sem texto, para não apagar outra mensagem da barra).
+        self._executar_com_carregamento(
+            None, lambda: self._reconstruir_grade(catalogo, estado_atual, bdi)
+        )
 
+    def _reconstruir_grade(self, catalogo, estado_atual, bdi):
         self.grade.iniciar_reconstrucao()
         fracao = self.grade.salvar_fracao_scroll()
         focar = self._grade_focar_meta

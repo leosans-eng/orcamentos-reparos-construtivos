@@ -1,5 +1,4 @@
 import gc
-import os
 import tkinter as tk
 
 from app_paths import icon_path
@@ -122,6 +121,11 @@ class OrcApp:
         self.ctx.frame_rodape = frame_rodape
         frame_rodape.pack(side="bottom", fill="x", padx=10, pady=(0, 6))
 
+        # Quadradinho com a situação da SINAPI (verde, âmbar ou vermelho).
+        indicador = tk.Frame(frame_rodape, width=8, height=8, bg=cores.texto_suave)
+        indicador.pack(side="left", padx=(0, 6))
+        self.ctx.indicador_sinapi_rodape = indicador
+
         label_rodape = tk.Label(
             frame_rodape,
             text=self.ctx.texto_rodape_interface(),
@@ -132,38 +136,18 @@ class OrcApp:
         )
         self.ctx.label_rodape = label_rodape
         label_rodape.pack(side="left", anchor="w")
+        for widget in (indicador, label_rodape):
+            vincular_tooltip(widget, lambda: self.ctx.dica_sinapi)
+        # Clicar no rodapé também tira o foco de um cartão do Hub.
+        for widget in (frame_rodape, indicador, label_rodape):
+            widget.bind("<Button-1>", lambda _e: self.janela.focus_set(), add="+")
+        self.ctx.atualizar_indicador_sinapi()
 
-        # Engrenagem num slot próprio à direita — o aviso CSV nunca ocupa essa faixa.
         self._refs_rodape: list = []
         slot_config = tk.Frame(frame_rodape, bg=cores.fundo)
         self.ctx.slot_configuracoes_rodape = slot_config
         slot_config.pack(side="right", anchor="e")
         self._montar_botao_configuracoes(slot_config, cores)
-
-        area_aviso = tk.Frame(frame_rodape, bg=cores.fundo)
-        self.ctx.area_aviso_csv_rodape = area_aviso
-        area_aviso.pack(side="right", anchor="e", padx=(0, 6))
-
-        if self.ctx.caminho_sinapi_carregado:
-            nome_csv = (
-                f"{os.path.basename(self.ctx.caminho_sinapi_carregado)} "
-                f"⭠ Arquivo de base"
-            )
-        else:
-            nome_csv = "Nenhum arquivo SINAPI carregado"
-
-        self.ctx.label_nome_csv_rodape = tk.Label(
-            area_aviso,
-            text=nome_csv,
-            font=("Arial", 8, "bold"),
-            fg=cores.perigo,
-            bg=cores.fundo,
-            anchor="e",
-        )
-        self.ctx.label_nome_csv_rodape.pack(side="right", anchor="e")
-        self.ctx.agendar_sumico_nome_csv_deslize_direita(
-            self.ctx.label_nome_csv_rodape
-        )
 
     def _montar_botao_configuracoes(self, parent, cores):
         icone = criar_icone_svg(
@@ -255,32 +239,20 @@ class OrcApp:
                 rodape.configure(bg=cores.fundo)
             except tk.TclError:
                 pass
-        for atr in ("slot_configuracoes_rodape", "area_aviso_csv_rodape"):
-            quadro = getattr(self.ctx, atr, None)
-            if quadro is not None:
-                try:
-                    quadro.configure(bg=cores.fundo)
-                except tk.TclError:
-                    pass
+        quadro = getattr(self.ctx, "slot_configuracoes_rodape", None)
+        if quadro is not None:
+            try:
+                quadro.configure(bg=cores.fundo)
+            except tk.TclError:
+                pass
         label_rodape = getattr(self.ctx, "label_rodape", None)
         if label_rodape is not None:
             try:
                 label_rodape.configure(bg=cores.fundo, fg=cores.texto_suave)
             except tk.TclError:
                 pass
-        label_csv = getattr(self.ctx, "label_nome_csv_rodape", None)
-        if label_csv is not None:
-            try:
-                label_csv.configure(bg=cores.fundo, fg=cores.perigo)
-            except tk.TclError:
-                pass
+        self.ctx.atualizar_indicador_sinapi()
         self._atualizar_botao_configuracoes(cores)
-        slot = getattr(self.ctx, "slot_configuracoes_rodape", None)
-        if slot is not None:
-            try:
-                slot.lift()
-            except tk.TclError:
-                pass
 
     def _criar_hub(self):
         self._frames["hub"] = HubFrame(

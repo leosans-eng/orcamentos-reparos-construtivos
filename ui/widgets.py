@@ -848,9 +848,14 @@ def aplicar_hover_cartao(
     cor_fundo_hover=COR_FUNDO_HOVER,
     cor_titulo_normal=COR_TITULO_PADRAO,
     cor_titulo_hover=COR_TITULO_HOVER,
+    destacar_com_foco=False,
 ):
-    """Hover estável: funciona ao mover o mouse entre o cartão e os labels internos."""
-    estado = {"hover": False, "job": None}
+    """Hover estável: funciona ao mover o mouse entre o cartão e os labels internos.
+
+    Com ``destacar_com_foco``, o cartão também fica destacado enquanto tem o
+    foco do teclado (Tab/setas), mesmo com o mouse longe.
+    """
+    estado = {"hover": False, "foco": False, "job": None}
 
     def aplicar(estilo_hover):
         cor_borda = cor_borda_hover if estilo_hover else cor_borda_normal
@@ -887,7 +892,7 @@ def aplicar_hover_cartao(
             aplicar(True)
         elif not dentro and estado["hover"]:
             estado["hover"] = False
-            aplicar(False)
+            aplicar(estado["foco"])
 
     def agendar_verificacao(_event=None):
         if estado["job"] is not None:
@@ -907,6 +912,17 @@ def aplicar_hover_cartao(
     for w in widgets:
         w.bind("<Enter>", ao_entrar)
         w.bind("<Leave>", agendar_verificacao)
+
+    if destacar_com_foco:
+        def ao_mudar_foco(tem_foco):
+            estado["foco"] = tem_foco
+            try:
+                aplicar(tem_foco or estado["hover"])
+            except tk.TclError:
+                pass
+
+        cartao.bind("<FocusIn>", lambda _e: ao_mudar_foco(True), add="+")
+        cartao.bind("<FocusOut>", lambda _e: ao_mudar_foco(False), add="+")
 
 
 def criar_botao_voltar(parent, command, bg_parent=None):
@@ -994,8 +1010,11 @@ def _limitar_posicao_a_area(x, y, largura, altura, area, margem=4):
     return x, y
 
 
-def vincular_tooltip(widget, texto: str):
-    """Exibe texto ao passar o mouse (tooltip simples, no mesmo monitor)."""
+def vincular_tooltip(widget, texto):
+    """Exibe texto ao passar o mouse (tooltip simples, no mesmo monitor).
+
+    ``texto`` pode ser uma função, chamada a cada exibição (texto que muda).
+    """
     estado = {"janela": None}
 
     def _mostrar(_event):
@@ -1009,7 +1028,7 @@ def vincular_tooltip(widget, texto: str):
             pass
         tk.Label(
             janela,
-            text=texto,
+            text=texto() if callable(texto) else texto,
             background="#ffffe0",
             foreground="#000000",
             relief="solid",

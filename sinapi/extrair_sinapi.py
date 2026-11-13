@@ -1,4 +1,3 @@
-from openpyxl import load_workbook
 from pathlib import Path
 import csv
 import os
@@ -40,6 +39,10 @@ def processar_arquivo(caminho_excel, callback=None):
         raise FileNotFoundError(
             f"Arquivo não encontrado: {caminho_excel}"
         )
+
+    # Importado aqui: o openpyxl é pesado (~0,4 s) e só é usado ao extrair
+    # uma planilha nova da SINAPI, não a cada abertura do programa.
+    from openpyxl import load_workbook
 
     wb = load_workbook(
         caminho_excel,

@@ -9,10 +9,6 @@ from core.composicoes_proprias import (
     linhas_detalhe_composicao,
     obter_composicao_por_id,
 )
-from core.exportacao_planilha_orcamento import (
-    exportar_orcamento_customizado_modelo4,
-    exportar_orcamento_customizado_modelo_formatado,
-)
 from core.composicoes_proprias_storage import listar as listar_composicoes_catalogo
 from core.orcamento_customizado import (
     BDI_PADRAO,
@@ -3169,6 +3165,13 @@ class OrcamentoCustomizadoFrame(tk.Frame):
         )
 
     def _ao_selecionar_modelo_planilha(self, numero):
+        # Import só aqui: a exportação carrega o openpyxl, que é pesado e não
+        # precisa pesar na abertura do programa para quem não gera planilha.
+        from core.exportacao_planilha_orcamento import (
+            exportar_orcamento_customizado_modelo4,
+            exportar_orcamento_customizado_modelo_formatado,
+        )
+
         referencia = self.ctx.sinapi_referencia_rotulo
         if referencia == "BASE AUSENTE":
             referencia = "Base não carregada"

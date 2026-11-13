@@ -7,8 +7,6 @@ from copy import deepcopy
 from datetime import datetime
 
 import pandas as pd
-from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 
 from app_paths import asset_path
 from core.app_state import ALTURA_TREE_MIN, NOMES_GRUPOS_REPARO
@@ -919,7 +917,6 @@ def criar_area_privativa(parent, ctx, on_voltar):
         else:
             combo_estado.set("")
 
-        ctx.atualizar_label_csv_rodape()
         ctx.atualizar_rodape()
 
         if lista_anomalias:
@@ -1334,6 +1331,9 @@ def criar_area_privativa(parent, ctx, on_voltar):
     # GERAR ORÇAMENTO              #
     # ---------------------------- #
     def gerar_orcamento():
+        # Importado aqui: o openpyxl é pesado e só é usado ao gerar a planilha.
+        from openpyxl import load_workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
         # para diagnosticar bugs
         print("LISTA_ANOMALIAS:", lista_anomalias)

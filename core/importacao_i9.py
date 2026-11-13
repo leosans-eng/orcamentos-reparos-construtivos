@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import openpyxl
-
 from core.composicoes_proprias_storage import obter_por_codigo
 from core.formatador_sinapi.comum import (
     encontrar_linha_dados_start,
@@ -93,6 +91,8 @@ def importar_planilha_i9(caminho: str, catalogo=None, sinapi=None) -> ResultadoI
     Itens com banco Próprio são vinculados ao catálogo de composições próprias pelo código.
     """
     arquivo = validar_caminho_planilha(caminho)
+    import openpyxl  # pesado; só carregado ao importar uma planilha i9
+
     wb = openpyxl.load_workbook(arquivo, data_only=True)
     ws = planilha_ativa(wb)
 

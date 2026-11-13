@@ -24,11 +24,13 @@ class HubFrame(tk.Frame):
         self.offline = offline
         self._cache_icones = {}
         self._refs_icones = []
+        self._cartoes: list[tk.Frame] = []
         self._montar()
 
     def atualizar_tema(self):
         self._cache_icones.clear()
         self._refs_icones.clear()
+        self._cartoes.clear()
         for filho in list(self.winfo_children()):
             try:
                 filho.destroy()
@@ -82,27 +84,27 @@ class HubFrame(tk.Frame):
             [
                 {
                     "titulo": "Orçamento\nCustomizado",
-                    "descricao": "Montar orçamento com Etapas e Itens personalizados",
+                    "descricao": "Monte um orçamento livre, com as etapas e os itens que quiser",
                     "modulo": "orcamento_customizado",
                     "habilitado": True,
-                    "icone_titulo": "construct-outline",
+                    "icone_titulo": "document-text-outline",
                 },
                 {
                     "titulo": "Área Privativa",
-                    "descricao": "Orçamento de reparos em unidades autônomas",
+                    "descricao": "Reparos dentro das unidades autônomas (apartamentos e casas)",
                     "modulo": "area_privativa",
                     "habilitado": True,
-                    "icone_titulo": "construct-outline",
+                    "icone_titulo": "home-outline",
                 },
                 {
                     "titulo": "Área Comum",
                     "descricao": (
-                        "Orçamento de reparos em áreas comuns, "
-                        "com a opção de composições próprias"
+                        "Reparos nas áreas comuns do condomínio, "
+                        "como fachada, cobertura e circulações"
                     ),
                     "modulo": "area_comum",
                     "habilitado": True,
-                    "icone_titulo": "construct-outline",
+                    "icone_titulo": "business-outline",
                 },
             ],
             cores,
@@ -124,8 +126,8 @@ class HubFrame(tk.Frame):
                 {
                     "titulo": "Configurar\nComposições Próprias",
                     "descricao": (
-                        "Cadastre composições com insumos/composições "
-                        "SINAPI ou de mercado"
+                        "Crie suas próprias composições com itens "
+                        "da SINAPI ou preços de mercado"
                     ),
                     "modulo": "composicoes_proprias",
                     "habilitado": True,
@@ -134,8 +136,8 @@ class HubFrame(tk.Frame):
                 {
                     "titulo": "Configurar\nEtapas pré-definidas",
                     "descricao": (
-                        "Configure modelos de Etapas que já virão com "
-                        "itens SINAPI e composições próprias"
+                        "Monte modelos de etapas que já chegam prontos "
+                        "no orçamento, com seus itens"
                     ),
                     "modulo": "etapas_predefinidas",
                     "habilitado": True,
@@ -154,7 +156,7 @@ class HubFrame(tk.Frame):
             [
                 {
                     "titulo": "Consulta SINAPI",
-                    "descricao": "Pesquisar composições e preços da base",
+                    "descricao": "Pesquise composições, insumos e preços da SINAPI",
                     "modulo": "consulta_sinapi",
                     "habilitado": True,
                     "icone_titulo": "search-outline",
@@ -165,6 +167,7 @@ class HubFrame(tk.Frame):
         )
 
         self._montar_botoes_rodape(cores)
+        self._ligar_clique_fora(self)
 
     def _montar_secao(
         self, parent, titulo, cartoes, cores, *, pady_abaixo=16, cor_fundo=None
@@ -312,7 +315,8 @@ class HubFrame(tk.Frame):
             font=("Arial", 9),
             fg=cor_texto,
             bg=cor_fundo,
-            wraplength=largura - 28,
+            # Espaço útil: largura menos a borda (2 + 2) e o padx (14 + 14).
+            wraplength=largura - 36,
             justify="center",
         )
         lbl_desc.grid(row=1, column=0, padx=14, sticky="n")
@@ -343,10 +347,26 @@ class HubFrame(tk.Frame):
         if habilitado:
             def ao_clicar(_event=None, mod=modulo):
                 self.on_selecionar_modulo(mod)
+                return "break"
 
             cartao.bind("<Button-1>", ao_clicar)
             for filho in filhos:
                 filho.bind("<Button-1>", ao_clicar)
+
+            # Teclado: Tab/setas escolhem o cartão, Enter ou espaço abrem,
+            # Esc tira o foco.
+            cartao.configure(takefocus=1)
+            for tecla in ("<Return>", "<KP_Enter>", "<space>"):
+                cartao.bind(tecla, ao_clicar)
+            for tecla, direcao in (
+                ("<Left>", "esquerda"),
+                ("<Right>", "direita"),
+                ("<Up>", "cima"),
+                ("<Down>", "baixo"),
+            ):
+                cartao.bind(tecla, lambda _e, c=cartao, d=direcao: self._mover_foco(c, d))
+            cartao.bind("<Escape>", lambda _e: self._tirar_foco())
+            self._cartoes.append(cartao)
 
             aplicar_hover_cartao(
                 cartao,
@@ -357,7 +377,53 @@ class HubFrame(tk.Frame):
                 cor_fundo_hover=cores.fundo_hover,
                 cor_titulo_normal=cores.titulo,
                 cor_titulo_hover=cores.titulo_hover,
+                destacar_com_foco=True,
             )
+
+    # ------------------------------------------------------------- teclado
+
+    def _tirar_foco(self):
+        try:
+            self.focus_set()
+        except tk.TclError:
+            pass
+        return "break"
+
+    def _ligar_clique_fora(self, widget):
+        """Clicar no fundo (fora dos cartões) tira o foco do cartão."""
+        if widget in self._cartoes:
+            return
+        if isinstance(widget, (tk.Frame, tk.Label)):
+            widget.bind("<Button-1>", lambda _e: self._tirar_foco(), add="+")
+        for filho in widget.winfo_children():
+            self._ligar_clique_fora(filho)
+
+    def _mover_foco(self, atual, direcao):
+        """Vai para o cartão mais próximo na direção da seta."""
+        try:
+            ax = atual.winfo_rootx() + atual.winfo_width() / 2
+            ay = atual.winfo_rooty() + atual.winfo_height() / 2
+            melhor, melhor_nota = None, None
+            for cartao in self._cartoes:
+                if cartao is atual or not cartao.winfo_ismapped():
+                    continue
+                dx = cartao.winfo_rootx() + cartao.winfo_width() / 2 - ax
+                dy = cartao.winfo_rooty() + cartao.winfo_height() / 2 - ay
+                if direcao in ("esquerda", "direita"):
+                    avanco, desvio = (dx if direcao == "direita" else -dx), abs(dy)
+                else:
+                    avanco, desvio = (dy if direcao == "baixo" else -dy), abs(dx)
+                if avanco <= 10:
+                    continue
+                # Prefere quem está alinhado: desviar pesa mais que avançar.
+                nota = avanco + 3 * desvio
+                if melhor_nota is None or nota < melhor_nota:
+                    melhor, melhor_nota = cartao, nota
+            if melhor is not None:
+                melhor.focus_set()
+        except tk.TclError:
+            pass
+        return "break"
 
     def _icone_cartao(self, nome: str, cor: str) -> tk.PhotoImage:
         chave = (nome, ALTURA_ICONE_CARTAO, cor)

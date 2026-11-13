@@ -4,7 +4,6 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from core.composicoes_proprias_storage import listar as listar_composicoes_catalogo
-from core.importacao_i9 import importar_planilha_i9
 from core.orcamento_storage import (
     adicionar_orcamento_importado,
     criar_orcamento,
@@ -501,6 +500,10 @@ class SelecaoOrcamentosCustomizadoFrame(tk.Frame):
             messagebox.showwarning("Orçamento", str(exc), parent=self.winfo_toplevel())
 
     def _importar_i9(self):
+        # Import só aqui: o leitor de planilhas i9 carrega o openpyxl, que é
+        # pesado e não precisa entrar na abertura do programa.
+        from core.importacao_i9 import importar_planilha_i9
+
         def ao_importar(caminho):
             try:
                 resultado = importar_planilha_i9(

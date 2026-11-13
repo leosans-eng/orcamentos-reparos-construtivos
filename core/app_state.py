@@ -1,5 +1,4 @@
 import json
-import os
 import queue
 import threading
 import tkinter as tk
@@ -29,9 +28,6 @@ LARGURA_JANELA_PADRAO = 1080
 ALTURA_JANELA_PADRAO = 720
 ALTURA_TREE_MIN = 11
 
-RODAPE_CSV_SUMIR_APOS_MS = 3000
-RODAPE_CSV_DESLIZE_INTERVALO_MS = 35
-RODAPE_CSV_DESLIZE_PASSO_PX = 4
 INTERVALO_FILA_UI_MS = 80
 
 NOMES_GRUPOS_REPARO = {
@@ -56,8 +52,8 @@ class AppContext:
         self.janela: tk.Tk | None = None
         self.frame_rodape: tk.Frame | None = None
         self.label_rodape: tk.Label | None = None
-        self.label_nome_csv_rodape: tk.Label | None = None
-        self.area_aviso_csv_rodape: tk.Frame | None = None
+        self.indicador_sinapi_rodape: tk.Frame | None = None
+        self.dica_sinapi = ""
         self.slot_configuracoes_rodape: tk.Frame | None = None
         self.btn_configuracoes_rodape: tk.Label | None = None
         self.status_sinapi: tk.StringVar | None = None
@@ -165,8 +161,7 @@ class AppContext:
         self.janela = None
         self.frame_rodape = None
         self.label_rodape = None
-        self.label_nome_csv_rodape = None
-        self.area_aviso_csv_rodape = None
+        self.indicador_sinapi_rodape = None
         self.slot_configuracoes_rodape = None
         self.btn_configuracoes_rodape = None
         self.status_sinapi = None
@@ -218,7 +213,6 @@ class AppContext:
 
     def notificar_sinapi_atualizada(self):
         self.atualizar_rodape()
-        self.atualizar_label_csv_rodape()
         for callback in self._sinapi_callbacks:
             callback()
 
@@ -241,112 +235,55 @@ class AppContext:
     def atualizar_rodape(self):
         if self.label_rodape and self.label_rodape.winfo_exists():
             self.label_rodape.config(text=self.texto_rodape_interface())
+        self.atualizar_indicador_sinapi()
 
-    def _manter_engrenagem_acima(self) -> None:
-        slot = self.slot_configuracoes_rodape
-        if slot is None:
-            return
-        try:
-            if slot.winfo_exists():
-                slot.lift()
-        except tk.TclError:
-            pass
+    def estado_sinapi(self) -> tuple[str, str]:
+        """Resume a situação da base SINAPI para o quadradinho do rodapé.
 
-    def agendar_sumico_nome_csv_deslize_direita(self, label_csv):
-        """Some o aviso CSV deslizando à direita, sem cobrir a engrenagem."""
-        area = self.area_aviso_csv_rodape
-        if area is None:
-            area = self.frame_rodape
-        if area is None:
-            return
-        self._manter_engrenagem_acima()
-
-        def executar():
-            if self.frame_rodape is None:
-                return
-            if area is None or not area.winfo_exists():
-                return
-            if not label_csv.winfo_exists():
-                return
-            if label_csv.winfo_manager() != "pack":
-                return
-            label_csv.pack_forget()
-            label_csv.place(relx=1.0, rely=0.5, anchor="e", x=0, in_=area)
-            self._manter_engrenagem_acima()
-
-            def deslizar():
-                if self.frame_rodape is None:
-                    return
-                if area is None or not area.winfo_exists():
-                    return
-                if not label_csv.winfo_exists():
-                    return
-                try:
-                    area.update_idletasks()
-                    label_csv.update_idletasks()
-                    # Saiu pela direita da área de aviso (antes da engrenagem).
-                    if label_csv.winfo_x() >= area.winfo_width() + 8:
-                        label_csv.destroy()
-                        self._manter_engrenagem_acima()
-                        return
-                    info = label_csv.place_info()
-                    cur_x = int(float(info.get("x", 0)))
-                    label_csv.place(
-                        relx=1.0,
-                        rely=0.5,
-                        anchor="e",
-                        x=cur_x + RODAPE_CSV_DESLIZE_PASSO_PX,
-                        in_=area,
-                    )
-                    self._manter_engrenagem_acima()
-                    self._agendar_after(
-                        area, RODAPE_CSV_DESLIZE_INTERVALO_MS, deslizar
-                    )
-                except tk.TclError:
-                    return
-
-            self._agendar_after(area, 25, deslizar)
-
-        try:
-            if area is not None and area.winfo_exists():
-                self._agendar_after(area, RODAPE_CSV_SUMIR_APOS_MS, executar)
-        except tk.TclError:
-            pass
-
-    def atualizar_label_csv_rodape(self):
-        area = self.area_aviso_csv_rodape
-        if area is None:
-            area = self.frame_rodape
-        if area is None:
-            return
-
-        if self.caminho_sinapi_carregado:
-            texto = (
-                f"{os.path.basename(self.caminho_sinapi_carregado)} "
-                f"⭠ Arquivo de base"
-            )
-        else:
-            texto = "Nenhum arquivo SINAPI carregado"
-
-        if (
-            self.label_nome_csv_rodape is None
-            or not self.label_nome_csv_rodape.winfo_exists()
+        Devolve (estado, explicação), onde estado é "ok", "andamento",
+        "atencao" ou "erro".
+        """
+        texto = (self.status_sinapi.get() if self.status_sinapi else "") or ""
+        minusculo = texto.lower()
+        if self.sinapi_referencia_rotulo == "BASE AUSENTE" or "erro" in minusculo:
+            return "erro", "Não foi possível carregar a base SINAPI."
+        if "indisponível (servidor e pasta local)" in minusculo:
+            return "erro", "A base SINAPI não foi encontrada no site da Caixa nem neste computador."
+        if self._sinapi_carregando or any(
+            palavra in minusculo for palavra in ("verificando", "baixando", "processando")
         ):
-            self.label_nome_csv_rodape = tk.Label(
-                area,
-                text=texto,
-                font=("Arial", 8, "bold"),
-                fg="#C62828",
-                anchor="e",
+            return "andamento", "Carregando ou verificando a base SINAPI…"
+        if "sinapi local" in minusculo or "servidor da caixa" in minusculo:
+            return (
+                "atencao",
+                "O site da Caixa não respondeu. Usando a base salva neste computador, "
+                "que pode não ser a mais recente.",
             )
-            self.label_nome_csv_rodape.pack(side="right", anchor="e")
-            self.agendar_sumico_nome_csv_deslize_direita(
-                self.label_nome_csv_rodape
-            )
-        else:
-            self.label_nome_csv_rodape.config(text=texto)
+        if "atualizada" in minusculo:
+            return "ok", "A base SINAPI está atualizada."
+        return "andamento", "Verificando a base SINAPI…"
 
-        self._manter_engrenagem_acima()
+    def atualizar_indicador_sinapi(self) -> None:
+        quadrado = self.indicador_sinapi_rodape
+        if quadrado is None:
+            return
+        try:
+            if not quadrado.winfo_exists():
+                return
+            from ui.temas import cores_tema
+
+            cores = cores_tema(quadrado)
+            estado, explicacao = self.estado_sinapi()
+            cor = {
+                "ok": "#66bb6a" if cores.escuro else "#2e7d32",
+                "andamento": "#ffb74d" if cores.escuro else "#e09100",
+                "atencao": "#ffb74d" if cores.escuro else "#e09100",
+                "erro": cores.perigo,
+            }[estado]
+            quadrado.configure(bg=cor)
+            self.dica_sinapi = explicacao
+        except tk.TclError:
+            pass
 
     def recarregar_sinapi_em_memoria(self):
         self.sinapi, self.caminho_sinapi_carregado, self.sinapi_referencia_rotulo = (

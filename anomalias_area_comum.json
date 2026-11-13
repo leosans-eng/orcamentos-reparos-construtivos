@@ -490,7 +490,7 @@
       "reparos": [
         {
           "id": "6c8abf4f-9386-434b-98e4-57ef74e89bf1",
-          "nome": "Veneziana",
+          "nome": "Troca de janela - Veneziana",
           "origem": "etapa_predefinida",
           "etapa_predefinida_id": "215caa8f-b233-4072-b07e-0cd2c506cb55",
           "etapa_nome": "SUBSTITUIÇÃO DE ESQUADRIAS NÃO ESTANQUES",
@@ -541,7 +541,7 @@
         },
         {
           "id": "147b142d-f7fa-450b-958d-e18b241025e8",
-          "nome": "Vidro",
+          "nome": "Troca de janela - Vidro",
           "origem": "etapa_predefinida",
           "etapa_predefinida_id": "215caa8f-b233-4072-b07e-0cd2c506cb55",
           "etapa_nome": "SUBSTITUIÇÃO DE ESQUADRIAS NÃO ESTANQUES",
@@ -2414,6 +2414,120 @@
                 }
               ],
               "tipo_calculo": "pct_troca_rodape_hall",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Deterioração de calçadas e caminhos": {
+      "reparos": [
+        {
+          "id": "00714e05-25ff-4bb4-af22-ca76f06ae214",
+          "nome": "Reparo de calçadas",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "2cea1abd-fa8a-4156-b29f-8ed75a03895b",
+          "etapa_nome": "REPARO E ADEQUAÇÃO DE CALÇADAS E CALÇAMENTOS",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "anomalia_reparo",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [
+            "troca_calcadas"
+          ],
+          "itens": [
+            {
+              "id": "a923c7af-fa22-4901-8a81-1e2b54b1944d",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97639",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos M² de calçadas/caminhos serão adequados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "64447bc8-880a-4362-9532-983a54c55a96",
+              "tipo": "sinapi",
+              "codigo_sinapi": "93382",
+              "unidade": "M3",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "fixo",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "fixo",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "de1986f4-9ebf-46a8-9113-db1adb5af426",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94993",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "fixo",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "fixo",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "e00c1d12-1ab7-4d1d-a188-7c57d0629729",
+              "tipo": "sinapi",
+              "codigo_sinapi": "90444",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "fixo",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "fixo",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "56d7fc79-abdb-4312-aeaa-55b35246776d",
+              "tipo": "sinapi",
+              "codigo_sinapi": "98575",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "fixo",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "fixo",
               "coeficiente": 1.0
             }
           ]

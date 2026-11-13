@@ -52,8 +52,8 @@ class OrcApiClient:
             )
         except requests.RequestException as exc:
             raise ApiIndisponivelError(
-                f"Não foi possível conectar à API em {self.base_url}.\n"
-                "Verifique se o servidor está em execução e a URL nas configurações."
+                "Não foi possível conectar ao servidor. "
+                "Verifique sua internet ou contate o suporte."
             ) from exc
         return response
 
@@ -137,12 +137,16 @@ class OrcApiClient:
             return
         self._tratar_resposta(response)
 
-    def login(self, username: str, password: str) -> str:
+    def login(self, username: str, password: str, *, timeout: float = 12) -> str:
         response = self._request(
             "POST",
             "/api/auth/login",
             json={"username": username, "password": password},
+            timeout=timeout,
         )
+        if response.status_code == 401:
+            # O texto padrão do 401 ("Sessão expirada") não faz sentido aqui.
+            raise ApiNaoAutenticadoError("Usuário ou senha incorretos.", 401)
         dados = self._tratar_resposta(response)
         token = dados["access_token"]
         self.access_token = token

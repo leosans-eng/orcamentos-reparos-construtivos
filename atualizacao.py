@@ -653,6 +653,29 @@ def iniciar_verificacao_atualizacao(
     coordenador.registrar_janela(root)
 
 
+def versao_nova_encontrada() -> str | None:
+    """Número da versão mais nova, se a busca já terminou e achou uma."""
+    coordenador = _coordenador
+    if coordenador is None:
+        return None
+    with coordenador._lock:
+        info = coordenador._info
+    if not info:
+        return None
+    return str(info.get("version") or "") or None
+
+
+def reabrir_aviso_atualizacao(parent: tk.Misc) -> bool:
+    """
+    Mostra de novo a janela de atualização (ex.: depois de "Depois").
+    Devolve False se nenhuma versão nova foi encontrada.
+    """
+    coordenador = _coordenador
+    if coordenador is None:
+        return False
+    return coordenador.reabrir(parent)
+
+
 class _UpdateCheckCoordinator:
     """
     Uma única busca em thread de rede.
@@ -684,6 +707,28 @@ class _UpdateCheckCoordinator:
             self._ja_oferecida = True
             self._dialogo = None
         self._cancelar_poll()
+
+    def reabrir(self, parent: tk.Misc) -> bool:
+        with self._lock:
+            info = self._info
+            dialogo = self._dialogo
+        if info is None:
+            return False
+        if self._janela_viva(dialogo):
+            try:
+                dialogo.lift()
+                dialogo.focus_force()
+            except tk.TclError:
+                pass
+            return True
+        try:
+            dialogo = UpdateDialog(parent, info, self.app_version)
+        except (tk.TclError, RuntimeError):
+            return False
+        with self._lock:
+            self._dialogo = dialogo
+            self._ja_oferecida = True
+        return True
 
     def desligar_ui(self) -> None:
         """Solta a janela atual sem descartar o resultado da busca."""

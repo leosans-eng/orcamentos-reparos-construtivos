@@ -60,10 +60,6 @@ from core.ui_prefs import definir_pref, obter_pref
 from core.etapas_predefinidas import aplicar_etapa_no_orcamento
 from core.municipios_br import resolver_uf_municipio
 from app_paths import asset_path
-from core.exportacao_planilha_orcamento import (
-    exportar_orcamento_customizado_modelo4,
-    exportar_orcamento_customizado_modelo_formatado,
-)
 from core.orcamento_customizado import (
     TIPO_COMPOSICAO_PROPRIA,
     TIPO_GRUPO,
@@ -88,7 +84,6 @@ from core.sinapi_busca import deve_fixar_estado_sinapi, estados_com_codigo, obte
 from ui.calculadora import abrir_calculadora
 from ui.dialogo_previa_composicao import DialogoPreviaComposicao
 from ui.dialogo_config_anomalias_area_comum import DialogoConfigAnomaliasAreaComum
-from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.desenho_2d import CHAVES_MEDIDA_ORCCAD, PreviaDesenho2D, VistaIsometricaBloco
 from ui.grade_orcamento import GradeOrcamento
 from ui.icones import (
@@ -331,6 +326,7 @@ class AreaComumFrame(tk.Frame):
         self._referencias_ultimo_calculo = None
         self._destaque_mouse = None
         self._destaque_foco = None
+        self._entradas_caracteristicas: set = set()
         self._perguntando_uf = False
         self._aplicando_historico = False
         self._caminho_arquivo = None
@@ -951,6 +947,8 @@ class AreaComumFrame(tk.Frame):
             )
             entrada.grid(row=linha, column=col + 1, sticky="w", pady=2, padx=(0, 18))
             self._vincular_campo_numerico(entrada)
+            self._entradas_caracteristicas.add(entrada)
+            entrada.bind("<Escape>", lambda _e: self._tirar_foco_campo(), add="+")
             parte = PARTES_ISOMETRICA.get(chave)
             if parte:
                 self._ligar_destaque_isometrico([lbl_campo, entrada], parte, campo=entrada)
@@ -2811,6 +2809,30 @@ class AreaComumFrame(tk.Frame):
         ):
             func_id = topo.bind(sequencia, callback, add="+")
             self._binds_historico.append((topo, sequencia, func_id))
+        # Clique fora de um campo de "Características do Empreendimento"
+        # tira o foco dele (o desfazer do binding vai junto no _ao_destruir).
+        func_id = topo.bind("<Button-1>", self._ao_clicar_fora_do_campo, add="+")
+        self._binds_historico.append((topo, "<Button-1>", func_id))
+
+    def _tirar_foco_campo(self):
+        """Tira o foco do campo atual (o campo formata o número ao perdê-lo)."""
+        try:
+            self.focus_set()
+        except tk.TclError:
+            pass
+        return "break"
+
+    def _ao_clicar_fora_do_campo(self, event):
+        try:
+            focado = self.focus_get()
+        except (tk.TclError, KeyError):
+            return
+        if focado not in self._entradas_caracteristicas:
+            return
+        # Clique em outro lugar de digitação: ele mesmo recebe o foco.
+        if isinstance(event.widget, (tk.Entry, ttk.Entry, tk.Text, tk.Spinbox)):
+            return
+        self._tirar_foco_campo()
 
     def _novo(self):
         if self._sujo and not self._confirmar_saida(
@@ -5451,12 +5473,22 @@ class AreaComumFrame(tk.Frame):
                 parent=self.winfo_toplevel(),
             )
             return
+        # Import só aqui: abrir a Área Comum não precisa pagar por ele.
+        from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
+
         DialogoSelecionarModeloPlanilha(
             self.winfo_toplevel(),
             on_selecionar=self._ao_selecionar_modelo_planilha,
         )
 
     def _ao_selecionar_modelo_planilha(self, numero):
+        # Import só aqui: a exportação carrega o openpyxl (~0,3 s), que não
+        # precisa pesar na abertura do módulo para quem não gera planilha.
+        from core.exportacao_planilha_orcamento import (
+            exportar_orcamento_customizado_modelo4,
+            exportar_orcamento_customizado_modelo_formatado,
+        )
+
         referencia = getattr(self.ctx, "sinapi_referencia_rotulo", "") or "BASE AUSENTE"
         if referencia == "BASE AUSENTE":
             referencia = "Base não carregada"

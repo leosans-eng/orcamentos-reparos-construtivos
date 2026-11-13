@@ -2538,7 +2538,8 @@ class VistaIsometricaBloco(tk.Frame):
     """Bloco em 3D (isométrico) a partir da planta externa.
 
     Desenhado com polígonos do próprio Canvas: paredes da mais distante para a
-    mais próxima e a cobertura por último. Cada parte recebe uma etiqueta
+    mais próxima, a laje da cobertura sobre elas e, por fim, a platibanda (um
+    muro fino na borda da laje). Cada parte recebe uma etiqueta
     ("paredes", "platibanda", "cobertura", "pavimentos") para poder ser
     destacada.
     """
@@ -2738,36 +2739,27 @@ class VistaIsometricaBloco(tk.Frame):
                 fill=_ISO_SOMBRA, outline="",
             )
 
-        # 2) Paredes viradas para quem olha, da mais distante para a mais próxima.
-        visiveis = []
+        # 2) Prédio até a laje: paredes viradas para quem olha (da mais distante
+        #    para a mais próxima) e a laje por cima delas.
+        trechos = []  # (segmento, normal para fora, tom do lado de fora)
         for i in range(n):
             (ax, ay), (bx, by) = girado[i], girado[(i + 1) % n]
             comp = math.hypot(bx - ax, by - ay)
             if comp < 1e-9:
                 continue
             normal_x, normal_y = (by - ay) / comp, -(bx - ax) / comp  # para fora
-            if normal_y >= -1e-9:
-                continue  # virada para trás
             luz = normal_x * _ISO_LUZ[0] + normal_y * _ISO_LUZ[1]
             tom = _misturar_hex(_ISO_PAREDE_ESCURA, _ISO_PAREDE_CLARA, (luz + 1.0) / 2.0)
-            visiveis.append(((ax, ay, bx, by), tom))
-        for indice in _ordem_paredes([v[0] for v in visiveis]):
-            (ax, ay, bx, by), tom = visiveis[indice]
+            trechos.append(((ax, ay, bx, by), normal_y, tom))
+        frente = [t for t in trechos if t[1] < -1e-9]
+        for indice in _ordem_paredes([t[0] for t in frente]):
+            (ax, ay, bx, by), _ny, tom = frente[indice]
             fill, contorno_cor = cores_parte("paredes", tom)
             c.create_polygon(
                 *tela(ax, ay, 0.0), *tela(bx, by, 0.0),
                 *tela(bx, by, altura_pav), *tela(ax, ay, altura_pav),
                 fill=fill, outline=contorno_cor, tags=("paredes",),
             )
-            if self._platibanda > 0:
-                fill_p, contorno_p = cores_parte(
-                    "platibanda", _misturar_hex(tom, COR_EXTERNA, 0.22)
-                )
-                c.create_polygon(
-                    *tela(ax, ay, altura_pav), *tela(bx, by, altura_pav),
-                    *tela(bx, by, altura_total), *tela(ax, ay, altura_total),
-                    fill=fill_p, outline=contorno_p, tags=("platibanda",),
-                )
             if linhas or destaque == "pavimentos":
                 cor_pav = _ISO_DESTAQUE_LINHA if destaque == "pavimentos" else COR_EXTERNA
                 largura_pav = 2 if destaque == "pavimentos" else 1
@@ -2777,13 +2769,30 @@ class VistaIsometricaBloco(tk.Frame):
                         *tela(ax, ay, z), *tela(bx, by, z),
                         fill=cor_pav, width=largura_pav, tags=("pavimentos",),
                     )
-
-        # 3) Cobertura por último: vista de cima, nada fica na frente dela.
-        pts_topo = []
+        pts_laje = []
         for x, y in girado:
-            pts_topo.extend(tela(x, y, altura_total))
+            pts_laje.extend(tela(x, y, altura_pav))
         fill_t, contorno_t = cores_parte("cobertura", _ISO_TOPO)
-        c.create_polygon(*pts_topo, fill=fill_t, outline=contorno_t, tags=("cobertura",))
+        c.create_polygon(*pts_laje, fill=fill_t, outline=contorno_t, tags=("cobertura",))
+
+        # 3) Platibanda: um muro fino na borda da laje. Nos trechos da frente
+        #    aparece o lado de fora; nos do fundo, o lado de dentro (voltado para
+        #    a laje). Tudo aqui fica acima da laje, então vem depois dela; entre
+        #    si, os trechos seguem a mesma ordem do mais distante ao mais próximo.
+        if self._platibanda > 0:
+            visiveis = [t for t in trechos if abs(t[1]) > 1e-9]
+            for indice in _ordem_paredes([t[0] for t in visiveis]):
+                (ax, ay, bx, by), normal_y, tom = visiveis[indice]
+                if normal_y < 0:  # lado de fora
+                    base = _misturar_hex(tom, COR_EXTERNA, 0.22)
+                else:  # lado de dentro: na sombra do próprio muro
+                    base = _misturar_hex(_ISO_PAREDE_ESCURA, COR_EXTERNA, 0.18)
+                fill_p, contorno_p = cores_parte("platibanda", base)
+                c.create_polygon(
+                    *tela(ax, ay, altura_pav), *tela(bx, by, altura_pav),
+                    *tela(bx, by, altura_total), *tela(ax, ay, altura_total),
+                    fill=fill_p, outline=contorno_p, tags=("platibanda",),
+                )
 
         # 4) Selo com a quantidade de blocos (quadrado, no canto).
         if self._blocos > 1:

@@ -239,9 +239,12 @@ class DialogoNovaComposicao(tk.Toplevel):
 
 
 class ComposicoesPropriasFrame(tk.Frame):
-    def __init__(self, parent, ctx, on_voltar):
+    def __init__(self, parent, ctx, on_voltar, *, somente_leitura=False):
         cores = cores_tema(parent)
         super().__init__(parent, bg=cores.fundo)
+        # Somente leitura (usuário comum): mostra tudo, mas sem os controles
+        # de criar, editar, excluir e mover.
+        self.somente_leitura = somente_leitura
         self._cores = cores
         self._estilos = estilos_botao(self)
         self._cg = cores_grade(self)
@@ -311,9 +314,10 @@ class ComposicoesPropriasFrame(tk.Frame):
         cores = self._cores
         estilos = self._estilos
         fundo = cores.fundo
+        ro = self.somente_leitura
         self.label_referencia = criar_barra_modulo(
             self,
-            "Configurar Composições Próprias",
+            "Composições Próprias" if ro else "Configurar Composições Próprias",
             self.on_voltar,
             texto_referencia=self._texto_referencia(),
             montar_acoes_apos_titulo=self._montar_botao_recarregar_cabecalho,
@@ -392,7 +396,8 @@ class ComposicoesPropriasFrame(tk.Frame):
         self.tree_composicoes.bind("<<TreeviewSelect>>", self._ao_selecionar_composicao)
 
         linha_bt_comp = tk.Frame(esquerda, bg=fundo)
-        linha_bt_comp.pack(fill="x", pady=(6, 0))
+        if not ro:
+            linha_bt_comp.pack(fill="x", pady=(6, 0))
         criar_botao_ttk_com_icone(
             linha_bt_comp,
             texto="Nova composição",
@@ -413,7 +418,12 @@ class ComposicoesPropriasFrame(tk.Frame):
         ).pack(side="left")
 
         direita = tk.LabelFrame(
-            painel, text="Edição da composição", bg=fundo, fg=cores.texto, padx=8, pady=8
+            painel,
+            text="Detalhes da composição" if ro else "Edição da composição",
+            bg=fundo,
+            fg=cores.texto,
+            padx=8,
+            pady=8,
         )
         painel.add(direita, minsize=420)
 
@@ -434,17 +444,23 @@ class ComposicoesPropriasFrame(tk.Frame):
             tk.Label(
                 linha, text=rotulo, width=10, anchor="w", bg=fundo, fg=cores.texto
             ).pack(side="left")
-            ttk.Entry(linha, textvariable=var, width=48).pack(side="left", fill="x", expand=True)
+            ttk.Entry(
+                linha,
+                textvariable=var,
+                width=48,
+                state="readonly" if ro else "normal",
+            ).pack(side="left", fill="x", expand=True)
 
-        criar_botao_ttk_com_icone(
-            form,
-            texto="Salvar alterações",
-            nome_icone="save-outline",
-            command=self._salvar_composicao,
-            estilo=estilos.salvar,
-            cor_icone=estilos.icone_salvar,
-            refs=self._icones_botoes,
-        ).pack(anchor="e", pady=(6, 0))
+        if not ro:
+            criar_botao_ttk_com_icone(
+                form,
+                texto="Salvar alterações",
+                nome_icone="save-outline",
+                command=self._salvar_composicao,
+                estilo=estilos.salvar,
+                cor_icone=estilos.icone_salvar,
+                refs=self._icones_botoes,
+            ).pack(anchor="e", pady=(6, 0))
 
         painel_comp = tk.LabelFrame(
             direita, text="Componentes", bg=fundo, fg=cores.texto, padx=6, pady=6
@@ -475,7 +491,8 @@ class ComposicoesPropriasFrame(tk.Frame):
         scroll_cmp.pack(side="right", fill="y")
 
         linha_bt_cmp = tk.Frame(direita, bg=fundo)
-        linha_bt_cmp.pack(fill="x", pady=(8, 0))
+        if not ro:
+            linha_bt_cmp.pack(fill="x", pady=(8, 0))
         criar_botao_inserir_prominente(
             linha_bt_cmp,
             texto="Adicionar componente SINAPI",
@@ -596,7 +613,9 @@ class ComposicoesPropriasFrame(tk.Frame):
 
     def _ao_mudar_estado_previa(self, _event=None):
         estado = self._estado_selecionado()
-        if estado:
+        # A UF da prévia fica gravada no catálogo, que é de todos; quem só
+        # consulta muda a prévia apenas na própria tela.
+        if estado and not self.somente_leitura:
             salvar_estado_previa_custos(estado, self._dados)
             self._dados = carregar()
         self._atualizar_listas()

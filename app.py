@@ -254,6 +254,19 @@ class OrcApp:
         self.ctx.atualizar_indicador_sinapi()
         self._atualizar_botao_configuracoes(cores)
 
+    def _pode_alterar_cadastros(self) -> bool:
+        """Composições Próprias e Etapas pré-definidas: só admin altera.
+
+        No modo offline não há servidor para consultar, então tudo fica liberado.
+        Obs.: a regra hoje vale só no programa; o servidor ainda aceita gravações
+        de qualquer usuário logado.
+        """
+        if self.offline:
+            return True
+        from ui.dialogo_admin_usuarios import usuario_atual_eh_admin
+
+        return usuario_atual_eh_admin()
+
     def _criar_hub(self):
         self._frames["hub"] = HubFrame(
             self.area_conteudo,
@@ -261,6 +274,7 @@ class OrcApp:
             on_selecionar_modulo=self._ao_selecionar_modulo_hub,
             on_logout=None if self.offline else self._logout,
             offline=self.offline,
+            pode_alterar_cadastros=self._pode_alterar_cadastros(),
         )
 
     def _logout(self):
@@ -329,12 +343,14 @@ class OrcApp:
                 self.area_conteudo,
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),
+                somente_leitura=not self._pode_alterar_cadastros(),
             )
         elif nome == "etapas_predefinidas":
             self._frames[nome] = EtapasPredefinidasFrame(
                 self.area_conteudo,
                 self.ctx,
                 on_voltar=lambda: self.mostrar_modulo("hub"),
+                somente_leitura=not self._pode_alterar_cadastros(),
             )
         elif nome == "area_comum":
             self._frames[nome] = AreaComumFrame(

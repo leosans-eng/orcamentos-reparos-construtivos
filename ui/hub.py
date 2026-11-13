@@ -15,13 +15,21 @@ ALTURA_ICONE_CARTAO = 20
 
 class HubFrame(tk.Frame):
     def __init__(
-        self, parent, ctx, on_selecionar_modulo, on_logout=None, *, offline=False
+        self,
+        parent,
+        ctx,
+        on_selecionar_modulo,
+        on_logout=None,
+        *,
+        offline=False,
+        pode_alterar_cadastros=True,
     ):
         super().__init__(parent)
         self.ctx = ctx
         self.on_selecionar_modulo = on_selecionar_modulo
         self.on_logout = on_logout
         self.offline = offline
+        self.pode_alterar_cadastros = pode_alterar_cadastros
         self._cache_icones = {}
         self._refs_icones = []
         self._cartoes: list[tk.Frame] = []
@@ -119,10 +127,9 @@ class HubFrame(tk.Frame):
 
         cadastros = tk.Frame(inferior, bg=cores.fundo)
         cadastros.grid(row=0, column=0, sticky="nw", padx=(0, 28))
-        self._montar_secao(
-            cadastros,
-            "Configurar cadastros",
-            [
+        if self.pode_alterar_cadastros:
+            titulo_secao = "Configurar cadastros"
+            cartoes_cadastros = [
                 {
                     "titulo": "Configurar\nComposições Próprias",
                     "descricao": (
@@ -143,7 +150,36 @@ class HubFrame(tk.Frame):
                     "habilitado": True,
                     "icone_titulo": "cog-outline",
                 },
-            ],
+            ]
+        else:
+            # Usuário comum: só consulta (alterar fica com os administradores).
+            titulo_secao = "Cadastros"
+            cartoes_cadastros = [
+                {
+                    "titulo": "Ver\nComposições Próprias",
+                    "descricao": (
+                        "Consulte as composições próprias e os itens "
+                        "de cada uma"
+                    ),
+                    "modulo": "composicoes_proprias",
+                    "habilitado": True,
+                    "icone_titulo": "folder-open-outline",
+                },
+                {
+                    "titulo": "Ver\nEtapas pré-definidas",
+                    "descricao": (
+                        "Consulte os modelos de etapas usados "
+                        "nos orçamentos"
+                    ),
+                    "modulo": "etapas_predefinidas",
+                    "habilitado": True,
+                    "icone_titulo": "folder-open-outline",
+                },
+            ]
+        self._montar_secao(
+            cadastros,
+            titulo_secao,
+            cartoes_cadastros,
             cores,
             pady_abaixo=0,
         )

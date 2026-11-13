@@ -99,9 +99,12 @@ class DialogoNovaEtapaPredefinida(tk.Toplevel):
 
 
 class EtapasPredefinidasFrame(tk.Frame):
-    def __init__(self, parent, ctx, on_voltar):
+    def __init__(self, parent, ctx, on_voltar, *, somente_leitura=False):
         cores = cores_tema(parent)
         super().__init__(parent, bg=cores.fundo)
+        # Somente leitura (usuário comum): mostra tudo, mas sem os controles
+        # de criar, editar, excluir e mover.
+        self.somente_leitura = somente_leitura
         self._cores = cores
         self._estilos = estilos_botao(self)
         self.ctx = ctx
@@ -166,6 +169,7 @@ class EtapasPredefinidasFrame(tk.Frame):
         cores = self._cores
         estilos = self._estilos
         fundo = cores.fundo
+        ro = self.somente_leitura
         self.label_referencia = criar_barra_modulo(
             self,
             "Etapas pré-definidas",
@@ -224,7 +228,8 @@ class EtapasPredefinidasFrame(tk.Frame):
         self.tree_etapas.bind("<<TreeviewSelect>>", self._ao_selecionar_etapa)
 
         linha_bt_etapas = tk.Frame(esquerda, bg=fundo)
-        linha_bt_etapas.pack(fill="x", pady=(6, 0))
+        if not ro:
+            linha_bt_etapas.pack(fill="x", pady=(6, 0))
         criar_botao_ttk_com_icone(
             linha_bt_etapas,
             texto="Nova etapa",
@@ -245,7 +250,12 @@ class EtapasPredefinidasFrame(tk.Frame):
         ).pack(side="left")
 
         direita = tk.LabelFrame(
-            painel, text="Edição da etapa", bg=fundo, fg=cores.texto, padx=8, pady=8
+            painel,
+            text="Detalhes da etapa" if ro else "Edição da etapa",
+            bg=fundo,
+            fg=cores.texto,
+            padx=8,
+            pady=8,
         )
         painel.add(direita, minsize=420)
 
@@ -258,19 +268,23 @@ class EtapasPredefinidasFrame(tk.Frame):
         tk.Label(
             linha_nome, text="Nome:", width=10, anchor="w", bg=fundo, fg=cores.texto
         ).pack(side="left")
-        ttk.Entry(linha_nome, textvariable=self.var_nome, width=48).pack(
-            side="left", fill="x", expand=True
-        )
+        ttk.Entry(
+            linha_nome,
+            textvariable=self.var_nome,
+            width=48,
+            state="readonly" if ro else "normal",
+        ).pack(side="left", fill="x", expand=True)
 
-        criar_botao_ttk_com_icone(
-            form,
-            texto="Salvar alterações",
-            nome_icone="save-outline",
-            command=self._salvar_etapa,
-            estilo=estilos.salvar,
-            cor_icone=estilos.icone_salvar,
-            refs=self._icones_botoes,
-        ).pack(anchor="e", pady=(6, 0))
+        if not ro:
+            criar_botao_ttk_com_icone(
+                form,
+                texto="Salvar alterações",
+                nome_icone="save-outline",
+                command=self._salvar_etapa,
+                estilo=estilos.salvar,
+                cor_icone=estilos.icone_salvar,
+                refs=self._icones_botoes,
+            ).pack(anchor="e", pady=(6, 0))
 
         painel_itens = tk.LabelFrame(
             direita, text="Itens da etapa", bg=fundo, fg=cores.texto, padx=6, pady=6
@@ -297,7 +311,8 @@ class EtapasPredefinidasFrame(tk.Frame):
         scroll_itens.pack(side="right", fill="y")
 
         linha_bt_itens = tk.Frame(direita, bg=fundo)
-        linha_bt_itens.pack(fill="x", pady=(8, 0))
+        if not ro:
+            linha_bt_itens.pack(fill="x", pady=(8, 0))
         criar_botao_inserir_prominente(
             linha_bt_itens,
             texto="Adicionar item SINAPI",

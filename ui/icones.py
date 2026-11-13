@@ -21,6 +21,13 @@ except ImportError:
     ImageTk = None  # type: ignore[misc, assignment]
 
 
+# Ícones já desenhados, reaproveitados entre telas. Desenhar um SVG custa
+# ~20 ms; a Área Comum sozinha pedia 36 ao abrir. A chave inclui o
+# interpretador Tk (master.tk) para nunca reaproveitar um ícone de uma janela
+# principal que já foi fechada.
+_cache_icones: dict[tuple, tk.PhotoImage] = {}
+
+
 def criar_icone_svg(
     master: tk.Misc,
     nome: str,
@@ -32,7 +39,44 @@ def criar_icone_svg(
     escala_y: float = 1.0,
     cortar_margens: bool = False,
 ) -> tk.PhotoImage:
-    """Rasteriza um SVG de assets/icons/{nome}.svg na altura indicada (px)."""
+    """Rasteriza um SVG de assets/icons/{nome}.svg na altura indicada (px).
+
+    A mesma imagem é devolvida para pedidos iguais; não altere a imagem
+    recebida (use uma cópia, se precisar).
+    """
+    chave = (master.tk, nome, int(altura), cor, angulo, escala_x, escala_y, cortar_margens)
+    imagem = _cache_icones.get(chave)
+    if imagem is not None:
+        try:
+            imagem.width()  # ainda existe no Tk?
+            return imagem
+        except tk.TclError:
+            _cache_icones.pop(chave, None)
+    imagem = _desenhar_icone_svg(
+        master,
+        nome,
+        altura=altura,
+        cor=cor,
+        angulo=angulo,
+        escala_x=escala_x,
+        escala_y=escala_y,
+        cortar_margens=cortar_margens,
+    )
+    _cache_icones[chave] = imagem
+    return imagem
+
+
+def _desenhar_icone_svg(
+    master: tk.Misc,
+    nome: str,
+    *,
+    altura: int,
+    cor: str,
+    angulo: float,
+    escala_x: float,
+    escala_y: float,
+    cortar_margens: bool,
+) -> tk.PhotoImage:
     if SvgImage is None:
         raise ImportError("Pacote 'tksvg' não instalado.")
 

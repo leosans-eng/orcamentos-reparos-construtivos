@@ -67,6 +67,8 @@ class GradeOrcamento(tk.Frame):
         self._drag: dict | None = None
         self._marcador_drop = None
         self._lbl_vazio = None
+        self._frame_construcao: tk.Frame | None = None
+        self._lbl_vazio_construcao: tk.Label | None = None
         self._filtro = ""
         self._montar()
         self._carregar_icone_previa()
@@ -106,17 +108,26 @@ class GradeOrcamento(tk.Frame):
             container, highlightthickness=0, bg=cg.fundo, takefocus=1
         )
         self.scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
-        self.frame_linhas = tk.Frame(self.canvas, bg=cg.fundo)
-
-        self.frame_linhas.bind("<Configure>", self._atualizar_scrollregion)
+        self.frame_linhas, self._lbl_vazio = self._criar_frame_linhas()
         self._janela_canvas = self.canvas.create_window((0, 0), window=self.frame_linhas, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
-        self._lbl_vazio = tk.Label(
-            self.frame_linhas,
+        self.canvas.bind("<Configure>", self._ao_redimensionar_canvas)
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        for alvo in (self, container, self.canvas, self.cabecalho):
+            self._vincular_tecla_delete(alvo)
+
+    def _criar_frame_linhas(self) -> tuple[tk.Frame, tk.Label]:
+        """Quadro que recebe as linhas, e o rótulo de grade vazia dele."""
+        frame = tk.Frame(self.canvas, bg=self._cg.fundo)
+        frame.bind("<Configure>", self._atualizar_scrollregion)
+        frame.bind("<MouseWheel>", self._on_mousewheel)
+        self._vincular_tecla_delete(frame)
+        lbl_vazio = tk.Label(
+            frame,
             text="",
             font=("Arial", 10),
             fg=self._cg.vazio,
@@ -124,12 +135,68 @@ class GradeOrcamento(tk.Frame):
             justify="center",
             pady=28,
         )
+        return frame, lbl_vazio
 
-        self.canvas.bind("<Configure>", self._ao_redimensionar_canvas)
-        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
-        self.frame_linhas.bind("<MouseWheel>", self._on_mousewheel)
-        for alvo in (self, container, self.canvas, self.frame_linhas, self.cabecalho):
-            self._vincular_tecla_delete(alvo)
+    # Buffer duplo: durante a reconstrução as linhas novas vão para um quadro
+    # que ainda não está na tela; no fim ele substitui o visível de uma vez.
+    # Montar fora da tela e mostrar tudo junto custa menos da metade de montar
+    # linha a linha num quadro visível, e o quadro antigo é descartado inteiro.
+
+    def _descartar_frame_construcao(self):
+        frame = self._frame_construcao
+        self._frame_construcao = None
+        self._lbl_vazio_construcao = None
+        if frame is not None:
+            try:
+                frame.destroy()
+            except tk.TclError:
+                pass
+
+    def _trocar_para_frame_construcao(self):
+        novo = self._frame_construcao
+        if novo is None:
+            return
+        antigo = self.frame_linhas
+        self.canvas.itemconfigure(self._janela_canvas, window=novo)
+        self.frame_linhas = novo
+        self._lbl_vazio = self._lbl_vazio_construcao
+        self._frame_construcao = None
+        self._lbl_vazio_construcao = None
+        self._destruir_aos_poucos(antigo)
+
+    def _destruir_aos_poucos(self, frame, lote=12):
+        """Destrói o quadro antigo em pequenos lotes, com a grade nova já na tela.
+
+        Destruir ~1.000 widgets de uma vez travava a tela por ~0,5 s; em lotes
+        entre um evento e outro, o usuário não percebe.
+        """
+        try:
+            filhos = list(frame.winfo_children())
+        except tk.TclError:
+            return
+
+        def passo():
+            for widget in filhos[:lote]:
+                try:
+                    widget.destroy()
+                except tk.TclError:
+                    pass
+            del filhos[:lote]
+            if filhos:
+                try:
+                    self.after(1, passo)
+                    return
+                except tk.TclError:
+                    pass  # grade sendo fechada: destrói o resto agora
+            try:
+                frame.destroy()
+            except tk.TclError:
+                pass
+
+        try:
+            self.after(1, passo)
+        except tk.TclError:
+            frame.destroy()
 
     def _vincular_tecla_delete(self, widget):
         for tecla in ("<Delete>", "<KP_Delete>"):
@@ -174,6 +241,9 @@ class GradeOrcamento(tk.Frame):
             self._fracao_scroll_salva = float(self.canvas.yview()[0])
         except tk.TclError:
             self._fracao_scroll_salva = 0.0
+        # Sobra de uma reconstrução interrompida por erro: descarta.
+        self._descartar_frame_construcao()
+        self._frame_construcao, self._lbl_vazio_construcao = self._criar_frame_linhas()
 
     def salvar_fracao_scroll(self):
         return self._fracao_scroll_salva
@@ -190,7 +260,10 @@ class GradeOrcamento(tk.Frame):
 
     def _aplicar_largura_descricao(self, largura_canvas: int):
         largura = max(int(largura_canvas), 400)
-        self._largura_descricao = max(120, largura - self._soma_colunas_fixas() - 24)
+        nova = max(120, largura - self._soma_colunas_fixas() - 24)
+        if nova == self._largura_descricao:
+            return  # as linhas já foram criadas com essa largura
+        self._largura_descricao = nova
         for linha in self._linhas:
             if linha.get("lbl_descricao"):
                 linha["lbl_descricao"].config(wraplength=self._largura_descricao)
@@ -199,8 +272,12 @@ class GradeOrcamento(tk.Frame):
         self,
         chaves=("quantidade", "unidade", "custo_unit", "custo_bdi", "total"),
     ):
-        """A mesma largura em todas as linhas, para um texto longo não empurrar a quantidade."""
-        self.update_idletasks()
+        """A mesma largura em todas as linhas, para um texto longo não empurrar a quantidade.
+
+        winfo_reqwidth() já vem certo logo após criar o Label; não é preciso
+        forçar um passe de layout (update_idletasks) antes de medir, o que
+        custava quase 1 s numa grade de ~100 linhas.
+        """
         for chave in chaves:
             col = next(i for i, item in enumerate(COLUNAS) if item[0] == chave)
             _chave, _titulo, minimo, _anchor, peso = COLUNAS[col]
@@ -224,8 +301,11 @@ class GradeOrcamento(tk.Frame):
     def limpar(self):
         self._encerrar_edicao_inline(descartar=True)
         self._encerrar_arraste(limpar_apenas=True)
-        for linha in self._linhas:
-            linha["frame"].destroy()
+        if self._frame_construcao is None:
+            for linha in self._linhas:
+                linha["frame"].destroy()
+        # Em reconstrução, as linhas antigas somem junto com o quadro antigo
+        # na troca (destruir uma a uma, ainda na tela, era bem mais caro).
         self._linhas.clear()
         self._selecao_metas.clear()
         self._ancora_indice = None
@@ -274,6 +354,7 @@ class GradeOrcamento(tk.Frame):
             fracao_top = self._fracao_scroll_salva
         self._uniformizar_colunas()
         self._aplicar_largura_descricao(self.canvas.winfo_width())
+        self._trocar_para_frame_construcao()
         self._reconstruindo = False
         self.restaurar_fracao_scroll(fracao_top)
         if metas_selecionadas is not None:
@@ -312,8 +393,9 @@ class GradeOrcamento(tk.Frame):
         elif estilo != "grupo" and idx % 2 == 1:
             cor_fundo = cg.zebra
 
+        pai = self._frame_construcao if self._frame_construcao is not None else self.frame_linhas
         frame = tk.Frame(
-            self.frame_linhas,
+            pai,
             bg=cor_fundo,
             highlightbackground=cg.borda,
             highlightthickness=0,

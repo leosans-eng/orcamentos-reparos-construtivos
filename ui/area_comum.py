@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import tkinter as tk
 import tkinter.font as tkfont
 import traceback
@@ -285,6 +286,9 @@ class AreaComumFrame(tk.Frame):
         self._composicoes_ciclo = None
         self._avisos_ultima_carga = []
         self._total_geral_ultimo = None
+        self._observacoes = ""
+        self._grade_pendente = False
+        self._referencias_ultimo_calculo = None
         self._perguntando_uf = False
         self._aplicando_historico = False
         self._caminho_arquivo = None
@@ -1151,6 +1155,28 @@ class AreaComumFrame(tk.Frame):
         self.texto_obs = tk.Text(bloco_obs, height=4, wrap="word")
         self.texto_obs.pack(fill="both", expand=True)
         self.texto_obs.bind("<KeyRelease>", lambda _e: self._ao_alterar_campo())
+        # <<Modified>> pega também colar pelo mouse e outras alterações.
+        self.texto_obs.bind("<<Modified>>", self._ao_modificar_observacoes)
+
+    def _ao_modificar_observacoes(self, _event=None):
+        """Mantém uma cópia do texto fora do widget.
+
+        Ao fechar o módulo, o Tk destrói a caixa de texto antes de avisar o
+        módulo; sem esta cópia, o último autosave não conseguia ler as
+        observações e falhava.
+        """
+        try:
+            self._observacoes = self.texto_obs.get("1.0", "end").strip()
+            self.texto_obs.edit_modified(False)
+        except tk.TclError:
+            pass
+
+    def _texto_observacoes(self) -> str:
+        try:
+            self._observacoes = self.texto_obs.get("1.0", "end").strip()
+        except tk.TclError:
+            pass  # widget já destruído: usa a última cópia
+        return self._observacoes
 
     def _montar_aba_anomalias(self):
         cores = self._cores
@@ -1491,6 +1517,9 @@ class AreaComumFrame(tk.Frame):
             on_previa_composicao=self._abrir_previa_composicao,
         )
         self.grade.pack(fill="both", expand=True)
+        # Quando a grade aparece (troca de aba ou volta ao módulo), redesenha
+        # se algum cálculo aconteceu enquanto ela estava escondida.
+        self.grade.bind("<Map>", self._ao_mostrar_grade, add="+")
         self._montar_legenda_grade(tabela)
 
     def _montar_filtro_grade(self, parent):
@@ -1959,8 +1988,35 @@ class AreaComumFrame(tk.Frame):
     def _ao_trocar_aba(self, _event=None):
         if self._carregando or self._aplicando_historico:
             return
-        self._carregar_etapas()
-        self._recalcular()
+        # Antes recalculava tudo a cada troca de aba. Agora só quando há
+        # motivo: uma edição ainda não calculada ou um catálogo que mudou
+        # fora deste módulo (composições, etapas, SINAPI, anomalias).
+        if self._job_calculo is not None or self._dados_externos_mudaram():
+            self._carregar_etapas()
+            self._recalcular()
+        else:
+            self._preencher_grade_se_pendente()
+
+    def _referencias_externas(self) -> tuple:
+        """Objetos que mudam quando algum catálogo é alterado.
+
+        Os armazenamentos trocam o objeto do cache a cada alteração; comparar
+        com `is` (mesmo objeto?) é instantâneo, sem olhar o conteúdo.
+        """
+        composicoes = sys.modules.get("core.composicoes_proprias_storage")
+        etapas = sys.modules.get("core.etapas_predefinidas_storage")
+        return (
+            getattr(composicoes, "_catalogo_cache", None),
+            getattr(etapas, "_catalogo_cache", None),
+            self.ctx.sinapi,
+            self._catalogo,
+        )
+
+    def _dados_externos_mudaram(self) -> bool:
+        anterior = self._referencias_ultimo_calculo
+        if anterior is None:
+            return True
+        return any(a is not b for a, b in zip(self._referencias_externas(), anterior))
 
     def _ao_atalho_salvar(self, _event=None):
         try:
@@ -2033,6 +2089,13 @@ class AreaComumFrame(tk.Frame):
         self._job_calculo = self.after(DEBOUNCE_CALCULO_MS, self._recalcular)
 
     def _recalcular(self):
+        # Chamado direto (fora do agendamento), cancela o recálculo agendado
+        # pela digitação; senão ele rodaria de novo logo depois, à toa.
+        if self._job_calculo is not None:
+            try:
+                self.after_cancel(self._job_calculo)
+            except (tk.TclError, ValueError):
+                pass
         self._job_calculo = None
         self._sincronizar_percentual_pintura_fachada()
         medidas = {chave: var.get() for chave, var in self.var_medidas.items()}
@@ -2092,6 +2155,7 @@ class AreaComumFrame(tk.Frame):
 
         self._atualizar_preview_orcamento()
         self._atualizar_valores_anomalias_orcamento()
+        self._referencias_ultimo_calculo = self._referencias_externas()
 
     def _coletar_rascunho(self) -> dict:
         dados = novo_rascunho()
@@ -2142,7 +2206,7 @@ class AreaComumFrame(tk.Frame):
         dados["considerar_limpeza_geral"] = bool(self.var_considerar_limpeza.get())
         dados["extras_orcamento"] = []
         dados["orcamento"] = self._orcamento_para_rascunho()
-        dados["observacoes"] = self.texto_obs.get("1.0", "end").strip()
+        dados["observacoes"] = self._texto_observacoes()
         return dados
 
     def _orcamento_para_rascunho(self) -> dict:
@@ -2301,14 +2365,6 @@ class AreaComumFrame(tk.Frame):
         self._avisos_ultima_carga = []
         if normalizar:
             dados = normalizar_rascunho(dados)
-        # Recálculo agendado por edições anteriores ficaria redundante:
-        # _recalcular() roda ao final da carga.
-        if self._job_calculo is not None:
-            try:
-                self.after_cancel(self._job_calculo)
-            except (tk.TclError, ValueError):
-                pass
-            self._job_calculo = None
         try:
             self._etapa_carregamento("Aplicando dados iniciais…")
             self.var_nome.set(dados["condominio"].get("nome", ""))
@@ -2368,6 +2424,7 @@ class AreaComumFrame(tk.Frame):
             obs = dados.get("observacoes") or ""
             if obs:
                 self.texto_obs.insert("1.0", obs)
+            self._observacoes = obs.strip()
             self._caminho_arquivo = str(caminho) if caminho else None
             self._sujo = False
             self._atualizar_rotulo_arquivo()
@@ -4929,6 +4986,24 @@ class AreaComumFrame(tk.Frame):
                         item["custo_unitario"] = salvo["custo_unitario"]
         self._preencher_grade()
 
+    def _grade_visivel(self) -> bool:
+        """A aba 3 está selecionada e o módulo está na tela."""
+        try:
+            return (
+                self.notebook.select() == str(self._aba_orcamento)
+                and bool(self.winfo_ismapped())
+            )
+        except (tk.TclError, AttributeError):
+            return True  # na dúvida, redesenha (comportamento antigo)
+
+    def _ao_mostrar_grade(self, _event=None):
+        if self._grade_pendente and not self._carregando:
+            self.after_idle(self._preencher_grade_se_pendente)
+
+    def _preencher_grade_se_pendente(self):
+        if self._grade_pendente and not self._carregando and self._grade_visivel():
+            self._preencher_grade()
+
     def _preencher_grade(self):
         catalogo = self._composicoes_para_calculo()
         estado_atual = estado_do_combo(self.var_uf.get())
@@ -4940,6 +5015,12 @@ class AreaComumFrame(tk.Frame):
         )
         if not hasattr(self, "grade"):
             return
+        if not self._grade_visivel():
+            # Redesenhar a grade é a parte mais cara do recálculo (~1.000
+            # widgets). Escondida, ela só é refeita quando voltar a aparecer.
+            self._grade_pendente = True
+            return
+        self._grade_pendente = False
 
         self.grade.iniciar_reconstrucao()
         fracao = self.grade.salvar_fracao_scroll()

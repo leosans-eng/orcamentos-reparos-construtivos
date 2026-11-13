@@ -512,8 +512,10 @@ def normalizar_rascunho(dados) -> dict:
         base["considerar_pintura"] = bool(dados.get("considerar_pintura"))
     else:
         base["considerar_pintura"] = True
-    if "pintura_fachada_manual" in dados:
-        base["pintura_fachada_manual"] = bool(dados.get("pintura_fachada_manual"))
+    # None = rascunho antigo sem a informação; a interface decide comparando
+    # o percentual salvo com o das anomalias.
+    manual = dados.get("pintura_fachada_manual")
+    base["pintura_fachada_manual"] = None if manual is None else bool(manual)
     if "duas_demaos_fundo_selador" in dados:
         base["duas_demaos_fundo_selador"] = bool(dados.get("duas_demaos_fundo_selador"))
     if "considerar_destinacao_entulho" in dados:

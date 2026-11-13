@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 import tkinter.font as tkfont
+import traceback
 from copy import deepcopy
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -131,6 +132,23 @@ def _numero_br_fixo(valor, casas: int = 2) -> str:
         return str(valor)
     texto = f"{v:,.{casas}f}"
     return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _texto_campo_numerico(bruto, *, percentual=False, casas=None) -> str:
+    """Formata como o campo faz ao perder o foco.
+
+    Expressão válida vira número formatado; texto inválido é mantido como
+    está (nunca vira 0 em silêncio).
+    """
+    bruto = str(bruto or "").strip()
+    if not bruto:
+        return ""
+    try:
+        parse_expressao(bruto)
+    except ValueError:
+        return bruto
+    valor = numero(bruto, percentual=percentual)
+    return _numero_br_fixo(valor, casas) if casas is not None else formatar_decimal_br(valor)
 
 
 def _fmt_medida(valor, unidade: str) -> str:
@@ -263,6 +281,7 @@ class AreaComumFrame(tk.Frame):
         self._sincronizando_percentuais = False
         self._pct_em_edicao = {}
         self._painel_carregamento = None
+        self._composicoes_ciclo = None
         self._perguntando_uf = False
         self._aplicando_historico = False
         self._caminho_arquivo = None
@@ -743,14 +762,7 @@ class AreaComumFrame(tk.Frame):
             bruto = widget.get().strip()
         except tk.TclError:
             return
-        if not bruto:
-            return
-        try:
-            parse_expressao(bruto)
-        except ValueError:
-            return
-        valor = numero(bruto, percentual=percentual)
-        novo = _numero_br_fixo(valor, casas) if casas is not None else formatar_decimal_br(valor)
+        novo = _texto_campo_numerico(bruto, percentual=percentual, casas=casas)
         if novo == bruto:
             return
         try:
@@ -2246,9 +2258,20 @@ class AreaComumFrame(tk.Frame):
         finally:
             self._ocultar_painel_carregamento(ao_terminar)
 
-    def _aplicar_rascunho(self, dados: dict, *, caminho=None):
+    def _aplicar_rascunho(self, dados: dict, *, caminho=None, normalizar=True):
+        """normalizar=False quando os dados já vêm de carregar_rascunho /
+        carregar_autosave, que normalizam na leitura."""
         self._carregando = True
-        dados = normalizar_rascunho(dados)
+        if normalizar:
+            dados = normalizar_rascunho(dados)
+        # Recálculo agendado por edições anteriores ficaria redundante:
+        # _recalcular() roda ao final da carga.
+        if self._job_calculo is not None:
+            try:
+                self.after_cancel(self._job_calculo)
+            except (tk.TclError, ValueError):
+                pass
+            self._job_calculo = None
         try:
             self.var_nome.set(dados["condominio"].get("nome", ""))
             self.var_municipio.set(dados["condominio"].get("municipio", ""))
@@ -2283,45 +2306,25 @@ class AreaComumFrame(tk.Frame):
                 if ident not in self.var_esquadrias:
                     continue
                 for chave_e in ("dim_x", "dim_y", "h_peitoril", "qtd_por_pav"):
-                    bruto = str(item.get(chave_e, "") or "").strip()
-                    if bruto:
-                        self.var_esquadrias[ident][chave_e].set(
-                            _numero_br_fixo(numero(bruto))
-                        )
-                    else:
-                        self.var_esquadrias[ident][chave_e].set("")
+                    self.var_esquadrias[ident][chave_e].set(
+                        _texto_campo_numerico(item.get(chave_e), casas=2)
+                    )
             self._anomalias_orcamento = list(dados.get("anomalias_orcamento") or [])
-            if "considerar_servicos_preliminares" in dados:
-                self.var_considerar_sp.set(
-                    bool(dados.get("considerar_servicos_preliminares"))
-                )
-            else:
-                self.var_considerar_sp.set(True)
-            if "considerar_pintura" in dados:
-                self.var_considerar_pintura.set(bool(dados.get("considerar_pintura")))
-            else:
-                self.var_considerar_pintura.set(True)
-            if "pintura_fachada_manual" in dados:
-                self._pintura_fachada_manual = bool(dados.get("pintura_fachada_manual"))
-            else:
+            # normalizar_rascunho já preenche os padrões dessas chaves.
+            self.var_considerar_sp.set(bool(dados["considerar_servicos_preliminares"]))
+            self.var_considerar_pintura.set(bool(dados["considerar_pintura"]))
+            manual = dados.get("pintura_fachada_manual")
+            if manual is None:
+                # Rascunho antigo: se o % de pintura difere do máximo das
+                # anomalias, foi ajustado à mão e não pode ser sobrescrito.
                 self._pintura_fachada_manual = self._pintura_diverge_do_maximo()
-            self.var_duas_demaos_selador.set(
-                bool(dados.get("duas_demaos_fundo_selador", True))
-            )
-            if "considerar_destinacao_entulho" in dados:
-                self.var_considerar_entulho.set(
-                    bool(dados.get("considerar_destinacao_entulho"))
-                )
             else:
-                self.var_considerar_entulho.set(True)
-            if "considerar_limpeza_geral" in dados:
-                self.var_considerar_limpeza.set(
-                    bool(dados.get("considerar_limpeza_geral"))
-                )
-            else:
-                self.var_considerar_limpeza.set(True)
+                self._pintura_fachada_manual = bool(manual)
+            self.var_duas_demaos_selador.set(bool(dados["duas_demaos_fundo_selador"]))
+            self.var_considerar_entulho.set(bool(dados["considerar_destinacao_entulho"]))
+            self.var_considerar_limpeza.set(bool(dados["considerar_limpeza_geral"]))
             self._carregar_orcamento_rascunho(dados)
-            self._redesenhar_anomalias_orcamento()
+            self._redesenhar_anomalias_orcamento(com_valores=False)
             self.texto_obs.delete("1.0", "end")
             obs = dados.get("observacoes") or ""
             if obs:
@@ -2339,6 +2342,33 @@ class AreaComumFrame(tk.Frame):
                 self._job_municipio = None
             if self._painel_carregamento is None:
                 self._carregando = False
+
+    def _aplicar_rascunho_seguro(
+        self, dados: dict, *, caminho=None, normalizar=True
+    ) -> str | None:
+        """Aplica o rascunho; se falhar no meio, volta ao estado anterior.
+
+        Evita que a tela fique com parte do rascunho novo e parte do antigo
+        (e que um Ctrl+S grave essa mistura no arquivo anterior).
+        Devolve None em caso de sucesso ou a descrição do erro.
+        """
+        anterior = self._capturar_snapshot()
+        caminho_anterior = self._caminho_arquivo
+        sujo_anterior = self._sujo
+        try:
+            self._aplicar_rascunho(dados, caminho=caminho, normalizar=normalizar)
+            return None
+        except Exception as exc:  # noqa: BLE001 — qualquer falha precisa reverter a tela
+            traceback.print_exc()
+            erro = f"{type(exc).__name__}: {exc}"
+        try:
+            self._aplicar_rascunho(anterior, caminho=caminho_anterior)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+        self._caminho_arquivo = caminho_anterior
+        self._sujo = sujo_anterior
+        self._atualizar_rotulo_arquivo()
+        return erro
 
     def _capturar_snapshot(self):
         return deepcopy(self._coletar_rascunho())
@@ -2383,14 +2413,22 @@ class AreaComumFrame(tk.Frame):
         if not self._historico_undo or self._aplicando_historico:
             return
         entrada = self._historico_undo.pop()
-        self._historico_redo.append(entrada)
         self._aplicando_historico = True
         try:
-            self._aplicar_rascunho(entrada["antes"], caminho=self._caminho_arquivo)
-            self._sujo = True
-            self._atualizar_rotulo_arquivo()
+            erro = self._aplicar_rascunho_seguro(
+                entrada["antes"], caminho=self._caminho_arquivo
+            )
+            if erro is None:
+                self._sujo = True
+                self._atualizar_rotulo_arquivo()
         finally:
             self._aplicando_historico = False
+        if erro is not None:
+            self._historico_undo.append(entrada)
+            self._atualizar_botoes_historico()
+            self._mostrar_erro_carregamento("Desfazer", erro)
+            return
+        self._historico_redo.append(entrada)
         self._snapshot_base = self._capturar_snapshot()
         self._atualizar_botoes_historico()
         self._mostrar_feedback(f"Desfeita — {entrada['descricao']}", "orange")
@@ -2399,14 +2437,22 @@ class AreaComumFrame(tk.Frame):
         if not self._historico_redo or self._aplicando_historico:
             return
         entrada = self._historico_redo.pop()
-        self._historico_undo.append(entrada)
         self._aplicando_historico = True
         try:
-            self._aplicar_rascunho(entrada["depois"], caminho=self._caminho_arquivo)
-            self._sujo = True
-            self._atualizar_rotulo_arquivo()
+            erro = self._aplicar_rascunho_seguro(
+                entrada["depois"], caminho=self._caminho_arquivo
+            )
+            if erro is None:
+                self._sujo = True
+                self._atualizar_rotulo_arquivo()
         finally:
             self._aplicando_historico = False
+        if erro is not None:
+            self._historico_redo.append(entrada)
+            self._atualizar_botoes_historico()
+            self._mostrar_erro_carregamento("Refazer", erro)
+            return
+        self._historico_undo.append(entrada)
         self._snapshot_base = self._capturar_snapshot()
         self._atualizar_botoes_historico()
         self._mostrar_feedback(f"Refeita — {entrada['descricao']}", "green")
@@ -2463,7 +2509,10 @@ class AreaComumFrame(tk.Frame):
             "Deseja salvar o rascunho JSON antes de começar outro?"
         ):
             return
-        self._aplicar_rascunho(novo_rascunho())
+        erro = self._aplicar_rascunho_seguro(novo_rascunho())
+        if erro is not None:
+            self._mostrar_erro_carregamento("Novo rascunho", erro)
+            return
         limpar_autosave()
         self._historico_undo.clear()
         self._historico_redo.clear()
@@ -2492,19 +2541,27 @@ class AreaComumFrame(tk.Frame):
             messagebox.showerror("Abrir rascunho", str(exc), parent=self.winfo_toplevel())
             return
 
+        erros = []
+
         def carregar():
-            self._aplicar_rascunho(dados, caminho=caminho)
+            erro = self._aplicar_rascunho_seguro(dados, caminho=caminho, normalizar=False)
+            if erro is not None:
+                erros.append(erro)
+                return
             self._historico_undo.clear()
             self._historico_redo.clear()
             self._iniciar_historico()
 
-        self._executar_com_carregamento(
-            "Carregando rascunho…",
-            carregar,
-            lambda: self._mostrar_feedback(
-                f"Rascunho aberto: {Path(caminho).name}", "green"
-            ),
-        )
+        def ao_terminar():
+            # Só depois de fechar o painel: ele é topmost e esconderia a mensagem.
+            if erros:
+                self._mostrar_erro_carregamento(
+                    "Abrir rascunho", erros[0], arquivo=Path(caminho).name
+                )
+            else:
+                self._mostrar_feedback(f"Rascunho aberto: {Path(caminho).name}", "green")
+
+        self._executar_com_carregamento("Carregando rascunho…", carregar, ao_terminar)
 
     def _salvar(self, *, salvar_como=False) -> bool:
         caminho = None if salvar_como else self._caminho_arquivo
@@ -2546,16 +2603,33 @@ class AreaComumFrame(tk.Frame):
             parent=self.winfo_toplevel(),
         ):
             return
+        erros = []
+
         def restaurar():
-            self._aplicar_rascunho(dados)
+            erro = self._aplicar_rascunho_seguro(dados, normalizar=False)
+            if erro is not None:
+                erros.append(erro)
+                return
             self._sujo = True
             self._atualizar_rotulo_arquivo()
             self._iniciar_historico()
 
-        self._executar_com_carregamento(
-            "Carregando rascunho…",
-            restaurar,
-            lambda: self._mostrar_feedback("Rascunho automático restaurado.", "green"),
+        def ao_terminar():
+            if erros:
+                self._mostrar_erro_carregamento("Rascunho automático", erros[0])
+            else:
+                self._mostrar_feedback("Rascunho automático restaurado.", "green")
+
+        self._executar_com_carregamento("Carregando rascunho…", restaurar, ao_terminar)
+
+    def _mostrar_erro_carregamento(self, titulo, erro, *, arquivo=None):
+        alvo = f"o rascunho «{arquivo}»" if arquivo else "o rascunho"
+        messagebox.showerror(
+            titulo,
+            f"Não foi possível carregar {alvo}.\n"
+            "A tela foi mantida como estava antes da tentativa.\n\n"
+            f"Detalhe técnico: {erro}",
+            parent=self.winfo_toplevel(),
         )
 
     def _recarregar_catalogo_anomalias(self):
@@ -2745,21 +2819,36 @@ class AreaComumFrame(tk.Frame):
         self._registrar_historico("Remover anomalia")
         self._recalcular()
 
-    def _redesenhar_anomalias_orcamento(self):
+    def _redesenhar_anomalias_orcamento(self, *, com_valores=True):
+        """Recria as linhas da árvore.
+
+        com_valores=False insere só nomes; usado na carga do rascunho, em que
+        _recalcular() logo em seguida preenche os valores já com os
+        quantitativos novos (antes eram calculados duas vezes, a primeira com
+        os quantitativos do rascunho anterior).
+        """
         if not hasattr(self, "tree_anomalias"):
             return
         selecao = list(self.tree_anomalias.selection())
         for item in self.tree_anomalias.get_children():
             self.tree_anomalias.delete(item)
-        reduzidas = self._ids_com_reducao_fachada()
+        if com_valores:
+            limites_fachada = self._limites_fachada()
+            reduzidas = {str(chave) for chave in limites_fachada[1]}
         for indice, linha in enumerate(self._anomalias_orcamento):
+            if com_valores:
+                valores = self._valores_linha_anomalia(linha, limites_fachada)
+                tags = self._tags_linha_anomalia(indice, linha, reduzidas)
+            else:
+                valores = (linha.get("reparo_nome") or "Reparo padrão", "", "", "")
+                tags = ("par" if indice % 2 else "impar",)
             self.tree_anomalias.insert(
                 "",
                 "end",
                 iid=linha["id"],
                 text=linha.get("nome") or "",
-                values=self._valores_linha_anomalia(linha),
-                tags=self._tags_linha_anomalia(indice, linha, reduzidas),
+                values=valores,
+                tags=tags,
             )
         for iid in selecao:
             if self.tree_anomalias.exists(iid):
@@ -2771,25 +2860,24 @@ class AreaComumFrame(tk.Frame):
         self._atualizar_valores_etapas_padrao()
         if not hasattr(self, "tree_anomalias"):
             return
-        reduzidas = self._ids_com_reducao_fachada()
+        limites_fachada = self._limites_fachada()
+        reduzidas = {str(chave) for chave in limites_fachada[1]}
+        por_id = {item.get("id"): item for item in self._anomalias_orcamento}
         for indice, iid in enumerate(self.tree_anomalias.get_children()):
-            linha = next(
-                (item for item in self._anomalias_orcamento if item.get("id") == iid),
-                None,
-            )
+            linha = por_id.get(iid)
             if linha is None:
                 continue
             self.tree_anomalias.item(
                 iid,
-                values=self._valores_linha_anomalia(linha),
+                values=self._valores_linha_anomalia(linha, limites_fachada),
                 tags=self._tags_linha_anomalia(indice, linha, reduzidas),
             )
 
-    def _valores_linha_anomalia(self, linha) -> tuple:
+    def _valores_linha_anomalia(self, linha, limites_fachada=None) -> tuple:
         return (
             linha.get("reparo_nome") or "Reparo padrão",
             f"{linha.get('percentual') or '100'}%",
-            self._texto_valor_reparo(linha),
+            self._texto_valor_reparo(linha, limites_fachada=limites_fachada),
             self._texto_valor_atual_anomalia(linha),
         )
 
@@ -2804,7 +2892,7 @@ class AreaComumFrame(tk.Frame):
         total = self._subtotal_grupo_calculado(
             grupo,
             bdi,
-            self._listar_composicoes(),
+            self._composicoes_para_calculo(),
             self._estado_selecionado(),
         )
         if abs(total) < 0.005:
@@ -2834,19 +2922,27 @@ class AreaComumFrame(tk.Frame):
             var.set(f"({self._texto_moeda_grupo(por_origem.get(chave))})")
         self._atualizar_rotulo_percentual_pintura()
 
-    def _texto_valor_reparo(self, linha, *, aplicar_limite=True) -> str:
+    def _limites_fachada(self):
+        """(limites, avisos) da redução de revestimento de fachada, para todas as linhas."""
+        return limitar_revestimento_fachada(
+            self._anomalias_orcamento,
+            self._catalogo,
+            self._quantitativos or {},
+            getattr(self, "_etapa_por_id", None),
+        )
+
+    def _texto_valor_reparo(
+        self, linha, *, aplicar_limite=True, limites_fachada=None
+    ) -> str:
+        """limites_fachada: resultado de _limites_fachada() já calculado pelo
+        chamador, para não recalcular a fachada inteira a cada linha."""
         reparo = self._reparo_da_linha(linha)
         if not reparo:
             return "—"
         limites = {}
         avisos = {}
         if aplicar_limite:
-            limites, avisos = limitar_revestimento_fachada(
-                self._anomalias_orcamento,
-                self._catalogo,
-                self._quantitativos or {},
-                getattr(self, "_etapa_por_id", None),
-            )
+            limites, avisos = limites_fachada or self._limites_fachada()
         pares = valores_considerados_reparo(
             reparo,
             self._quantitativos or {},
@@ -2890,15 +2986,6 @@ class AreaComumFrame(tk.Frame):
         )
         sem_limite = self._texto_valor_reparo(linha, aplicar_limite=False) if linha else "—"
         return f"Reduzido por {origem}.\nSem essa redução: {sem_limite}."
-
-    def _ids_com_reducao_fachada(self) -> set[str]:
-        _limites, avisos = limitar_revestimento_fachada(
-            self._anomalias_orcamento,
-            self._catalogo,
-            self._quantitativos or {},
-            getattr(self, "_etapa_por_id", None),
-        )
-        return {str(chave) for chave in avisos}
 
     def _tags_linha_anomalia(self, indice, linha, reduzidas) -> tuple[str, ...]:
         if str(linha.get("id") or "") in reduzidas:
@@ -3704,6 +3791,25 @@ class AreaComumFrame(tk.Frame):
             return listar_composicoes_catalogo()
         except (ValueError, OSError, TypeError):
             return []
+
+    def _composicoes_para_calculo(self):
+        """Catálogo só para leitura, reaproveitado até o próximo ciclo ocioso do Tk.
+
+        listar() faz deepcopy do catálogo inteiro (e pode ir à API se o cache
+        estiver vazio); antes isso acontecia uma vez por linha de anomalia.
+        Não repassar a diálogos: eles devem receber _listar_composicoes().
+        """
+        if self._composicoes_ciclo is None:
+            self._composicoes_ciclo = self._listar_composicoes()
+            try:
+                self.after_idle(self._descartar_composicoes_ciclo)
+            except tk.TclError:
+                self._composicoes_ciclo = None
+                return self._listar_composicoes()
+        return self._composicoes_ciclo
+
+    def _descartar_composicoes_ciclo(self):
+        self._composicoes_ciclo = None
 
     def _adicionar_extra_etapa(self):
         from ui.orcamento_customizado import DialogoNovaEtapa
@@ -4640,7 +4746,7 @@ class AreaComumFrame(tk.Frame):
         self._preencher_grade()
 
     def _preencher_grade(self):
-        catalogo = self._listar_composicoes()
+        catalogo = self._composicoes_para_calculo()
         estado_atual = estado_do_combo(self.var_uf.get())
         bdi = self.orcamento.bdi_percent
         total = self._total_geral_calculado(bdi, catalogo, estado_atual)

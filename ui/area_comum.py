@@ -289,6 +289,24 @@ def _formatar_bdi(valor):
         return str(valor)
 
 
+# Campo ou quantitativo da aba 1 -> parte que acende na visão isométrica.
+PARTES_ISOMETRICA = {
+    "qtd_pavimentos": "pavimentos",
+    "pe_direito_m": "pavimentos",
+    "perimetro_paredes_externas_bloco_m": "paredes",
+    "perimetro_paredes_externas_total_m": "paredes",
+    "area_fachada_bloco_m2": "paredes",
+    "area_fachada_total_m2": "paredes",
+    "perimetro_platibanda_bloco_m": "platibanda",
+    "perimetro_platibanda_total_m": "platibanda",
+    "altura_platibanda_m": "platibanda",
+    "area_construida_m2": "cobertura",
+    "qtd_aguas_telhado": "cobertura",
+    "perimetro_beiral_m": "cobertura",
+    "area_cobertura_total_m2": "cobertura",
+}
+
+
 class AreaComumFrame(tk.Frame):
     def __init__(self, parent, ctx, on_voltar, *, offline=False):
         cores = cores_tema(parent)
@@ -311,6 +329,8 @@ class AreaComumFrame(tk.Frame):
         self._observacoes = ""
         self._grade_pendente = False
         self._referencias_ultimo_calculo = None
+        self._destaque_mouse = None
+        self._destaque_foco = None
         self._perguntando_uf = False
         self._aplicando_historico = False
         self._caminho_arquivo = None
@@ -682,7 +702,9 @@ class AreaComumFrame(tk.Frame):
         return caixa
 
     def _grade_caixas(self, parent, itens, colunas=5, *, compacta=False, wraplength=168):
+        """Cria as caixas de valor e as devolve, na mesma ordem de `itens`."""
         caixas = []
+        todas = []
         for indice, item in enumerate(itens):
             var, rotulo = item[0], item[1]
             unidade = item[2] if len(item) > 2 else ""
@@ -702,6 +724,7 @@ class AreaComumFrame(tk.Frame):
                 padx=(0, 6),
                 pady=2 if compacta else 4,
             )
+            todas.append(caixa)
             if compacta:
                 caixas.append(caixa)
                 var.trace_add("write", self._agendar_alinhamento_caixas)
@@ -714,6 +737,56 @@ class AreaComumFrame(tk.Frame):
                 self._grupos_caixas_compactas = grupos
             grupos.append(caixas)
             self._agendar_alinhamento_caixas()
+        return todas
+
+    def _ligar_destaque_isometrico(self, widgets, parte, *, campo=None):
+        """Acende `parte` na visão isométrica com o mouse sobre `widgets`
+        e, se houver `campo`, enquanto ele estiver sendo editado."""
+        alvos = set()
+        pendentes = [w for w in widgets if w is not None]
+        while pendentes:
+            w = pendentes.pop()
+            alvos.add(w)
+            pendentes.extend(w.winfo_children())
+
+        def entrar(_event=None):
+            self._destaque_mouse = parte
+            self._aplicar_destaque_isometrico()
+
+        def conferir_saida():
+            # Passar do quadro para um texto dentro dele também gera "saiu";
+            # só apaga se o mouse realmente deixou o conjunto.
+            try:
+                sob = self.winfo_containing(*self.winfo_pointerxy())
+            except (tk.TclError, KeyError):
+                sob = None
+            if sob in alvos:
+                return
+            if self._destaque_mouse == parte:
+                self._destaque_mouse = None
+                self._aplicar_destaque_isometrico()
+
+        for w in alvos:
+            w.bind("<Enter>", entrar, add="+")
+            w.bind("<Leave>", lambda _e: self.after(15, conferir_saida), add="+")
+        if campo is not None:
+
+            def focar(_event=None):
+                self._destaque_foco = parte
+                self._aplicar_destaque_isometrico()
+
+            def desfocar(_event=None):
+                if self._destaque_foco == parte:
+                    self._destaque_foco = None
+                    self._aplicar_destaque_isometrico()
+
+            campo.bind("<FocusIn>", focar, add="+")
+            campo.bind("<FocusOut>", desfocar, add="+")
+
+    def _aplicar_destaque_isometrico(self):
+        vista = getattr(self, "vista_bloco", None)
+        if vista is not None:
+            vista.destacar(self._destaque_mouse or self._destaque_foco)
 
     def _igualar_altura_titulos(self, *titulos):
         """A borda do quadro passa no meio do título. Alturas diferentes deslocam essa linha."""
@@ -854,9 +927,10 @@ class AreaComumFrame(tk.Frame):
         for indice, (chave, rotulo) in enumerate(CAMPOS_MEDIDA_EDITAVEIS):
             linha = 2 + indice // 2
             col = (indice % 2) * 2
-            tk.Label(campos, text=rotulo + ":", bg=fundo, fg=cores.texto, anchor="w").grid(
-                row=linha, column=col, sticky="w", pady=2, padx=(0, 6)
+            lbl_campo = tk.Label(
+                campos, text=rotulo + ":", bg=fundo, fg=cores.texto, anchor="w"
             )
+            lbl_campo.grid(row=linha, column=col, sticky="w", pady=2, padx=(0, 6))
             # Mesmo widget em todos (tk.Entry): no Windows o ttk ignora
             # fieldbackground, e misturar ttk/tk desalinha a coluna.
             fundo_campo = (
@@ -877,6 +951,9 @@ class AreaComumFrame(tk.Frame):
             )
             entrada.grid(row=linha, column=col + 1, sticky="w", pady=2, padx=(0, 18))
             self._vincular_campo_numerico(entrada)
+            parte = PARTES_ISOMETRICA.get(chave)
+            if parte:
+                self._ligar_destaque_isometrico([lbl_campo, entrada], parte, campo=entrada)
 
         linha_auto = 2 + (len(CAMPOS_MEDIDA_EDITAVEIS) + 1) // 2
         tk.Label(
@@ -889,7 +966,7 @@ class AreaComumFrame(tk.Frame):
         ).grid(row=linha_auto, column=0, columnspan=4, sticky="w", pady=(10, 2))
         caixas_auto = tk.Frame(campos, bg=fundo)
         caixas_auto.grid(row=linha_auto + 1, column=0, columnspan=4, sticky="ew")
-        self._grade_caixas(
+        caixas = self._grade_caixas(
             caixas_auto,
             [
                 (self.var_medidas_auto[chave], rotulo, unidade)
@@ -899,6 +976,9 @@ class AreaComumFrame(tk.Frame):
             compacta=True,
             wraplength=150,
         )
+        for (chave, _rotulo, _unidade), caixa in zip(CAMPOS_MEDIDA_AUTO, caixas):
+            if chave in PARTES_ISOMETRICA:
+                self._ligar_destaque_isometrico([caixa], PARTES_ISOMETRICA[chave])
 
         lado_desenho = tk.Frame(bloco_qtd, bg=fundo)
         lado_desenho.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
@@ -1081,7 +1161,7 @@ class AreaComumFrame(tk.Frame):
         self.after_idle(lambda: self._igualar_altura_titulos(titulo_esq, titulo_res))
         grade_res = tk.Frame(bloco_res, bg=fundo)
         grade_res.pack(fill="both", expand=True)
-        self._grade_caixas(
+        caixas = self._grade_caixas(
             grade_res,
             [
                 (self.var_resumo[chave], rotulo, unidade)
@@ -1091,6 +1171,9 @@ class AreaComumFrame(tk.Frame):
             compacta=True,
             wraplength=180,
         )
+        for (chave, _rotulo, _unidade), caixa in zip(CAMPOS_RESUMO_FACHADA, caixas):
+            if chave in PARTES_ISOMETRICA:
+                self._ligar_destaque_isometrico([caixa], PARTES_ISOMETRICA[chave])
 
         titulo_pct = tk.Frame(interior, bg=fundo)
         tk.Label(
@@ -2006,7 +2089,14 @@ class AreaComumFrame(tk.Frame):
             pontos, fechado = camadas["externa"]
         pe = numero(self.var_medidas["pe_direito_m"].get())
         pav = numero(self.var_medidas["qtd_pavimentos"].get())
-        self.vista_bloco.definir(pontos, bool(fechado), pe, pav)
+        self.vista_bloco.definir(
+            pontos,
+            bool(fechado),
+            pe,
+            pav,
+            platibanda=numero(self.var_medidas["altura_platibanda_m"].get()),
+            blocos=numero(self.var_medidas["qtd_blocos"].get()),
+        )
 
     def _ao_sair_municipio(self, _event=None):
         self._resolver_uf_municipio()

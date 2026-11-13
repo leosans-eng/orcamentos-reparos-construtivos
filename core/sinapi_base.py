@@ -16,6 +16,12 @@ class SinapiBase:
         self.catalogo = self._normalizar_catalogo(catalogo)
         self.precos = self._normalizar_precos(precos)
         self._cache_por_estado: dict[str, pd.DataFrame] = {}
+        # Índices montados na primeira consulta. A base não muda depois de
+        # criada (uma SINAPI nova gera outro objeto), então podem ser reaproveitados.
+        self._estados: list[str] | None = None
+        self._estados_por_codigo: dict[str, list[str]] | None = None
+        self._posicao_por_estado: dict[str, dict[str, int]] = {}
+        self._tipo_por_codigo: dict[str, str] | None = None
 
     @property
     def empty(self) -> bool:
@@ -53,16 +59,37 @@ class SinapiBase:
     def estados(self) -> list[str]:
         if self.precos.empty:
             return []
-        return sorted(self.precos["estado"].dropna().astype(str).str.strip().unique().tolist())
+        if self._estados is None:
+            # "estado" já foi limpo em _normalizar_precos.
+            self._estados = sorted(self.precos["estado"].dropna().unique().tolist())
+        return list(self._estados)
+
+    def estados_do_codigo(self, codigo: str) -> list[str]:
+        """UFs em que o código tem preço. Monta o índice na primeira chamada."""
+        if self._estados_por_codigo is None:
+            agrupado: dict[str, set[str]] = {}
+            for cod, uf in zip(
+                self.precos["codigo"].tolist(), self.precos["estado"].tolist()
+            ):
+                agrupado.setdefault(cod, set()).add(uf)
+            self._estados_por_codigo = {
+                cod: sorted(ufs) for cod, ufs in agrupado.items()
+            }
+        return list(self._estados_por_codigo.get(str(codigo).strip(), ()))
 
     def obter_tipo(self, codigo: str) -> str:
         codigo = str(codigo).strip()
         if not codigo or self.catalogo.empty:
             return ""
-        linhas = self.catalogo[self.catalogo["codigo"] == codigo]
-        if linhas.empty:
-            return ""
-        return str(linhas.iloc[0].get("tipo", "")).strip().upper()[:1]
+        if self._tipo_por_codigo is None:
+            # O catálogo não tem códigos repetidos (drop_duplicates acima).
+            self._tipo_por_codigo = dict(
+                zip(
+                    self.catalogo["codigo"].tolist(),
+                    self.catalogo["tipo"].astype(str).tolist(),
+                )
+            )
+        return self._tipo_por_codigo.get(codigo, "").strip().upper()[:1]
 
     def dataframe_estado(self, estado: str) -> pd.DataFrame:
         estado = str(estado or "").strip()
@@ -90,7 +117,16 @@ class SinapiBase:
         if not codigo or not estado:
             return None
         df = self.dataframe_estado(estado)
-        linhas = df[df["codigo"] == codigo]
-        if linhas.empty:
+        posicoes = self._posicao_por_estado.get(estado)
+        if posicoes is None:
+            # Antes: df[df["codigo"] == codigo] percorria a tabela inteira a
+            # cada busca. Agora é uma consulta num dicionário código -> linha.
+            posicoes = {}
+            if "codigo" in df.columns:
+                for pos, cod in enumerate(df["codigo"].tolist()):
+                    posicoes.setdefault(cod, pos)  # primeira ocorrência, como iloc[0]
+            self._posicao_por_estado[estado] = posicoes
+        pos = posicoes.get(codigo)
+        if pos is None:
             return None
-        return linhas.iloc[0]
+        return df.iloc[pos]

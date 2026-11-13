@@ -337,15 +337,9 @@ def estados_com_codigo(sinapi, codigo) -> list[str]:
     codigo = str(codigo or "").strip()
     if base.empty or not codigo:
         return []
-    precos = base.precos
-    if precos.empty:
+    if base.precos.empty:
         return []
-    mask = precos["codigo"].astype(str).str.strip() == codigo
-    if not mask.any():
-        return []
-    return sorted(
-        precos.loc[mask, "estado"].dropna().astype(str).str.strip().unique().tolist()
-    )
+    return base.estados_do_codigo(codigo)
 
 
 def escolher_estado_fallback_sinapi(sinapi, codigo) -> str:

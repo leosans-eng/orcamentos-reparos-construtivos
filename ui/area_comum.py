@@ -59,6 +59,11 @@ from core.composicoes_proprias_storage import listar as listar_composicoes_catal
 from core.ui_prefs import definir_pref, obter_pref
 from core.etapas_predefinidas import aplicar_etapa_no_orcamento
 from core.municipios_br import resolver_uf_municipio
+from app_paths import asset_path
+from core.exportacao_planilha_orcamento import (
+    exportar_orcamento_customizado_modelo4,
+    exportar_orcamento_customizado_modelo_formatado,
+)
 from core.orcamento_customizado import (
     TIPO_COMPOSICAO_PROPRIA,
     TIPO_GRUPO,
@@ -73,13 +78,21 @@ from core.orcamento_customizado import (
     sincronizar_precos_sinapi_no_orcamento,
     subtotal_item,
 )
+from core.orcamento_conversao import novo_id
+from core.orcamento_storage import (
+    adicionar_orcamento_importado,
+    atualizar_orcamento_na_lista,
+    obter_orcamento_dict,
+)
 from core.sinapi_busca import deve_fixar_estado_sinapi, estados_com_codigo, obter_item_sinapi
 from ui.calculadora import abrir_calculadora
 from ui.dialogo_previa_composicao import DialogoPreviaComposicao
 from ui.dialogo_config_anomalias_area_comum import DialogoConfigAnomaliasAreaComum
+from ui.dialogo_selecionar_modelo_planilha import DialogoSelecionarModeloPlanilha
 from ui.desenho_2d import CHAVES_MEDIDA_ORCCAD, PreviaDesenho2D, VistaIsometricaBloco
 from ui.grade_orcamento import GradeOrcamento
 from ui.icones import (
+    carregar_png_icone,
     criar_botao_inserir_prominente,
     criar_botao_ttk_com_icone,
     criar_botao_ttk_so_icone,
@@ -108,13 +121,23 @@ DEBOUNCE_CALCULO_MS = 180
 HISTORICO_MAX = 40
 
 
-def _nome_arquivo_sugerido(nome_condominio: str) -> str:
-    texto = (nome_condominio or "").strip() or "sem_condominio"
+def _nome_arquivo_sugerido(nome_condominio: str, municipio: str = "", uf: str = "") -> str:
+    nome = (nome_condominio or "").strip() or "SEM CONDOMINIO"
+    municipio = (municipio or "").strip()
+    uf = (uf or "").strip()
+    if municipio and uf:
+        texto = f"{nome} - {municipio}-{uf}"
+    elif municipio:
+        texto = f"{nome} - {municipio}"
+    elif uf:
+        texto = f"{nome} - {uf}"
+    else:
+        texto = nome
     invalidos = '<>:"/\\|?*'
     for caractere in invalidos:
         texto = texto.replace(caractere, "_")
-    texto = "_".join(texto.split())
-    return f"area_comum_{texto}.json"
+    texto = " ".join(texto.split())
+    return f"{texto}.json"
 
 
 def _fmt(valor, casas=2, *, inteiro=False) -> str:
@@ -306,6 +329,7 @@ class AreaComumFrame(tk.Frame):
         self._etapa_por_id = {}
         self._etapa_por_rotulo = {}
         self.orcamento = OrcamentoCustomizado()
+        self._orcamento_customizado_id = ""
         self._grade_focar_meta = None
         self.entrada_nome = None
         self.entrada_municipio = None
@@ -587,24 +611,20 @@ class AreaComumFrame(tk.Frame):
 
         linha_botoes = tk.Frame(faixa, bg=fundo)
         linha_botoes.pack(fill="x")
-        criar_botao_ttk_com_icone(
+        btn_gerar_itens = criar_botao_ttk_com_icone(
             linha_botoes,
-            texto="Gerar orçamento",
+            texto="Gerar itens novamente",
             nome_icone="construct-outline",
             command=self._gerar_orcamento,
             estilo=self._estilos.compacto,
             cor_icone=self._estilos.icone,
             refs=self._refs_icones,
-        ).pack(side="left")
-        criar_botao_ttk_com_icone(
-            linha_botoes,
-            texto="Salvar em Orçamentos Customizados",
-            nome_icone="save-outline",
-            command=self._salvar_em_customizados,
-            estilo=self._estilos.compacto,
-            cor_icone=self._estilos.icone,
-            refs=self._refs_icones,
-        ).pack(side="left", padx=(6, 0))
+        )
+        btn_gerar_itens.pack(side="left")
+        vincular_tooltip(
+            btn_gerar_itens,
+            "Recalcula as etapas e itens a partir das anomalias e percentuais",
+        )
 
     def _caixa(self, parent, var, rotulo, unidade="", wraplength=168, *, compacta=False):
         cores = self._cores
@@ -1664,14 +1684,64 @@ class AreaComumFrame(tk.Frame):
         )
         self.lbl_feedback.pack(side="left", fill="x", expand=True, padx=(0, 12))
 
+        container_exportar = tk.Frame(linha, bg=barra)
+        container_exportar.pack(side="right", padx=10, pady=6)
+        self.btn_salvar_customizados = criar_botao_ttk_com_icone(
+            container_exportar,
+            texto="Salvar em Orçamentos Customizados",
+            nome_icone="save-outline",
+            command=self._salvar_em_customizados,
+            estilo=self._estilos.compacto,
+            cor_icone=self._estilos.icone,
+            refs=self._refs_icones,
+        )
+        self.btn_salvar_customizados.pack(side="left", padx=(0, 10))
+        vincular_tooltip(
+            self.btn_salvar_customizados,
+            "Grava este orçamento na lista de Orçamentos Customizados",
+        )
+
+        kwargs_planilha = {
+            "text": "Gerar Planilha",
+            "command": self._exportar_planilha,
+            "font": ("Arial", 10, "bold"),
+            "fg": cores.texto if cores.escuro else "#000000",
+            "activeforeground": cores.texto if cores.escuro else "#000000",
+            "bg": barra,
+            "activebackground": cores.fundo_hover,
+            "relief": "flat",
+            "bd": 0,
+            "padx": 2,
+            "pady": 0,
+            "cursor": "hand2",
+            "highlightthickness": 0,
+        }
+        caminho_excel = asset_path("icons", "excel-preto.png")
+        if caminho_excel is not None:
+            try:
+                self._icone_excel_export = carregar_png_icone(
+                    self, "excel-preto.png", inverter=bool(cores.escuro)
+                )
+                kwargs_planilha["image"] = self._icone_excel_export
+                kwargs_planilha["compound"] = "right"
+            except (FileNotFoundError, OSError, tk.TclError):
+                pass
+        self.btn_gerar_planilha = tk.Button(container_exportar, **kwargs_planilha)
+        self.btn_gerar_planilha.pack(side="left", padx=(0, 16))
+        vincular_tooltip(
+            self.btn_gerar_planilha,
+            "Gera a planilha Excel — disponível após salvar em Orçamentos Customizados",
+        )
+
         tk.Label(
-            linha,
+            container_exportar,
             textvariable=self.var_total,
             font=("Arial", 11, "bold"),
             fg=cores.titulo,
             bg=barra,
             anchor="e",
-        ).pack(side="right", padx=10, pady=6)
+        ).pack(side="left")
+        self._atualizar_estado_planilha()
 
     def _aba_rolavel(self, titulo):
         cores = self._cores
@@ -2205,6 +2275,7 @@ class AreaComumFrame(tk.Frame):
         dados["considerar_limpeza_geral"] = bool(self.var_considerar_limpeza.get())
         dados["extras_orcamento"] = []
         dados["orcamento"] = self._orcamento_para_rascunho()
+        dados["orcamento_customizado_id"] = str(self._orcamento_customizado_id or "")
         dados["observacoes"] = self._texto_observacoes()
         return dados
 
@@ -2356,6 +2427,10 @@ class AreaComumFrame(tk.Frame):
             self.var_considerar_entulho.set(bool(dados["considerar_destinacao_entulho"]))
             self.var_considerar_limpeza.set(bool(dados["considerar_limpeza_geral"]))
             self._carregar_orcamento_rascunho(dados)
+            self._orcamento_customizado_id = str(
+                dados.get("orcamento_customizado_id") or ""
+            ).strip()
+            self._atualizar_estado_planilha()
             self._redesenhar_anomalias_orcamento(com_valores=False)
             self.texto_obs.delete("1.0", "end")
             obs = dados.get("observacoes") or ""
@@ -2724,7 +2799,11 @@ class AreaComumFrame(tk.Frame):
             caminho = filedialog.asksaveasfilename(
                 title="Salvar rascunho de Área Comum",
                 initialdir=str(pasta_rascunhos()),
-                initialfile=_nome_arquivo_sugerido(self.var_nome.get()),
+                initialfile=_nome_arquivo_sugerido(
+                    self.var_nome.get(),
+                    self.var_municipio.get(),
+                    estado_do_combo(self.var_uf.get()),
+                ),
                 defaultextension=".json",
                 filetypes=[("Rascunho JSON", "*.json")],
                 parent=self.winfo_toplevel(),
@@ -5096,16 +5175,173 @@ class AreaComumFrame(tk.Frame):
             self.notebook.select(self._aba_orcamento)
         except (tk.TclError, AttributeError):
             pass
-        self._mostrar_feedback("Orçamento atualizado na aba 3.", "green")
+        self._mostrar_feedback("Itens gerados novamente.", "green")
+
+    def _atualizar_estado_planilha(self):
+        botao = getattr(self, "btn_gerar_planilha", None)
+        if botao is None:
+            return
+        liberado = bool(str(self._orcamento_customizado_id or "").strip())
+        try:
+            botao.configure(
+                state=("normal" if liberado else "disabled"),
+                cursor=("hand2" if liberado else "arrow"),
+            )
+        except tk.TclError:
+            pass
+
+    def _nome_orcamento_customizado(self) -> str:
+        nome = self.var_nome.get().strip() or "SEM CONDOMINIO"
+        municipio = self.var_municipio.get().strip()
+        uf = estado_do_combo(self.var_uf.get())
+        if municipio and uf:
+            return f"{nome} - {municipio}-{uf}"
+        if municipio:
+            return f"{nome} - {municipio}"
+        if uf:
+            return f"{nome} - {uf}"
+        return nome
+
+    def _preparar_orcamento_para_customizados(self) -> bool:
+        if not self.orcamento.grupos:
+            messagebox.showwarning(
+                "Salvar em Orçamentos Customizados",
+                "Não há etapas/itens para salvar.\n"
+                "Gere os itens novamente ou inclua anomalias na aba 2.",
+                parent=self.winfo_toplevel(),
+            )
+            return False
+        uf = estado_do_combo(self.var_uf.get())
+        if not uf:
+            messagebox.showwarning(
+                "Salvar em Orçamentos Customizados",
+                "Selecione a UF do condomínio antes de salvar.",
+                parent=self.winfo_toplevel(),
+            )
+            return False
+        self._atualizar_preview_orcamento()
+        self.orcamento.definir_nome(self._nome_orcamento_customizado())
+        self.orcamento.definir_estado_referencia(uf)
+        try:
+            self.orcamento.definir_bdi(numero(self.var_bdi.get()))
+        except (TypeError, ValueError):
+            pass
+        return True
+
+    def _registro_customizado_vinculado(self):
+        ident = str(self._orcamento_customizado_id or "").strip()
+        if not ident:
+            return None
+        try:
+            return obter_orcamento_dict(ident)
+        except ValueError:
+            return None
 
     def _salvar_em_customizados(self):
-        messagebox.showinfo(
-            "Área Comum",
-            "Quando o orçamento estiver gerado, esta opção vai gravá-lo "
-            "na lista de Orçamentos Customizados. Por enquanto o rascunho "
-            "fica só no JSON local.",
-            parent=self.winfo_toplevel(),
+        if not self._preparar_orcamento_para_customizados():
+            return
+        registro = self._registro_customizado_vinculado()
+        substituir = False
+        if registro is not None:
+            nome_salvo = str(registro.get("nome") or "sem nome").strip() or "sem nome"
+            escolha = messagebox.askyesnocancel(
+                "Orçamento já salvo",
+                f"Este rascunho já está em Orçamentos Customizados como "
+                f"«{nome_salvo}».\n\n"
+                "Deseja substituir o arquivo já salvo?\n\n"
+                "Sim — substituir o orçamento salvo\n"
+                "Não — salvar como cópia nova\n"
+                "Cancelar — não salvar",
+                parent=self.winfo_toplevel(),
+            )
+            if escolha is None:
+                return
+            substituir = bool(escolha)
+        try:
+            if substituir and registro is not None:
+                self.orcamento.id = str(registro.get("id") or self._orcamento_customizado_id)
+                self.orcamento.versao = int(registro.get("versao", 1) or 1)
+                atualizar_orcamento_na_lista(self.orcamento)
+                self._orcamento_customizado_id = str(self.orcamento.id)
+                mensagem = "Orçamento customizado atualizado."
+            else:
+                copia = deepcopy(self.orcamento)
+                copia.id = novo_id()
+                copia.versao = 1
+                salvo_id = adicionar_orcamento_importado(copia)
+                self._orcamento_customizado_id = str(salvo_id)
+                self.orcamento.id = str(salvo_id)
+                self.orcamento.versao = getattr(copia, "versao", 1)
+                mensagem = (
+                    "Cópia salva em Orçamentos Customizados."
+                    if registro is not None
+                    else "Salvo em Orçamentos Customizados."
+                )
+        except ValueError as exc:
+            messagebox.showwarning(
+                "Salvar em Orçamentos Customizados",
+                str(exc),
+                parent=self.winfo_toplevel(),
+            )
+            return
+        self._atualizar_estado_planilha()
+        self._marcar_sujo()
+        self._mostrar_feedback(mensagem, "green")
+
+    def _exportar_planilha(self):
+        if not str(self._orcamento_customizado_id or "").strip():
+            messagebox.showinfo(
+                "Gerar Planilha",
+                "Salve o orçamento em Orçamentos Customizados antes de gerar a planilha.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        if not self.orcamento.grupos:
+            messagebox.showwarning(
+                "Gerar Planilha",
+                "Não há etapas/itens para exportar.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        if hasattr(self, "grade") and self.grade.tem_itens_depreciados():
+            messagebox.showerror(
+                "Gerar Planilha",
+                "Há composições/insumos depreciados. Por favor, altere para um item atual.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        DialogoSelecionarModeloPlanilha(
+            self.winfo_toplevel(),
+            on_selecionar=self._ao_selecionar_modelo_planilha,
         )
+
+    def _ao_selecionar_modelo_planilha(self, numero):
+        referencia = getattr(self.ctx, "sinapi_referencia_rotulo", "") or "BASE AUSENTE"
+        if referencia == "BASE AUSENTE":
+            referencia = "Base não carregada"
+        parent = self.winfo_toplevel()
+        catalogo = self._listar_composicoes()
+        estado = estado_do_combo(self.var_uf.get())
+        sinapi = self.ctx.sinapi
+        if numero in (1, 2, 3):
+            exportar_orcamento_customizado_modelo_formatado(
+                parent,
+                numero,
+                self.orcamento,
+                catalogo,
+                sinapi,
+                estado,
+                referencia,
+            )
+        elif numero == 4:
+            exportar_orcamento_customizado_modelo4(
+                parent,
+                self.orcamento,
+                catalogo,
+                sinapi,
+                estado,
+                referencia,
+            )
 
     def _mostrar_feedback(self, texto, cor="gray", *, temporario=True):
         cores = self._cores

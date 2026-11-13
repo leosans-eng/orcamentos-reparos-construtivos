@@ -378,6 +378,7 @@ def novo_rascunho() -> dict:
         "considerar_limpeza_geral": True,
         "extras_orcamento": [],
         "orcamento": {"grupos": []},
+        "orcamento_customizado_id": "",
         "observacoes": "",
     }
 
@@ -575,6 +576,7 @@ def normalizar_rascunho(dados) -> dict:
         }
     else:
         base["orcamento"] = {"grupos": []}
+    base["orcamento_customizado_id"] = _texto(dados.get("orcamento_customizado_id"))
     base["observacoes"] = _texto(dados.get("observacoes"))
     return base
 

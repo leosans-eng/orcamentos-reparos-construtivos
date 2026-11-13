@@ -379,6 +379,8 @@ class AreaComumFrame(tk.Frame):
         self.var_arquivo = tk.StringVar(value="Rascunho novo")
         self.var_feedback = tk.StringVar(value="")
         self.var_total = tk.StringVar(value="Total geral: R$ 0,00")
+        self.var_variacao_total = tk.StringVar(value="")
+        self._job_variacao_total = None
         self.var_catalogo_anomalia = tk.StringVar()
         self.var_considerar_sp = tk.BooleanVar(value=True)
         self.var_considerar_pintura = tk.BooleanVar(value=True)
@@ -1731,6 +1733,22 @@ class AreaComumFrame(tk.Frame):
         vincular_tooltip(
             self.btn_gerar_planilha,
             "Gera a planilha Excel — disponível após salvar em Orçamentos Customizados",
+        )
+
+        # Variação do total após cada edição. Largura fixa para os botões ao
+        # lado não mudarem de lugar quando o texto aparece e some.
+        self.lbl_variacao_total = tk.Label(
+            container_exportar,
+            textvariable=self.var_variacao_total,
+            font=("Arial", 10, "bold"),
+            bg=barra,
+            anchor="e",
+            width=18,
+        )
+        self.lbl_variacao_total.pack(side="left", padx=(0, 6))
+        vincular_tooltip(
+            self.lbl_variacao_total,
+            "Quanto o total mudou com a última alteração",
         )
 
         tk.Label(
@@ -5001,6 +5019,31 @@ class AreaComumFrame(tk.Frame):
                         item["custo_unitario"] = salvo["custo_unitario"]
         self._preencher_grade()
 
+    def _mostrar_variacao_total(self, variacao):
+        if abs(variacao) < 0.005:
+            return
+        if variacao > 0:
+            texto = f"+ {_formatar_moeda(variacao)}"
+            cor = "#ffb74d" if self._cores.escuro else "#a67c00"
+        else:
+            texto = f"− {_formatar_moeda(-variacao)}"
+            cor = "#66bb6a" if self._cores.escuro else "#2e7d32"
+        self.var_variacao_total.set(texto)
+        try:
+            self.lbl_variacao_total.configure(fg=cor)
+        except (tk.TclError, AttributeError):
+            pass
+        if self._job_variacao_total is not None:
+            try:
+                self.after_cancel(self._job_variacao_total)
+            except (tk.TclError, ValueError):
+                pass
+        self._job_variacao_total = self.after(6000, self._limpar_variacao_total)
+
+    def _limpar_variacao_total(self):
+        self._job_variacao_total = None
+        self.var_variacao_total.set("")
+
     def _grade_visivel(self) -> bool:
         """A aba 3 está selecionada e o módulo está na tela."""
         try:
@@ -5024,7 +5067,15 @@ class AreaComumFrame(tk.Frame):
         estado_atual = estado_do_combo(self.var_uf.get())
         bdi = self.orcamento.bdi_percent
         total = self._total_geral_calculado(bdi, catalogo, estado_atual)
+        anterior = self._total_geral_ultimo
         self._total_geral_ultimo = total
+        # Abrir rascunho e Desfazer/Refazer já têm mensagem própria.
+        if (
+            anterior is not None
+            and not self._carregando
+            and not self._aplicando_historico
+        ):
+            self._mostrar_variacao_total(total - anterior)
         self.var_total.set(
             f"Total geral (c/ BDI {_formatar_bdi(bdi)}%): {_formatar_moeda(total)}"
         )

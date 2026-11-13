@@ -544,6 +544,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         catalogo_composicoes=None,
         on_confirmar_propria=None,
         texto_item_substituindo=None,
+        consulta_inicial="",
     ):
         super().__init__(parent)
         preparar_toplevel(self)
@@ -561,6 +562,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.texto_confirmar = texto_confirmar
         self.texto_confirmar_fechar = texto_confirmar_fechar
         self.fechar_unico = fechar_unico
+        self._consulta_inicial = str(consulta_inicial or "").strip()
         self._ultima_largura_wrap = 0
 
         self.title(titulo)
@@ -576,7 +578,9 @@ class DialogoBuscaSinapi(tk.Toplevel):
         self.bind("<Escape>", lambda _e: self.destroy())
         self.update_idletasks()
         centralizar_janela(self, parent)
-        focar_entrada_apos_exibir(self.entrada_busca)
+        focar_entrada_apos_exibir(
+            self.entrada_busca, selecionar=bool(self._consulta_inicial)
+        )
 
     def _montar(self, estado_inicial):
         painel = tk.Frame(self, bg=self._cores.fundo, padx=12, pady=10)
@@ -629,7 +633,7 @@ class DialogoBuscaSinapi(tk.Toplevel):
             cor=self._cores.titulo,
             refs=self._refs_icones,
         ).grid(row=1, column=0, padx=(0, 4), pady=3, sticky="w")
-        self.var_busca = tk.StringVar()
+        self.var_busca = tk.StringVar(value=self._consulta_inicial)
         self.entrada_busca = ttk.Entry(linha_filtros, textvariable=self.var_busca, width=36)
         self.entrada_busca.grid(row=1, column=1, padx=4, pady=3, sticky="ew")
 
@@ -788,6 +792,8 @@ class DialogoBuscaSinapi(tk.Toplevel):
 
         if self.ctx.sinapi.empty:
             self.label_status.config(text="Base SINAPI indisponível.", fg=self._cores.perigo)
+        elif self._consulta_inicial:
+            self._executar_busca()
 
         self.after_idle(self._ajustar_layout_detalhe)
 
@@ -932,6 +938,22 @@ class DialogoBuscaSinapi(tk.Toplevel):
             text=mensagem,
             fg=self._cor_status(mensagem, vazio=not self.tree.get_children()),
         )
+        self._selecionar_resultado_exato(consulta)
+
+    def _selecionar_resultado_exato(self, consulta: str) -> None:
+        alvo = str(consulta or "").strip()
+        if not alvo:
+            return
+        for iid in self.tree.get_children():
+            valores = self.tree.item(iid, "values")
+            if not valores:
+                continue
+            if str(valores[0]).strip() == alvo:
+                self.tree.selection_set(iid)
+                self.tree.focus(iid)
+                self.tree.see(iid)
+                self._ao_selecionar_item()
+                return
 
     def _cor_status(self, mensagem, *, vazio=False):
         cores = self._cores

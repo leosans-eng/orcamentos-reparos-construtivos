@@ -2327,6 +2327,102 @@
           "Telhas de Fibrocimento": "4a1d3223-d783-4daf-8309-01edd3443fec"
         }
       }
+    },
+    "Desplacamento de pisos cerâmicos": {
+      "reparos": [
+        {
+          "id": "0b90e6b3-5f4b-45dc-835c-8bb41d80b69f",
+          "nome": "Substituição dos pisos cerâmicos",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "95a7b460-ebbe-4b34-a22d-18e3597327be",
+          "etapa_nome": "SUBSTITUIÇÃO DOS PISOS CERÂMICOS (DESPLACAMENTO/HALL)",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [
+            "troca_pisos_hall",
+            "troca_rodape_hall"
+          ],
+          "itens": [
+            {
+              "id": "bc88ed5a-a4d4-46e0-a15f-023f026703c7",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97633",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_pisos_hall",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_pisos_hall",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "b4c50dbf-90ff-421a-b18a-e32f20977d6a",
+              "tipo": "sinapi",
+              "codigo_sinapi": "87256",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_pisos_hall",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_pisos_hall",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "39d19dd6-e86a-47dc-b2a2-d1310d54e9ad",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97632",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_rodape_hall",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_rodape_hall",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "d0608df2-9fd9-4161-b9c7-711b72409c17",
+              "tipo": "sinapi",
+              "codigo_sinapi": "88650",
+              "unidade": "M",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_rodape_hall",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_rodape_hall",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
     }
   },
   "servicos_preliminares": {

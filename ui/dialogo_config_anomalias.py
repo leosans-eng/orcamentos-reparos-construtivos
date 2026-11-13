@@ -151,6 +151,7 @@ class DialogoEtapaAnomalia(tk.Toplevel):
             mostrar_quantidade=False,
             texto_confirmar="Usar código",
             fechar_unico=True,
+            consulta_inicial=self.var_codigo.get().strip(),
         )
 
     def _confirmar(self):

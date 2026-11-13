@@ -281,7 +281,10 @@ class AreaComumFrame(tk.Frame):
         self._sincronizando_percentuais = False
         self._pct_em_edicao = {}
         self._painel_carregamento = None
+        self._lbl_etapa_carregamento = None
         self._composicoes_ciclo = None
+        self._avisos_ultima_carga = []
+        self._total_geral_ultimo = None
         self._perguntando_uf = False
         self._aplicando_historico = False
         self._caminho_arquivo = None
@@ -2017,7 +2020,7 @@ class AreaComumFrame(tk.Frame):
         if not rascunho_tem_conteudo(dados):
             return
         try:
-            salvar_autosave(dados)
+            salvar_autosave(dados, caminho_origem=self._caminho_arquivo)
         except OSError:
             pass
 
@@ -2193,6 +2196,17 @@ class AreaComumFrame(tk.Frame):
             fg=self._cores.texto,
             font=("Arial", 12, "bold"),
         ).pack(anchor="w")
+        # Etapa atual; largura fixa para a janela não mudar de tamanho a cada etapa.
+        self._lbl_etapa_carregamento = tk.Label(
+            corpo,
+            text="",
+            width=36,
+            anchor="w",
+            bg=self._cores.fundo,
+            fg=self._cores.texto,
+            font=("Arial", 10),
+        )
+        self._lbl_etapa_carregamento.pack(anchor="w", pady=(8, 0))
         tk.Label(
             corpo,
             text="Aguarde. A janela principal pode parar de responder.",
@@ -2233,6 +2247,7 @@ class AreaComumFrame(tk.Frame):
         def fechar():
             painel = self._painel_carregamento
             self._painel_carregamento = None
+            self._lbl_etapa_carregamento = None
             self._carregando = False
             if painel is not None:
                 try:
@@ -2251,6 +2266,21 @@ class AreaComumFrame(tk.Frame):
         except tk.TclError:
             fechar()
 
+    def _etapa_carregamento(self, texto):
+        """Mostra a etapa atual na janela "Carregando", se ela estiver aberta.
+
+        Só update_idletasks (redesenho), sem processar eventos: a carga
+        continua atômica e o usuário não consegue interagir no meio dela.
+        """
+        rotulo = self._lbl_etapa_carregamento
+        if rotulo is None or self._painel_carregamento is None:
+            return
+        try:
+            rotulo.configure(text=texto)
+            self._painel_carregamento.update_idletasks()
+        except tk.TclError:
+            pass
+
     def _executar_com_carregamento(self, texto, acao, ao_terminar=None):
         self._mostrar_painel_carregamento(texto)
         try:
@@ -2258,10 +2288,17 @@ class AreaComumFrame(tk.Frame):
         finally:
             self._ocultar_painel_carregamento(ao_terminar)
 
-    def _aplicar_rascunho(self, dados: dict, *, caminho=None, normalizar=True):
+    def _aplicar_rascunho(
+        self, dados: dict, *, caminho=None, normalizar=True, verificar_mudancas=False
+    ):
         """normalizar=False quando os dados já vêm de carregar_rascunho /
-        carregar_autosave, que normalizam na leitura."""
+        carregar_autosave, que normalizam na leitura.
+
+        verificar_mudancas=True (abrir arquivo / restaurar autosave) preenche
+        self._avisos_ultima_carga com o que mudou em relação ao que foi salvo.
+        """
         self._carregando = True
+        self._avisos_ultima_carga = []
         if normalizar:
             dados = normalizar_rascunho(dados)
         # Recálculo agendado por edições anteriores ficaria redundante:
@@ -2273,6 +2310,7 @@ class AreaComumFrame(tk.Frame):
                 pass
             self._job_calculo = None
         try:
+            self._etapa_carregamento("Aplicando dados iniciais…")
             self.var_nome.set(dados["condominio"].get("nome", ""))
             self.var_municipio.set(dados["condominio"].get("municipio", ""))
             uf = dados["condominio"].get("uf", "")
@@ -2323,6 +2361,7 @@ class AreaComumFrame(tk.Frame):
             self.var_duas_demaos_selador.set(bool(dados["duas_demaos_fundo_selador"]))
             self.var_considerar_entulho.set(bool(dados["considerar_destinacao_entulho"]))
             self.var_considerar_limpeza.set(bool(dados["considerar_limpeza_geral"]))
+            self._etapa_carregamento("Montando orçamento…")
             self._carregar_orcamento_rascunho(dados)
             self._redesenhar_anomalias_orcamento(com_valores=False)
             self.texto_obs.delete("1.0", "end")
@@ -2332,7 +2371,20 @@ class AreaComumFrame(tk.Frame):
             self._caminho_arquivo = str(caminho) if caminho else None
             self._sujo = False
             self._atualizar_rotulo_arquivo()
+            total_salvo = None
+            if verificar_mudancas and self.orcamento.grupos:
+                # Total com os preços gravados no arquivo, antes de o
+                # recálculo aplicar a SINAPI vigente. Rascunhos antigos sem
+                # orçamento salvo ficam de fora (não há com o que comparar).
+                total_salvo = self._total_geral_calculado(
+                    self.orcamento.bdi_percent,
+                    self._composicoes_para_calculo(),
+                    estado_do_combo(self.var_uf.get()),
+                )
+            self._etapa_carregamento("Calculando quantitativos e preços…")
             self._recalcular()
+            if verificar_mudancas:
+                self._avisos_ultima_carga = self._verificar_mudancas_carga(total_salvo)
         finally:
             if self._job_municipio is not None:
                 try:
@@ -2343,8 +2395,82 @@ class AreaComumFrame(tk.Frame):
             if self._painel_carregamento is None:
                 self._carregando = False
 
+    def _verificar_mudancas_carga(self, total_salvo) -> list[dict]:
+        """Compara o rascunho carregado com o que estava gravado.
+
+        Cada aviso: {"texto": str, "altera": bool}. "altera" indica que salvar
+        de novo vai gravar dados diferentes dos que estavam no arquivo.
+        """
+        avisos = []
+        total_novo = getattr(self, "_total_geral_ultimo", None)
+        if total_salvo is not None and total_novo is not None:
+            if abs(total_novo - total_salvo) >= 0.01:
+                avisos.append(
+                    {
+                        "texto": (
+                            "O total do orçamento mudou ao recalcular com a SINAPI e o "
+                            "catálogo atuais:\n"
+                            f"    salvo: {_formatar_moeda(total_salvo)}\n"
+                            f"    agora: {_formatar_moeda(total_novo)}"
+                        ),
+                        "altera": True,
+                    }
+                )
+        ausentes = []
+        # Consulta direta ao catálogo: obter_reparo() faz deepcopy do cadastro
+        # inteiro a cada chamada, caro demais só para checar se existe.
+        cadastros = (self._catalogo or {}).get("anomalias") or {}
+        for linha in self._anomalias_orcamento:
+            cadastro = cadastros.get(linha.get("nome") or "")
+            tem_reparo = isinstance(cadastro, dict) and any(
+                isinstance(r, dict) for r in (cadastro.get("reparos") or [])
+            )
+            if not tem_reparo:
+                nome = linha.get("nome") or "(sem nome)"
+                reparo = linha.get("reparo_nome")
+                ausentes.append(f"{nome} — {reparo}" if reparo else nome)
+        if ausentes:
+            lista = "\n".join(f"    • {item}" for item in ausentes[:10])
+            if len(ausentes) > 10:
+                lista += f"\n    … e mais {len(ausentes) - 10}"
+            avisos.append(
+                {
+                    "texto": (
+                        "Anomalias/reparos do rascunho que não existem mais no "
+                        f"catálogo (ficam sem valor):\n{lista}"
+                    ),
+                    "altera": False,
+                }
+            )
+        uf = estado_do_combo(self.var_uf.get())
+        # UFs já listadas no combo: ctx.obter_estados() recalcula a lista a
+        # partir da SINAPI inteira (~70 ms por chamada).
+        try:
+            valores_combo = self.combo_uf.cget("values") if self.combo_uf else ()
+        except tk.TclError:
+            valores_combo = ()
+        ufs_sinapi = {estado_do_combo(v) for v in valores_combo}
+        if uf and ufs_sinapi and uf not in ufs_sinapi:
+            avisos.append(
+                {
+                    "texto": f"A UF {uf} não está na base SINAPI carregada; "
+                    "os preços podem ficar zerados.",
+                    "altera": False,
+                }
+            )
+        return avisos
+
+    def _mostrar_avisos_carga(self, titulo):
+        avisos = getattr(self, "_avisos_ultima_carga", None) or []
+        if not avisos:
+            return
+        texto = "\n\n".join(item["texto"] for item in avisos)
+        if any(item["altera"] for item in avisos):
+            texto += "\n\nO rascunho foi marcado como não salvo para você revisar."
+        messagebox.showwarning(titulo, texto, parent=self.winfo_toplevel())
+
     def _aplicar_rascunho_seguro(
-        self, dados: dict, *, caminho=None, normalizar=True
+        self, dados: dict, *, caminho=None, normalizar=True, verificar_mudancas=False
     ) -> str | None:
         """Aplica o rascunho; se falhar no meio, volta ao estado anterior.
 
@@ -2356,7 +2482,12 @@ class AreaComumFrame(tk.Frame):
         caminho_anterior = self._caminho_arquivo
         sujo_anterior = self._sujo
         try:
-            self._aplicar_rascunho(dados, caminho=caminho, normalizar=normalizar)
+            self._aplicar_rascunho(
+                dados,
+                caminho=caminho,
+                normalizar=normalizar,
+                verificar_mudancas=verificar_mudancas,
+            )
             return None
         except Exception as exc:  # noqa: BLE001 — qualquer falha precisa reverter a tela
             traceback.print_exc()
@@ -2421,6 +2552,7 @@ class AreaComumFrame(tk.Frame):
             if erro is None:
                 self._sujo = True
                 self._atualizar_rotulo_arquivo()
+                self._agendar_autosave()
         finally:
             self._aplicando_historico = False
         if erro is not None:
@@ -2445,6 +2577,7 @@ class AreaComumFrame(tk.Frame):
             if erro is None:
                 self._sujo = True
                 self._atualizar_rotulo_arquivo()
+                self._agendar_autosave()
         finally:
             self._aplicando_historico = False
         if erro is not None:
@@ -2509,15 +2642,32 @@ class AreaComumFrame(tk.Frame):
             "Deseja salvar o rascunho JSON antes de começar outro?"
         ):
             return
-        erro = self._aplicar_rascunho_seguro(novo_rascunho())
-        if erro is not None:
-            self._mostrar_erro_carregamento("Novo rascunho", erro)
+        if self._carregando:
             return
-        limpar_autosave()
-        self._historico_undo.clear()
-        self._historico_redo.clear()
-        self._iniciar_historico()
-        self._mostrar_feedback("Novo rascunho iniciado.", "green")
+        if self._sujo and not self._confirmar_saida(
+            "Há alterações não salvas.\n"
+            "Deseja salvar o rascunho JSON antes de começar outro?"
+        ):
+            return
+        erros = []
+
+        def limpar():
+            erro = self._aplicar_rascunho_seguro(novo_rascunho())
+            if erro is not None:
+                erros.append(erro)
+                return
+            limpar_autosave()
+            self._historico_undo.clear()
+            self._historico_redo.clear()
+            self._iniciar_historico()
+
+        def ao_terminar():
+            if erros:
+                self._mostrar_erro_carregamento("Novo rascunho", erros[0])
+            else:
+                self._mostrar_feedback("Novo rascunho iniciado.", "green")
+
+        self._executar_com_carregamento("Iniciando novo rascunho…", limpar, ao_terminar)
 
     def _abrir(self):
         if self._carregando:
@@ -2535,31 +2685,45 @@ class AreaComumFrame(tk.Frame):
         )
         if not caminho:
             return
-        try:
-            dados = carregar_rascunho(caminho)
-        except RascunhoAreaComumError as exc:
-            messagebox.showerror("Abrir rascunho", str(exc), parent=self.winfo_toplevel())
-            return
 
+        nome_arquivo = Path(caminho).name
+        erro_leitura = []
         erros = []
 
         def carregar():
-            erro = self._aplicar_rascunho_seguro(dados, caminho=caminho, normalizar=False)
+            # A leitura acontece com o painel já visível (arquivo grande ou em rede).
+            self._etapa_carregamento(f"Lendo {nome_arquivo}…")
+            try:
+                dados = carregar_rascunho(caminho)
+            except RascunhoAreaComumError as exc:
+                erro_leitura.append(str(exc))
+                return
+            erro = self._aplicar_rascunho_seguro(
+                dados, caminho=caminho, normalizar=False, verificar_mudancas=True
+            )
             if erro is not None:
                 erros.append(erro)
                 return
+            # O usuário já decidiu (salvar ou descartar) o trabalho anterior.
+            limpar_autosave()
             self._historico_undo.clear()
             self._historico_redo.clear()
             self._iniciar_historico()
+            self._marcar_sujo_se_carga_alterou()
 
         def ao_terminar():
             # Só depois de fechar o painel: ele é topmost e esconderia a mensagem.
-            if erros:
+            if erro_leitura:
+                messagebox.showerror(
+                    "Abrir rascunho", erro_leitura[0], parent=self.winfo_toplevel()
+                )
+            elif erros:
                 self._mostrar_erro_carregamento(
-                    "Abrir rascunho", erros[0], arquivo=Path(caminho).name
+                    "Abrir rascunho", erros[0], arquivo=nome_arquivo
                 )
             else:
-                self._mostrar_feedback(f"Rascunho aberto: {Path(caminho).name}", "green")
+                self._mostrar_feedback(f"Rascunho aberto: {nome_arquivo}", "green")
+                self._mostrar_avisos_carga("Abrir rascunho")
 
         self._executar_com_carregamento("Carregando rascunho…", carregar, ao_terminar)
 
@@ -2588,25 +2752,37 @@ class AreaComumFrame(tk.Frame):
         self._caminho_arquivo = str(caminho)
         self._sujo = False
         self._atualizar_rotulo_arquivo()
+        # O arquivo agora contém tudo; o autosave antigo só causaria uma oferta
+        # de restauração desnecessária na próxima abertura.
+        limpar_autosave()
         self._mostrar_feedback(f"Rascunho salvo: {Path(caminho).name}", "green")
         return True
 
     def _oferecer_autosave(self):
-        dados = carregar_autosave()
-        if not dados or not rascunho_tem_conteudo(dados):
+        resultado = carregar_autosave()
+        if not resultado:
             return
+        dados, origem = resultado
+        if not rascunho_tem_conteudo(dados):
+            return
+        # Só reconecta ao arquivo de origem se ele ainda existir.
+        if origem and not Path(origem).is_file():
+            origem = None
         nome = dados.get("condominio", {}).get("nome") or "sem nome"
+        detalhe_origem = f"\nArquivo: {Path(origem).name}" if origem else ""
         if not messagebox.askyesno(
             "Rascunho automático",
             "Há um rascunho automático da Área Comum "
-            f"({nome}).\nDeseja continuar de onde parou?",
+            f"({nome}).{detalhe_origem}\nDeseja continuar de onde parou?",
             parent=self.winfo_toplevel(),
         ):
             return
         erros = []
 
         def restaurar():
-            erro = self._aplicar_rascunho_seguro(dados, normalizar=False)
+            erro = self._aplicar_rascunho_seguro(
+                dados, caminho=origem, normalizar=False, verificar_mudancas=True
+            )
             if erro is not None:
                 erros.append(erro)
                 return
@@ -2619,8 +2795,16 @@ class AreaComumFrame(tk.Frame):
                 self._mostrar_erro_carregamento("Rascunho automático", erros[0])
             else:
                 self._mostrar_feedback("Rascunho automático restaurado.", "green")
+                self._mostrar_avisos_carga("Rascunho automático")
 
         self._executar_com_carregamento("Carregando rascunho…", restaurar, ao_terminar)
+
+    def _marcar_sujo_se_carga_alterou(self):
+        """Se a carga mudou valores (ex.: SINAPI nova), salvar grava algo
+        diferente do arquivo; por isso o rascunho fica como "não salvo"."""
+        if any(item["altera"] for item in self._avisos_ultima_carga):
+            self._sujo = True
+            self._atualizar_rotulo_arquivo()
 
     def _mostrar_erro_carregamento(self, titulo, erro, *, arquivo=None):
         alvo = f"o rascunho «{arquivo}»" if arquivo else "o rascunho"
@@ -4750,6 +4934,7 @@ class AreaComumFrame(tk.Frame):
         estado_atual = estado_do_combo(self.var_uf.get())
         bdi = self.orcamento.bdi_percent
         total = self._total_geral_calculado(bdi, catalogo, estado_atual)
+        self._total_geral_ultimo = total
         self.var_total.set(
             f"Total geral (c/ BDI {_formatar_bdi(bdi)}%): {_formatar_moeda(total)}"
         )

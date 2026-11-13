@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from app_paths import area_comum_autosave_path, area_comum_rascunhos_dir
@@ -21,7 +22,16 @@ def caminho_autosave() -> Path:
     return area_comum_autosave_path()
 
 
+# Campo extra só do autosave: de qual arquivo .json o trabalho veio.
+CHAVE_ORIGEM_AUTOSAVE = "arquivo_origem"
+
+
 def _ler_json(caminho: Path) -> dict:
+    return normalizar_rascunho(_ler_json_bruto(caminho))
+
+
+def _ler_json_bruto(caminho: Path) -> dict:
+    """Lê e valida o arquivo, sem normalizar (preserva campos extras)."""
     try:
         bruto = json.loads(caminho.read_text(encoding="utf-8"))
     except OSError as exc:
@@ -39,36 +49,53 @@ def _ler_json(caminho: Path) -> dict:
         raise RascunhoAreaComumError(
             "Este rascunho foi salvo em uma versão mais nova do ORC."
         )
-    return normalizar_rascunho(bruto)
+    return bruto
 
 
 def carregar_rascunho(caminho) -> dict:
     return _ler_json(Path(caminho))
 
 
-def salvar_rascunho(dados: dict, caminho) -> Path:
-    destino = Path(caminho)
+def _gravar_json(destino: Path, payload: dict) -> None:
+    """Grava num arquivo temporário e só depois substitui o destino.
+
+    Se o programa fechar no meio da gravação, o arquivo anterior continua
+    inteiro (em vez de ficar um JSON pela metade).
+    """
     destino.parent.mkdir(parents=True, exist_ok=True)
-    payload = rascunho_para_salvar(dados)
-    destino.write_text(
+    temporario = destino.with_name(destino.name + ".tmp")
+    temporario.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    os.replace(temporario, destino)
+
+
+def salvar_rascunho(dados: dict, caminho) -> Path:
+    destino = Path(caminho)
+    _gravar_json(destino, rascunho_para_salvar(dados))
     return destino
 
 
-def carregar_autosave() -> dict | None:
+def carregar_autosave() -> tuple[dict, str | None] | None:
+    """Devolve (rascunho normalizado, caminho do arquivo de origem ou None)."""
     caminho = caminho_autosave()
     if not caminho.is_file():
         return None
     try:
-        return _ler_json(caminho)
+        bruto = _ler_json_bruto(caminho)
     except RascunhoAreaComumError:
         return None
+    origem = str(bruto.get(CHAVE_ORIGEM_AUTOSAVE) or "").strip() or None
+    return normalizar_rascunho(bruto), origem
 
 
-def salvar_autosave(dados: dict) -> Path:
-    return salvar_rascunho(dados, caminho_autosave())
+def salvar_autosave(dados: dict, caminho_origem=None) -> Path:
+    destino = caminho_autosave()
+    payload = rascunho_para_salvar(dados)
+    payload[CHAVE_ORIGEM_AUTOSAVE] = str(caminho_origem) if caminho_origem else ""
+    _gravar_json(destino, payload)
+    return destino
 
 
 def limpar_autosave() -> None:

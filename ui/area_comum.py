@@ -27,6 +27,8 @@ from core.area_comum_anomalias import (
     carregar_catalogo,
     nomes_anomalias,
     obter_reparo,
+    percentuais_aba1_validos,
+    percentuais_dos_fatores,
     perguntas_variaveis_reparo,
     limitar_revestimento_fachada,
     reparo_recomendado,
@@ -2701,10 +2703,14 @@ class AreaComumFrame(tk.Frame):
             if not escolhido:
                 return
             reparo = reparos[nomes.index(escolhido)]
+        percentuais_novos = self._coletar_percentuais_faltantes(reparo)
+        if percentuais_novos is None:
+            return
         percentual = "100"
         variaveis = self._coletar_variaveis_reparo(reparo)
         if variaveis is None:
             return
+        self._gravar_percentuais_aba1(percentuais_novos)
         nova = nova_anomalia_orcamento(
             nome=nome,
             reparo_id=reparo.get("id"),
@@ -2943,14 +2949,10 @@ class AreaComumFrame(tk.Frame):
         saida = []
         for pedido in pedidos:
             pergunta = pedido["pergunta"]
-            unidade = pedido.get("unidade") or ""
-            mensagem = pergunta
-            if unidade:
-                mensagem = f"{pergunta}\nUnidade: {unidade}"
             valor = perguntar_texto(
                 self.winfo_toplevel(),
                 "Quantitativo",
-                mensagem,
+                pergunta,
                 valor_inicial=conhecidas.get(pergunta.casefold(), ""),
                 texto_ok="Continuar",
             )
@@ -3454,11 +3456,15 @@ class AreaComumFrame(tk.Frame):
         if not escolhido or escolhido == atual:
             return
         reparo = reparos[nomes.index(escolhido)]
+        percentuais_novos = self._coletar_percentuais_faltantes(reparo)
+        if percentuais_novos is None:
+            return
         variaveis = self._coletar_variaveis_reparo(
             reparo, atuais=linha.get("variaveis")
         )
         if variaveis is None:
             return
+        self._gravar_percentuais_aba1(percentuais_novos)
         linha["reparo_id"] = reparo.get("id") or ""
         linha["reparo_nome"] = reparo.get("nome") or escolhido
         if variaveis:
@@ -3585,6 +3591,68 @@ class AreaComumFrame(tk.Frame):
             self.var_percentual_pintura.set("—")
             return
         self.var_percentual_pintura.set(f"{texto}%")
+
+    def _coletar_percentuais_faltantes(self, reparo) -> dict[str, str] | None:
+        """Pergunta os percentuais da aba 1 que a fórmula usa e ainda estão vazios.
+
+        None se o usuário cancelar. Os que a anomalia já declara são preenchidos
+        depois com o percentual dela, então não entram nesta pergunta.
+        """
+        declarados = set(percentuais_aba1_validos((reparo or {}).get("percentuais_aba1")))
+        declarados.discard("pintura_fachada")
+        respostas: dict[str, str] = {}
+        for chave in percentuais_dos_fatores(
+            reparo, getattr(self, "_etapa_por_id", None)
+        ):
+            if chave in declarados or chave not in self.var_percentuais:
+                continue
+            if (self.var_percentuais[chave].get() or "").strip():
+                continue
+            rotulo = ROTULOS_PERCENTUAIS_ABA1.get(chave, chave)
+            valor = self._perguntar_percentual_aba1(rotulo)
+            if valor is None:
+                return None
+            respostas[chave] = valor
+        return respostas
+
+    def _perguntar_percentual_aba1(self, rotulo: str):
+        while True:
+            texto = perguntar_texto(
+                self.winfo_toplevel(),
+                "Percentual da aba 1",
+                f"«{rotulo}» está vazio na aba 1.\nQual percentual deve ser adotado?",
+                valor_inicial="",
+                texto_ok="Usar",
+                largura_entrada=12,
+            )
+            if texto is None:
+                return None
+            bruto = str(texto).strip()
+            if not bruto:
+                self._mostrar_feedback("Informe o percentual.", "red")
+                continue
+            try:
+                parse_expressao(bruto)
+                valor = numero(bruto, percentual=True)
+            except (TypeError, ValueError):
+                self._mostrar_feedback("Percentual inválido.", "red")
+                continue
+            if valor < 0:
+                self._mostrar_feedback("Percentual inválido.", "red")
+                continue
+            return formatar_decimal_br(valor)
+
+    def _gravar_percentuais_aba1(self, valores: dict[str, str]) -> None:
+        if not valores:
+            return
+        self._sincronizando_percentuais = True
+        try:
+            for chave, valor in valores.items():
+                var = self.var_percentuais.get(chave)
+                if var is not None:
+                    var.set(valor)
+        finally:
+            self._sincronizando_percentuais = False
 
     def _perguntar_percentual_anomalia(self, nome: str, valor_inicial: str = "100"):
         texto = perguntar_texto(

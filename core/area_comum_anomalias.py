@@ -934,6 +934,23 @@ def chave_titulo_orcamento(rotulo: str) -> str:
     return TITULO_ANOMALIA_REPARO
 
 
+_QTD_PARA_PERCENTUAL_ABA1 = {
+    qtd: chave for chave, (qtd, _unidade) in QTD_PERCENTUAIS_ABA1.items()
+}
+
+
+def percentuais_dos_fatores(reparo, etapas_por_id=None) -> list[str]:
+    """Percentuais da aba 1 usados na fórmula do reparo, na ordem da aba."""
+    usadas: set[str] = set()
+    for item in itens_efetivos_reparo(reparo, etapas_por_id):
+        for fator in normalizar_fatores(item):
+            qtd = MAPA_TIPO_QUANTITATIVO.get(str(fator.get("tipo_calculo") or ""))
+            chave = _QTD_PARA_PERCENTUAL_ABA1.get(qtd or "")
+            if chave:
+                usadas.add(chave)
+    return [chave for chave in CHAVES_PERCENTUAIS_ABA1 if chave in usadas]
+
+
 def percentuais_aba1_validos(valores) -> list[str]:
     if not isinstance(valores, (list, tuple)):
         return []
@@ -1265,7 +1282,6 @@ def perguntas_variaveis_itens(itens) -> list[dict[str, str]]:
     saida: list[dict[str, str]] = []
     vistas: set[str] = set()
     for item in itens or []:
-        unidade = str((item or {}).get("unidade") or "").strip()
         for fator in normalizar_fatores(item):
             if fator.get("tipo_calculo") != "variavel":
                 continue
@@ -1274,7 +1290,7 @@ def perguntas_variaveis_itens(itens) -> list[dict[str, str]]:
             if chave in vistas:
                 continue
             vistas.add(chave)
-            saida.append({"pergunta": pergunta, "unidade": unidade})
+            saida.append({"pergunta": pergunta})
     return saida
 
 

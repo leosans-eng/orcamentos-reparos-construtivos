@@ -1835,6 +1835,498 @@
         "criterio": "",
         "por_opcao": {}
       }
+    },
+    "Armaduras expostas": {
+      "reparos": [
+        {
+          "id": "d1bd2409-5795-48e5-8f6f-1089bc8e3621",
+          "nome": "Tratamento por ponto",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "71ecef7a-8701-49f9-9b2b-4a7f8f8962f4",
+          "etapa_nome": "TRATAMENTO DE ARMADURAS EXPOSTAS",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "f938e65a-6ee2-425c-9321-cb3b1322438f",
+              "tipo": "sinapi",
+              "codigo_sinapi": "88309",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 4.0,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos pontos a serem tratados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 4.0
+            },
+            {
+              "id": "7a73842b-ae21-4a4c-a575-aa87c9a23813",
+              "tipo": "sinapi",
+              "codigo_sinapi": "105916",
+              "unidade": "CHP",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 4.0,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos pontos a serem tratados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 4.0
+            },
+            {
+              "id": "49e114e2-dc8f-4e9b-83e5-fd8c49ef29fa",
+              "tipo": "sinapi",
+              "codigo_sinapi": "99814",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos pontos a serem tratados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "e870bcb0-c80a-4c64-82b0-d5e8cbeab25e",
+              "tipo": "sinapi",
+              "codigo_sinapi": "100722",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos pontos a serem tratados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "7b628fdf-86e2-48d0-acb9-555bca1efc8e",
+              "tipo": "sinapi",
+              "codigo_sinapi": "90284",
+              "unidade": "M3",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 0.6,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos pontos a serem tratados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 0.6
+            },
+            {
+              "id": "9db88c14-13a7-4fad-801e-ba87549fbf78",
+              "tipo": "sinapi",
+              "codigo_sinapi": "43681",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "I",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 0.5,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos pontos a serem tratados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 0.5
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Infiltração pela laje exposta": {
+      "reparos": [
+        {
+          "id": "478708e7-249f-4ea7-988c-58f1b84283b7",
+          "nome": "Impermeabilização na área dos halls",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "ced29b0d-1e18-436e-a3d4-e135c1e2bf90",
+          "etapa_nome": "IMPERMEABILIZAÇÃO DE LAJE EXPOSTA",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "be85d91b-25b1-408c-9268-b02082a84114",
+              "tipo": "sinapi",
+              "codigo_sinapi": "88316",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 16.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "por_bloco",
+              "coeficiente": 16.0
+            },
+            {
+              "id": "4ecaf074-8a5e-4d23-a056-6b7f43a5c3cf",
+              "tipo": "sinapi",
+              "codigo_sinapi": "98547",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "area_laje_hall_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "area_laje_hall_total",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "79e2487b-a54c-4080-a6c4-a9b8f97dde7f",
+              "tipo": "sinapi",
+              "codigo_sinapi": "87769",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "area_laje_hall_total",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "area_laje_hall_total",
+              "coeficiente": 1.0
+            }
+          ]
+        },
+        {
+          "id": "aa8266fc-4a46-48c3-953b-9adfd8f485d2",
+          "nome": "Impermeabilização em área específica",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "ced29b0d-1e18-436e-a3d4-e135c1e2bf90",
+          "etapa_nome": "IMPERMEABILIZAÇÃO DE LAJE EXPOSTA",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "62ff0816-923e-40a7-b30c-31d647dccc3e",
+              "tipo": "sinapi",
+              "codigo_sinapi": "88316",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 16.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "por_bloco",
+              "coeficiente": 16.0
+            },
+            {
+              "id": "3cbd2067-7267-4ca4-a9fb-1ca986414caa",
+              "tipo": "sinapi",
+              "codigo_sinapi": "98547",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos M² de laje a serem impermeabilizados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "4b581e87-5de3-4af0-a164-ab3847dc3e65",
+              "tipo": "sinapi",
+              "codigo_sinapi": "87769",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "variavel",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar",
+                  "pergunta": "Quantos M² de laje a serem impermeabilizados?"
+                }
+              ],
+              "tipo_calculo": "variavel",
+              "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Destelhamento": {
+      "reparos": [
+        {
+          "id": "78210e53-e334-4a73-9b38-bfddd9783e6a",
+          "nome": "Revisão e amarração (telha cerâmica)",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "b5fe421d-d42d-49bb-8ffb-d0ec303012ed",
+          "etapa_nome": "REVISÃO DA COBERTURA/TELHAMENTO E AMARRAÇÃO (BEIRAIS)",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "9714223c-5475-41bc-9387-29142c761beb",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97647",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "b32ed7e2-1dd8-4fb7-8eb1-c30ddc22718a",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94198",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "694db472-a3d0-4e33-9f40-f10b751aa708",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94232",
+              "unidade": "UN",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 15.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 15.0
+            }
+          ]
+        },
+        {
+          "id": "76acd874-3af1-4538-b5df-53b3fa896788",
+          "nome": "Revisão e amarração (telha de concreto)",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "b5fe421d-d42d-49bb-8ffb-d0ec303012ed",
+          "etapa_nome": "REVISÃO DA COBERTURA/TELHAMENTO E AMARRAÇÃO (BEIRAIS)",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "anomalia_reparo",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "fbb72442-74ab-4458-8ff5-fa88b577b98c",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97647",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "a3cd338c-4f70-4a60-82f3-8c051f39d7a0",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94192",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "b2b97b53-6648-4515-9740-82ffeccf5cf1",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94232",
+              "unidade": "UN",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 15.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 15.0
+            }
+          ]
+        },
+        {
+          "id": "4a1d3223-d783-4daf-8309-01edd3443fec",
+          "nome": "Revisão e amarração (telha de fibrocimento)",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "b5fe421d-d42d-49bb-8ffb-d0ec303012ed",
+          "etapa_nome": "REVISÃO DA COBERTURA/TELHAMENTO E AMARRAÇÃO (BEIRAIS)",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "anomalia_reparo",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "74d3040d-d3c8-4dfa-a6da-5a947b163ef6",
+              "tipo": "sinapi",
+              "codigo_sinapi": "97647",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "1e86ea9e-239d-41b6-be1b-a61368d84f96",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94210",
+              "unidade": "M2",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 1.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 1.0
+            },
+            {
+              "id": "42b440e5-9f7f-4382-af3d-b88be79b9a50",
+              "tipo": "sinapi",
+              "codigo_sinapi": "94232",
+              "unidade": "UN",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "pct_troca_telhas_cobertura",
+                  "coeficiente": 15.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "pct_troca_telhas_cobertura",
+              "coeficiente": 15.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "tipo_cobertura",
+        "por_opcao": {
+          "Telhas Cerâmicas": "78210e53-e334-4a73-9b38-bfddd9783e6a",
+          "Telhas de Concreto": "76acd874-3af1-4538-b5df-53b3fa896788",
+          "Telhas de Fibrocimento": "4a1d3223-d783-4daf-8309-01edd3443fec"
+        }
+      }
     }
   },
   "servicos_preliminares": {

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import tkinter as tk
+from dataclasses import replace
 from tkinter import ttk
 
 from core.desenho_geometria import (
@@ -21,6 +22,7 @@ from core.desenho_geometria import (
     dict_para_camadas,
     desenho_camadas_para_dict,
     distancia,
+    estender_ate_linhas,
     lado_do_ponto,
     offset_retangulo,
     offset_retangulo_comprimento,
@@ -36,6 +38,7 @@ from core.desenho_geometria import (
     retangulo_eixos,
     segmento_mais_proximo,
 )
+from core.desenho_comodos import Comodo, detectar_comodos, medidas_uteis, ponto_dentro
 from core.desenho_edicao import (
     HistoricoDesenho,
     ajustar_comprimento,
@@ -45,6 +48,7 @@ from core.desenho_edicao import (
     indices_segmentos,
     mover_vertices,
     selecionar_por_retangulo,
+    trechos_restantes,
     vertices_da_selecao,
 )
 from ui.icones import criar_botao_ttk_so_icone
@@ -75,6 +79,8 @@ CHAVES_MEDIDA_ORCCAD = frozenset(
 
 COR_EXTERNA = "#006699"
 COR_HALL = "#2e7d32"
+COR_PAREDE = "#795548"
+COR_ROTULO_COMODO = "#455a64"
 COR_SELECAO = "#1e88e5"
 COR_GRIP = "#1565c0"
 COR_GRIP_QUENTE = "#e53935"
@@ -95,7 +101,7 @@ _PASSO_GRADE_SNAP = 0.1
 class PainelDesenho2D(tk.Frame):
     """Widget reutilizável: desenho em metros com Orto, Polar e snap."""
 
-    def __init__(self, parent, *, on_resultado=None):
+    def __init__(self, parent, *, on_resultado=None, paredes=False):
         cores = cores_tema(parent)
         super().__init__(parent, bg=cores.fundo)
         self._cores = cores
@@ -105,6 +111,18 @@ class PainelDesenho2D(tk.Frame):
             "hall": {"pontos": [], "fechado": False},
         }
         self.camada_ativa = "externa"
+        # Paredes internas (ORCCAD avulso): cada parede é uma camada própria,
+        # "parede_1", "parede_2"…, uma linha aberta (ou fechada, se o usuário
+        # clicar no primeiro ponto). Assim selecionar, mover, apagar e editar
+        # cota funcionam nelas sem código à parte.
+        self._com_paredes = bool(paredes)
+        self._prox_parede = 1
+        self._cache_comodos: tuple = (None, [])
+        self._comodo_destacado: int | None = None
+        # Nomes dados pelo usuário: (ponto, nome). O nome vale para o cômodo
+        # que contém o ponto, então continua certo quando surgem paredes novas.
+        self._nomes_comodos: list[tuple[Ponto, str]] = []
+        self.espessura_paredes = 0.0  # metros; 0 = medidas pelo eixo
         # "selecao" é o estado sem comando: clique seleciona, como no AutoCAD.
         self._ferramenta = "selecao"
         self._canto_ret = None
@@ -185,9 +203,156 @@ class PainelDesenho2D(tk.Frame):
             "hall": self.resultado_camada("hall"),
         }
 
+    def tem_desenho(self) -> bool:
+        return any(len(d["pontos"]) >= 2 for d in self._camadas.values())
+
+    def tem_paredes(self) -> bool:
+        return any(len(self._camadas[k]["pontos"]) >= 2 for k in self._chaves_paredes())
+
+    # ------------------------------------------------------------------
+    # Paredes internas e cômodos
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _eh_parede(nome) -> bool:
+        return isinstance(nome, str) and nome.startswith("parede_")
+
+    def _nome_camada(self, nome: str | None = None) -> str:
+        nome = nome or self.camada_ativa
+        if self._eh_parede(nome):
+            return "Paredes"
+        return "Externa" if nome == "externa" else "Hall"
+
+    def _cor_camada(self, nome: str | None = None) -> str:
+        nome = nome or self.camada_ativa
+        if self._eh_parede(nome):
+            return COR_PAREDE
+        return COR_EXTERNA if nome == "externa" else COR_HALL
+
+    def _chaves_paredes(self) -> list[str]:
+        return [k for k in self._camadas if self._eh_parede(k)]
+
+    def _remover_paredes_vazias(self):
+        for chave in self._chaves_paredes():
+            if len(self._camadas[chave]["pontos"]) < 2:
+                del self._camadas[chave]
+        self._selecao = {s for s in self._selecao if s[0] in self._camadas}
+
+    def _nova_parede(self):
+        """Ativa uma parede nova e vazia; as anteriores ficam como estão."""
+        self._remover_paredes_vazias()
+        numeros = [
+            int(k.split("_", 1)[1])
+            for k in self._chaves_paredes()
+            if k.split("_", 1)[1].isdigit()
+        ]
+        self._prox_parede = max([self._prox_parede - 1, *numeros]) + 1
+        chave = f"parede_{self._prox_parede}"
+        self._prox_parede += 1
+        self._camadas[chave] = {"pontos": [], "fechado": False}
+        self.camada_ativa = chave
+        self._atualizar_chips_camada()
+
+    def _terminar_parede(self, *, continuar: bool):
+        """Enter/botão direito: encerra a parede atual (e já prepara a próxima)."""
+        self._buffer = ""
+        self._canto_ret = None
+        self._nova_parede()
+        self._ferramenta = "polilinha" if continuar else "selecao"
+        self._ultimo_snap = None
+        self._redesenhar_estatico()
+        self._atualizar_volante()
+        self._avisar_resultado()
+        self._set_status(
+            "Parede pronta. Clique para começar outra ou Esc para sair."
+            if continuar
+            else ""
+        )
+
+    def comodos(self) -> list[Comodo]:
+        """Cômodos formados pela Externa + paredes (vazio se não há paredes)."""
+        if not self._com_paredes:
+            return []
+        paredes = [
+            (d["pontos"], bool(d["fechado"]))
+            for k, d in self._camadas.items()
+            if self._eh_parede(k) and len(d["pontos"]) >= 2
+        ]
+        if not paredes:
+            return []
+        externa = self._camadas["externa"]
+        chave = (
+            tuple(externa["pontos"]),
+            bool(externa["fechado"]),
+            tuple((tuple(pts), f) for pts, f in paredes),
+            tuple(self._nomes_comodos),
+            self.espessura_paredes,
+        )
+        if self._cache_comodos[0] != chave:
+            linhas = [(externa["pontos"], bool(externa["fechado"]))] + paredes
+            segs_externa = _pares(externa["pontos"], fechado=bool(externa["fechado"]))
+            finais = []
+            for comodo in detectar_comodos(linhas):
+                nome = comodo.nome
+                for ponto, nome_salvo in self._nomes_comodos:
+                    if ponto_dentro(ponto, comodo):
+                        nome = nome_salvo
+                extra = {}
+                if self.espessura_paredes > 0:
+                    util = medidas_uteis(comodo, segs_externa, self.espessura_paredes)
+                    if util is None:
+                        extra = {"area_util_m2": 0.0, "perimetro_util_m": 0.0}
+                    else:
+                        extra = {
+                            "area_util_m2": util[0],
+                            "perimetro_util_m": util[1],
+                            "poligono_util": util[2],
+                        }
+                finais.append(replace(comodo, nome=nome, **extra))
+            self._cache_comodos = (chave, finais)
+        return self._cache_comodos[1]
+
+    def renomear_comodo(self, indice: int, nome: str):
+        """Dá nome ao cômodo; vazio volta ao nome automático ("Cômodo N")."""
+        comodos = self.comodos()
+        if not 0 <= indice < len(comodos):
+            return
+        comodo = comodos[indice]
+        nome = " ".join((nome or "").split())[:40]
+        novos = [(p, n) for p, n in self._nomes_comodos if not ponto_dentro(p, comodo)]
+        if nome and nome != f"Cômodo {indice + 1}":
+            novos.append((comodo.rotulo, nome))
+        if novos == self._nomes_comodos:
+            return
+        self._registrar()
+        self._nomes_comodos = novos
+        self._redesenhar_estatico()
+        self._avisar_resultado()
+
+    def definir_espessura(self, metros: float):
+        metros = max(0.0, float(metros))
+        if abs(metros - self.espessura_paredes) < 1e-9:
+            return
+        self.espessura_paredes = metros
+        self._redesenhar_estatico()
+        self._avisar_resultado()
+
+    def _comodo_em(self, sx: float, sy: float) -> int | None:
+        ponto = self._tela_para_mundo(sx, sy)
+        for i, comodo in enumerate(self.comodos()):
+            if ponto_dentro(ponto, comodo):
+                return i
+        return None
+
+    def destacar_comodo(self, indice: int | None):
+        if indice == self._comodo_destacado:
+            return
+        self._comodo_destacado = indice
+        self._redesenhar_estatico()
+
     def _limpar_estado_offset(self, *, restaurar_hall: bool = False):
         if restaurar_hall and self._offset_hall_backup is not None:
-            self._camadas["hall"] = {
+            self._camadas[self._offset_hall_backup.get("camada", "hall")] = {
                 "pontos": list(self._offset_hall_backup["pontos"]),
                 "fechado": bool(self._offset_hall_backup["fechado"]),
             }
@@ -206,11 +371,19 @@ class PainelDesenho2D(tk.Frame):
     # ------------------------------------------------------------------
 
     def _estado(self) -> dict:
-        return {"camadas": copiar_camadas(self._camadas), "ativa": self.camada_ativa}
+        return {
+            "camadas": copiar_camadas(self._camadas),
+            "ativa": self.camada_ativa,
+            "nomes": list(self._nomes_comodos),
+        }
 
     def _restaurar(self, estado: dict):
         self._camadas = copiar_camadas(estado["camadas"])
-        self.camada_ativa = estado.get("ativa") or "externa"
+        self._nomes_comodos = list(estado.get("nomes", []))
+        ativa = estado.get("ativa") or "externa"
+        self.camada_ativa = ativa if ativa in self._camadas else "externa"
+        if self._eh_parede(ativa) and ativa not in self._camadas:
+            self._nova_parede()
 
     def _registrar(self, estado: dict | None = None):
         """Guarda o estado anterior a uma alteração (para Ctrl+Z)."""
@@ -273,6 +446,21 @@ class PainelDesenho2D(tk.Frame):
 
     def limpar(self):
         self._cancelar_comandos()
+        if self._eh_parede(self.camada_ativa):
+            # Na camada Paredes, "Limpar" apaga todas as paredes.
+            if any(self._camadas[k]["pontos"] for k in self._chaves_paredes()):
+                self._registrar()
+            for chave in self._chaves_paredes():
+                del self._camadas[chave]
+            self._selecao = {s for s in self._selecao if s[0] in self._camadas}
+            self._nova_parede()
+            self._ultimo_snap = None
+            self._ferramenta = "selecao"
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._avisar_resultado()
+            self._set_status("")
+            return
         if self.pontos or self.fechado:
             self._registrar()
         self.pontos.clear()
@@ -289,8 +477,12 @@ class PainelDesenho2D(tk.Frame):
         self._cancelar_comandos()
         if any(d["pontos"] for d in self._camadas.values()):
             self._registrar()
+        for chave in self._chaves_paredes():
+            del self._camadas[chave]
         for chave in self._camadas:
             self._camadas[chave] = {"pontos": [], "fechado": False}
+        if self._eh_parede(self.camada_ativa):
+            self._nova_parede()
         self._ultimo_snap = None
         self._selecao.clear()
         self._ferramenta = "selecao"
@@ -300,16 +492,35 @@ class PainelDesenho2D(tk.Frame):
         self._set_status(self._msg_inicio())
 
     def exportar(self) -> dict:
+        dados = self._exportar_camadas()
+        if self._nomes_comodos:
+            dados["nomes_comodos"] = [
+                {"x": float(p.x), "y": float(p.y), "nome": n}
+                for p, n in self._nomes_comodos
+            ]
+        if self.espessura_paredes > 0:
+            dados["espessura_paredes_m"] = float(self.espessura_paredes)
+        return dados
+
+    def _exportar_camadas(self) -> dict:
         return desenho_camadas_para_dict(
             externa_pontos=self._camadas["externa"]["pontos"],
             externa_fechado=self._camadas["externa"]["fechado"],
             hall_pontos=self._camadas["hall"]["pontos"],
             hall_fechado=self._camadas["hall"]["fechado"],
+            paredes=[
+                (self._camadas[k]["pontos"], bool(self._camadas[k]["fechado"]))
+                for k in self._chaves_paredes()
+            ],
         )
 
     def carregar(self, dados):
         camadas = dict_para_camadas(dados)
+        for chave in self._chaves_paredes():
+            del self._camadas[chave]
         for chave, (pts, fechado) in camadas.items():
+            if self._eh_parede(chave) and not self._com_paredes:
+                continue
             self._camadas[chave] = {"pontos": list(pts), "fechado": fechado}
         self.camada_ativa = "externa"
         self._limpar_estado_offset(restaurar_hall=False)
@@ -323,7 +534,22 @@ class PainelDesenho2D(tk.Frame):
         self._redesenhar_estatico()
         self._atualizar_volante()
         self._avisar_resultado()
-        if self._camadas["externa"]["pontos"] or self._camadas["hall"]["pontos"]:
+        self._prox_parede = len(self._chaves_paredes()) + 1
+        self._nomes_comodos = []
+        self.espessura_paredes = 0.0
+        if self._com_paredes and isinstance(dados, dict):
+            for item in dados.get("nomes_comodos") or []:
+                try:
+                    self._nomes_comodos.append(
+                        (Ponto(float(item["x"]), float(item["y"])), str(item["nome"]))
+                    )
+                except (KeyError, TypeError, ValueError):
+                    continue
+            try:
+                self.espessura_paredes = max(0.0, float(dados.get("espessura_paredes_m") or 0))
+            except (TypeError, ValueError):
+                self.espessura_paredes = 0.0
+        if self.tem_desenho():
             self.enquadrar_quando_visivel()
             self._set_status("Planta carregada. Edite Externa/Hall ou salve no orçamento.")
         else:
@@ -411,10 +637,21 @@ class PainelDesenho2D(tk.Frame):
         barra = ttk.Frame(self, padding=(8, 6))
         barra.pack(fill="x")
 
-        for chave, rotulo, cor in (
+        camadas_chip = [
             ("externa", "EXTERNA", COR_EXTERNA),
             ("hall", "HALL", COR_HALL),
-        ):
+        ]
+        if self._com_paredes:
+            camadas_chip.append(("paredes", "PAREDES", COR_PAREDE))
+        dicas_camada = {
+            "externa": "Parte externa do edifício (fachada, beiral, cobertura).",
+            "hall": "Hall interno: desenhe do zero ou use Offset a partir de uma parede externa.",
+            "paredes": (
+                "Paredes internas: cada parede que liga um lado a outro\n"
+                "divide a planta em cômodos. Enter termina uma parede."
+            ),
+        }
+        for chave, rotulo, cor in camadas_chip:
             chip = tk.Label(
                 barra,
                 text=rotulo,
@@ -425,12 +662,7 @@ class PainelDesenho2D(tk.Frame):
             )
             chip.pack(side="left", padx=(0, 4))
             chip.bind("<Button-1>", lambda _e, c=chave: self._ativar_camada(c))
-            vincular_tooltip(
-                chip,
-                "Parte externa do edifício (fachada, beiral, cobertura)."
-                if chave == "externa"
-                else "Hall interno: desenhe do zero ou use Offset a partir de uma parede externa.",
-            )
+            vincular_tooltip(chip, dicas_camada[chave])
             self._chips_camada[chave] = (chip, cor)
         self._atualizar_chips_camada()
 
@@ -471,7 +703,13 @@ class PainelDesenho2D(tk.Frame):
             (4, 0),
             "Offset (lado)",
             "Parede paralela no estilo AutoCAD OFFSET.\n"
-            "1) Clique a parede da Externa\n"
+            + (
+                "Na camada Paredes: clique qualquer linha e digite a distância;\n"
+                "a parede nova vai de uma linha à outra.\n"
+                if self._com_paredes
+                else ""
+            )
+            + "1) Clique a parede da Externa\n"
             "2) Digite a distância vazia (m) e Enter\n"
             "3) Digite ou arraste o comprimento da nova parede e Enter/clique.",
         )
@@ -481,6 +719,12 @@ class PainelDesenho2D(tk.Frame):
             (4, 4),
             "Offset (retângulo)",
             "Hall retangular a partir de uma parede.\n"
+            + (
+                "Na camada Paredes: cria um cômodo encostado na linha (ex.: armário).\n"
+                if self._com_paredes
+                else ""
+            )
+            +
             "1) Clique a parede da Externa\n"
             "2) Digite a distância vazia / profundidade (m) e Enter\n"
             "3) Estique o comprimento (digite ou arraste) e Enter/clique.",
@@ -522,7 +766,12 @@ class PainelDesenho2D(tk.Frame):
             self.limpar,
             (0, 0),
             "Limpar camada",
-            "Apaga só a camada ativa (Externa ou Hall).\n"
+            (
+                "Apaga só a camada ativa (Externa, Hall ou todas as paredes).\n"
+                if self._com_paredes
+                else "Apaga só a camada ativa (Externa ou Hall).\n"
+            )
+            +
             "Para apagar linhas selecionadas, use Delete.",
         )
         _btn(
@@ -557,7 +806,12 @@ class PainelDesenho2D(tk.Frame):
             "Duplo clique numa linha: digitar o novo comprimento\n"
             "Offset: 1º distância vazia · 2º comprimento (digite ou arraste)\n"
             "Shift: trava H/V · F11: guias · digite medida + Enter\n"
-            "Ctrl+Z / Ctrl+Y · roda: zoom · espaço+arraste: pan",
+            "Ctrl+Z / Ctrl+Y · roda: zoom · espaço+arraste: pan"
+            + (
+                "\nPAREDES: Enter ou botão direito termina a parede e começa outra"
+                if self._com_paredes
+                else ""
+            ),
         )
 
         moldura = ttk.Frame(self)
@@ -713,6 +967,11 @@ class PainelDesenho2D(tk.Frame):
             grade=bool(self.var_grade.get()),
             passo_grade=_PASSO_GRADE_SNAP,
             guias=bool(self.var_guias.get()),
+            perto=self._com_paredes
+            and (
+                self._eh_parede(self.camada_ativa)
+                or (self._grip is not None and self._eh_parede(self._grip[0]))
+            ),
         )
 
     def _mundo_para_tela(self, x: float, y: float) -> tuple[float, float]:
@@ -739,16 +998,15 @@ class PainelDesenho2D(tk.Frame):
         return None
 
     def _vertices_snap(self) -> list[Ponto]:
-        verts = list(self.pontos)
-        outra = "hall" if self.camada_ativa == "externa" else "externa"
-        verts.extend(self._camadas[outra]["pontos"])
+        verts: list[Ponto] = []
+        for dados in self._camadas.values():
+            verts.extend(dados["pontos"])
         return verts
 
     def _segmentos_snap(self) -> list[tuple[Ponto, Ponto]]:
-        segs = list(_pares(self.pontos, fechado=self.fechado))
-        outra = "hall" if self.camada_ativa == "externa" else "externa"
-        dados = self._camadas[outra]
-        segs.extend(_pares(dados["pontos"], fechado=bool(dados["fechado"])))
+        segs: list[tuple[Ponto, Ponto]] = []
+        for dados in self._camadas.values():
+            segs.extend(_pares(dados["pontos"], fechado=bool(dados["fechado"])))
         return segs
 
     def _resolver(self, sx: float, sy: float) -> ResultadoSnap:
@@ -770,6 +1028,19 @@ class PainelDesenho2D(tk.Frame):
         )
 
     def _ativar_camada(self, camada: str):
+        if camada == "paredes":
+            if self._eh_parede(self.camada_ativa):
+                self._atualizar_chips_camada()
+                return
+            self._cancelar_comandos()
+            if self._ferramenta in ("mover", "retangulo"):
+                self._ferramenta = "selecao"
+            self._nova_parede()
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._avisar_resultado()
+            self._set_status(self._msg_inicio())
+            return
         if camada not in self._camadas or camada == self.camada_ativa:
             self._atualizar_chips_camada()
             return
@@ -777,6 +1048,7 @@ class PainelDesenho2D(tk.Frame):
         if self._ferramenta in ("mover", "retangulo"):
             self._ferramenta = "selecao"
         self.camada_ativa = camada
+        self._remover_paredes_vazias()
         self._atualizar_chips_camada()
         self._redesenhar_estatico()
         self._atualizar_volante()
@@ -785,22 +1057,33 @@ class PainelDesenho2D(tk.Frame):
 
     def _atualizar_chips_camada(self):
         for chave, (chip, cor) in self._chips_camada.items():
-            ativo = chave == self.camada_ativa
+            ativo = chave == self.camada_ativa or (
+                chave == "paredes" and self._eh_parede(self.camada_ativa)
+            )
             chip.config(
                 bg=cor if ativo else self._cores.fundo_cartao_off,
                 fg="#ffffff" if ativo else self._cores.texto_suave,
             )
 
     def _usar_offset(self, modo: str):
-        externa = self._camadas["externa"]["pontos"]
-        if len(externa) < 2:
+        para_paredes = self._eh_parede(self.camada_ativa)
+        if para_paredes:
+            if not self.tem_desenho():
+                self._set_status("Desenhe alguma linha antes de usar Offset.")
+                return
+        elif len(self._camadas["externa"]["pontos"]) < 2:
             self._set_status("Desenhe e complete a Externa antes de usar Offset.")
             return
         self._cancelar_comandos()
         self._selecao.clear()
+        if para_paredes:
+            # Na camada Paredes o resultado vira uma parede nova (não o Hall).
+            self._nova_parede()
+        alvo = self.camada_ativa if para_paredes else "hall"
         self._offset_hall_backup = {
-            "pontos": list(self._camadas["hall"]["pontos"]),
-            "fechado": bool(self._camadas["hall"]["fechado"]),
+            "camada": alvo,
+            "pontos": list(self._camadas[alvo]["pontos"]),
+            "fechado": bool(self._camadas[alvo]["fechado"]),
             "estado": self._estado(),
         }
         self._ferramenta = f"offset_{modo}"
@@ -812,8 +1095,28 @@ class PainelDesenho2D(tk.Frame):
         self._atualizar_volante()
         self._set_status(
             f"Offset ({'retângulo' if modo == 'retangulo' else 'lado'}): "
-            "clique uma parede da EXTERNA."
+            + ("clique uma linha." if para_paredes else "clique uma parede da EXTERNA.")
         )
+
+    def _offset_para_paredes(self) -> bool:
+        backup = self._offset_hall_backup
+        return bool(backup) and self._eh_parede(backup.get("camada"))
+
+    def _offset_alvo(self) -> str:
+        backup = self._offset_hall_backup
+        return (backup or {}).get("camada", "hall")
+
+    def _segmentos_offset(self) -> list[tuple[Ponto, Ponto]]:
+        """Linhas que podem servir de base (e de limite) para o Offset."""
+        if not self._offset_para_paredes():
+            return self._segmentos_externa()
+        alvo = self._offset_alvo()
+        segs: list[tuple[Ponto, Ponto]] = []
+        for nome, dados in self._camadas.items():
+            if nome in ("hall", alvo):
+                continue
+            segs.extend(_pares(dados["pontos"], fechado=bool(dados["fechado"])))
+        return segs
 
     def _segmentos_externa(self) -> list[tuple[Ponto, Ponto]]:
         dados = self._camadas["externa"]
@@ -831,7 +1134,11 @@ class PainelDesenho2D(tk.Frame):
         if dist is None or dist <= 0 or comp is None or comp <= 0 or lado is None:
             return None
         if self._offset_modo == "retangulo":
-            return list(offset_retangulo_comprimento(a, b, dist, lado, comp))
+            pts = list(offset_retangulo_comprimento(a, b, dist, lado, comp))
+            if self._offset_para_paredes():
+                # Paredes: um "U" encostado na linha base (o 4º lado já existe).
+                return [pts[1], pts[2], pts[3], pts[0]]
+            return pts
         a2, b2 = offset_segmento_comprimento(a, b, dist, lado, comp)
         return [a2, b2]
 
@@ -839,9 +1146,13 @@ class PainelDesenho2D(tk.Frame):
         pts = self._geometria_offset_atual()
         if pts is None:
             return
-        self.camada_ativa = "hall"
+        self.camada_ativa = self._offset_alvo()
         self.pontos = pts
-        self.fechado = self._offset_modo == "retangulo" and len(pts) >= 3
+        self.fechado = (
+            self._offset_modo == "retangulo"
+            and len(pts) >= 3
+            and not self._offset_para_paredes()
+        )
         self._atualizar_chips_camada()
         self._redesenhar_estatico()
         self._atualizar_volante()
@@ -854,6 +1165,9 @@ class PainelDesenho2D(tk.Frame):
         ref = cursor or self._tela_para_mundo(*self._cursor_tela)
         self._offset_lado = lado_do_ponto(ref, a, b)
         self._offset_dist = metros
+        if self._offset_para_paredes() and self._offset_modo == "segmento":
+            self._criar_parede_offset()
+            return
         self._offset_comp = max(0.1, distancia(a, b))
         self._offset_fase = "comprimento"
         self._buffer = ""
@@ -861,6 +1175,29 @@ class PainelDesenho2D(tk.Frame):
         self._set_status(
             "Distância ok. Agora o COMPRIMENTO da parede: digite (m) e Enter, "
             "arraste o mouse ou clique para confirmar."
+        )
+
+    def _parede_offset_preview(self, a: Ponto, b: Ponto, dist: float, lado: float):
+        """Parede paralela que vai de uma linha à outra."""
+        a2, b2 = offset_segmento(a, b, dist, lado)
+        return estender_ate_linhas(a2, b2, self._segmentos_offset())
+
+    def _criar_parede_offset(self):
+        a, b = self._offset_seg
+        p, q = self._parede_offset_preview(a, b, self._offset_dist, self._offset_lado)
+        alvo = self._offset_alvo()
+        self._registrar(self._offset_hall_backup["estado"])
+        self._camadas[alvo] = {"pontos": [p, q], "fechado": False}
+        modo = self._offset_modo
+        self._limpar_estado_offset(restaurar_hall=False)
+        self._buffer = ""
+        self._nova_parede()
+        self._avisar_resultado()
+        # Continua no Offset, como no AutoCAD: dá para fazer várias seguidas.
+        self._usar_offset(modo)
+        self._set_status(
+            f"Parede criada ({formatar_decimal_br(distancia(p, q), 2)} m). "
+            "Clique outra linha para repetir ou Esc para sair."
         )
 
     def _confirmar_comprimento_offset(self, comprimento: float | None = None):
@@ -878,9 +1215,18 @@ class PainelDesenho2D(tk.Frame):
         modo = self._offset_modo
         if self._offset_hall_backup is not None:
             self._registrar(self._offset_hall_backup["estado"])
+        para_paredes = self._offset_para_paredes()
         self._limpar_estado_offset(restaurar_hall=False)
         self._ferramenta = "selecao" if modo == "retangulo" else "polilinha"
         self._buffer = ""
+        if para_paredes:
+            self._ferramenta = "selecao"
+            self._nova_parede()
+            self._redesenhar_estatico()
+            self._atualizar_volante()
+            self._avisar_resultado()
+            self._set_status("Paredes criadas. Ctrl+Z desfaz.")
+            return
         self._atualizar_chips_camada()
         self._redesenhar_estatico()
         self._atualizar_volante()
@@ -931,11 +1277,15 @@ class PainelDesenho2D(tk.Frame):
                 return
             achado = segmento_mais_proximo(
                 cursor,
-                self._segmentos_externa(),
+                self._segmentos_offset(),
                 max_dist=max(0.8, self._abertura_m() * 3),
             )
             if achado is None:
-                self._set_status("Clique mais perto de uma parede da Externa.")
+                self._set_status(
+                    "Clique mais perto de uma linha."
+                    if self._offset_para_paredes()
+                    else "Clique mais perto de uma parede da Externa."
+                )
                 return
             _i, a, b, _d = achado
             self._offset_seg = (a, b)
@@ -953,6 +1303,8 @@ class PainelDesenho2D(tk.Frame):
         if self._ferramenta == "mover":
             self._clique_mover(event)
             return
+        if self.fechado and self._eh_parede(self.camada_ativa):
+            self._nova_parede()
         if self.fechado:
             self._set_status(
                 "Polígono desta camada completo. Limpar, Desfazer ou troque de camada."
@@ -1164,13 +1516,26 @@ class PainelDesenho2D(tk.Frame):
             self._set_status("Selecione linhas para apagar (clique ou janela).")
             return
         novas = copiar_camadas(self._camadas)
-        for nome, dados in novas.items():
+        for nome, dados in list(novas.items()):
             indices = [i for camada, i in self._selecao if camada == nome]
             if not indices:
                 continue
+            if self._eh_parede(nome):
+                # Apagar o meio de uma parede deixa duas paredes.
+                del novas[nome]
+                for trecho in trechos_restantes(
+                    dados["pontos"], bool(dados["fechado"]), indices
+                ):
+                    if len(trecho) >= 2:
+                        novas[f"parede_{self._prox_parede}"] = {
+                            "pontos": trecho,
+                            "fechado": False,
+                        }
+                        self._prox_parede += 1
+                continue
             resultado = apagar_segmentos(dados["pontos"], bool(dados["fechado"]), indices)
             if resultado is None:
-                rotulo = "Externa" if nome == "externa" else "Hall"
+                rotulo = self._nome_camada(nome)
                 self._set_status(
                     f"{rotulo}: apagar essas linhas dividiria o desenho em partes. "
                     "Apague linhas vizinhas ou a camada inteira."
@@ -1179,6 +1544,8 @@ class PainelDesenho2D(tk.Frame):
             dados["pontos"], dados["fechado"] = resultado
         self._registrar()
         self._camadas = novas
+        if self.camada_ativa not in self._camadas:
+            self._nova_parede()
         n = len(self._selecao)
         self._selecao.clear()
         self._hover_linha = None
@@ -1193,9 +1560,52 @@ class PainelDesenho2D(tk.Frame):
         self._janela_sel = None
         linha = self._linha_em(event.x, event.y, tol_px=_TOL_LINHA_PX + 6)
         if linha is None:
+            indice = self._comodo_em(event.x, event.y)
+            if indice is not None:
+                self.abrir_editor_nome(indice)
             return "break"
         self._abrir_editor_cota(*linha)
         return "break"
+
+    def abrir_editor_nome(self, indice: int):
+        """Campo sobre o desenho para dar nome ao cômodo."""
+        comodos = self.comodos()
+        if not 0 <= indice < len(comodos):
+            return
+        self._fechar_editor_cota()
+        comodo = comodos[indice]
+        sx, sy = self._mundo_para_tela(comodo.rotulo.x, comodo.rotulo.y)
+        var = tk.StringVar(value=comodo.nome)
+        entrada = tk.Entry(
+            self.canvas,
+            textvariable=var,
+            width=16,
+            justify="center",
+            font=("Segoe UI", 9, "bold"),
+            relief="solid",
+            bd=1,
+        )
+        item = self.canvas.create_window(sx, sy - 7, window=entrada)
+        self._editor_cota = (entrada, item, "comodo", indice)
+
+        def aplicar(_e=None):
+            texto = var.get()
+            cancelar()
+            self.renomear_comodo(indice, texto)
+            return "break"
+
+        def cancelar(_e=None):
+            self._fechar_editor_cota()
+            self._set_status("")
+            return "break"
+
+        entrada.bind("<Return>", aplicar)
+        entrada.bind("<KP_Enter>", aplicar)
+        entrada.bind("<Escape>", cancelar)
+        entrada.bind("<FocusOut>", cancelar)
+        entrada.focus_set()
+        entrada.select_range(0, "end")
+        self._set_status("Digite o nome do cômodo e Enter. Vazio volta ao nome automático.")
 
     def _abrir_editor_cota(self, nome: str, indice: int):
         self._fechar_editor_cota()
@@ -1426,6 +1836,9 @@ class PainelDesenho2D(tk.Frame):
             self._atualizar_volante()
             self._set_status("Retângulo cancelado.")
             return "break"
+        if self._eh_parede(self.camada_ativa) and self._ferramenta == "polilinha":
+            self._terminar_parede(continuar=bool(self.pontos))
+            return "break"
         if len(self.pontos) >= 3 and not self.fechado:
             self.fechar_poligono()
         elif self.pontos and not self.fechado:
@@ -1446,6 +1859,32 @@ class PainelDesenho2D(tk.Frame):
         self._redesenhar_estatico()
         self._atualizar_volante()
 
+    def _ancora_inicio(self, snap: ResultadoSnap | None) -> Ponto | None:
+        """Ponto de referência para digitar a distância do 1º ponto.
+
+        Guia: o vértice de onde a guia sai. Em cima de uma linha: o canto
+        (ou encontro de paredes) mais próximo nessa linha.
+        """
+        if snap is None or self._origem_atual() is not None:
+            return None
+        if self._ferramenta not in ("polilinha", "retangulo") or self.fechado:
+            return None
+        if snap.tipo == "guia" and len(snap.ancoras_guia) == 1:
+            ancora = snap.ancoras_guia[0]
+        elif snap.tipo == "perto" and len(snap.ancoras_guia) == 2:
+            a, b = snap.ancoras_guia
+            na_linha = [
+                v
+                for v in self._vertices_snap()
+                if distancia(v, ponto_no_segmento(v, a, b)) < 1e-6
+            ]
+            ancora = min(na_linha + [a, b], key=lambda v: distancia(v, snap.ponto))
+        else:
+            return None
+        if quase_iguais(ancora, snap.ponto):
+            return None
+        return ancora
+
     def _ao_tecla(self, event):
         ch = event.char or ""
         if ch and ch in "0123456789,.":
@@ -1460,7 +1899,7 @@ class PainelDesenho2D(tk.Frame):
                 self._ferramenta in ("polilinha", "retangulo")
                 and self.pontos
                 and not self.fechado
-            )
+            ) or self._ancora_inicio(self._ultimo_snap) is not None
             if not (digitando_offset or digitando_edicao or desenhando):
                 return "break"
             if ch in ",." and ("," in self._buffer or "." in self._buffer):
@@ -1507,7 +1946,10 @@ class PainelDesenho2D(tk.Frame):
             self._confirmar_distancia()
             return "break"
         if self._ferramenta == "polilinha":
-            self.fechar_poligono()
+            if self._eh_parede(self.camada_ativa):
+                self._terminar_parede(continuar=True)
+            else:
+                self.fechar_poligono()
         return "break"
 
     def _cancelar_offset(self):
@@ -1536,7 +1978,7 @@ class PainelDesenho2D(tk.Frame):
             if self._offset_fase == "comprimento":
                 # Volta para redigitar a distância vazia.
                 if self._offset_hall_backup is not None:
-                    self._camadas["hall"] = {
+                    self._camadas[self._offset_alvo()] = {
                         "pontos": list(self._offset_hall_backup["pontos"]),
                         "fechado": bool(self._offset_hall_backup["fechado"]),
                     }
@@ -1582,6 +2024,11 @@ class PainelDesenho2D(tk.Frame):
         if self._canto_ret is not None:
             self._canto_ret = None
             self.pontos.clear()
+        if self._ferramenta in ("polilinha", "retangulo") and self._eh_parede(
+            self.camada_ativa
+        ):
+            self._terminar_parede(continuar=False)
+            return "break"
         if self._ferramenta in ("polilinha", "retangulo"):
             # Como no AutoCAD: Esc encerra o comando e mantém o que foi desenhado.
             self._ferramenta = "selecao"
@@ -1625,6 +2072,23 @@ class PainelDesenho2D(tk.Frame):
             return
         origem = self._origem_atual()
         editando = self._ferramenta == "mover" or self._grip is not None
+        ancora = self._ancora_inicio(self._ultimo_snap) if origem is None else None
+        if ancora is not None:
+            try:
+                metros = parse_decimal_br(self._buffer)
+            except ValueError:
+                self._set_status("Medida inválida.")
+                return
+            if metros <= 0:
+                self._set_status("Informe uma distância maior que zero.")
+                return
+            ponto = ponto_na_direcao(ancora, self._ultimo_snap.ponto, metros)
+            self._buffer = ""
+            if self._ferramenta == "retangulo":
+                self._clique_retangulo(ponto)
+            else:
+                self._clique_polilinha(ResultadoSnap(ponto, "orto"))
+            return
         if origem is None or (self.fechado and not editando):
             self._buffer = ""
             return
@@ -1689,12 +2153,18 @@ class PainelDesenho2D(tk.Frame):
         self._redesenhar_estatico()
         self._atualizar_volante()
         self._avisar_resultado()
-        self._set_status("Polígono completo. Aplique a metragem ou limpe para outro desenho.")
+        self._set_status(
+            "Parede fechada."
+            if self._eh_parede(self.camada_ativa)
+            else "Polígono completo. Aplique a metragem ou limpe para outro desenho."
+        )
 
     def _usar(self, ferramenta: str):
         self._cancelar_comandos()
         self._selecao.clear()
-        nome = "Externa" if self.camada_ativa == "externa" else "Hall"
+        if self._eh_parede(self.camada_ativa) and self.pontos:
+            self._nova_parede()  # cada comando começa uma parede nova
+        nome = self._nome_camada()
         if self.fechado:
             self._ferramenta = "selecao"
             self._redesenhar_estatico()
@@ -1860,6 +2330,8 @@ class PainelDesenho2D(tk.Frame):
         c.create_line(0, oy, w, oy, fill=cores.titulo, width=1, tags="estatico")
         c.create_line(ox, 0, ox, h, fill=cores.titulo, width=1, tags="estatico")
 
+        self._desenhar_destaque_comodo()
+
         for nome, cor_linha, fill_poly in (
             ("externa", COR_EXTERNA, "#d7e8f2"),
             ("hall", COR_HALL, "#c8e6c9"),
@@ -1909,12 +2381,88 @@ class PainelDesenho2D(tk.Frame):
                     fill=cor_pt, outline=cor_pt, tags="estatico",
                 )
 
+        self._desenhar_paredes()
+        self._desenhar_rotulos_comodos()
+
         if self._offset_seg is not None:
             a, b = self._offset_seg
             x1, y1 = self._mundo_para_tela(a.x, a.y)
             x2, y2 = self._mundo_para_tela(b.x, b.y)
             c.create_line(
                 x1, y1, x2, y2, fill="#f9a825", width=4, tags="estatico"
+            )
+
+    def _desenhar_paredes(self):
+        c = self.canvas
+        modo_paredes = self._eh_parede(self.camada_ativa)
+        for nome in self._chaves_paredes():
+            dados = self._camadas[nome]
+            pts = dados["pontos"]
+            ativa = nome == self.camada_ativa
+            pares = _pares(pts, fechado=bool(dados["fechado"]))
+            if (
+                ativa
+                and self._ferramenta == "retangulo"
+                and self._canto_ret is not None
+                and len(pts) == 1
+            ):
+                pares = []
+            for a, b in pares:
+                x1, y1 = self._mundo_para_tela(a.x, a.y)
+                x2, y2 = self._mundo_para_tela(b.x, b.y)
+                c.create_line(
+                    x1, y1, x2, y2,
+                    fill=COR_PAREDE,
+                    width=3 if modo_paredes else 2,
+                    tags="estatico",
+                )
+                if modo_paredes:
+                    self._cota_segmento(a, b)
+            if ativa:
+                for p in pts:
+                    sx, sy = self._mundo_para_tela(p.x, p.y)
+                    c.create_rectangle(
+                        sx - 3, sy - 3, sx + 3, sy + 3,
+                        fill=COR_PAREDE, outline=COR_PAREDE, tags="estatico",
+                    )
+
+    def _desenhar_destaque_comodo(self):
+        indice = self._comodo_destacado
+        comodos = self.comodos()
+        if indice is None or not 0 <= indice < len(comodos):
+            return
+        coords = []
+        for p in comodos[indice].pontos:
+            coords.extend(self._mundo_para_tela(p.x, p.y))
+        self.canvas.create_polygon(
+            *coords, fill="#ffe082", outline="", tags="estatico"
+        )
+
+    def _desenhar_rotulos_comodos(self):
+        c = self.canvas
+        for comodo in self.comodos():
+            if len(comodo.poligono_util) >= 3:
+                # Contorno da área útil (descontando a espessura das paredes).
+                coords = []
+                for p in comodo.poligono_util:
+                    coords.extend(self._mundo_para_tela(p.x, p.y))
+                c.create_polygon(
+                    *coords, fill="", outline="#a1887f", dash=(3, 3), tags="estatico"
+                )
+            tela = [self._mundo_para_tela(p.x, p.y) for p in comodo.pontos]
+            largura = max(x for x, _ in tela) - min(x for x, _ in tela)
+            altura = max(y for _, y in tela) - min(y for _, y in tela)
+            if largura < 56 or altura < 32:
+                continue  # pequeno demais na tela para caber o nome
+            sx, sy = self._mundo_para_tela(comodo.rotulo.x, comodo.rotulo.y)
+            c.create_text(
+                sx, sy - 7, text=comodo.nome, fill=COR_ROTULO_COMODO,
+                font=("Segoe UI", 8, "bold"), tags="estatico",
+            )
+            c.create_text(
+                sx, sy + 7,
+                text=f"{formatar_decimal_br(comodo.area_exibida, 2)} m²",
+                fill=COR_ROTULO_COMODO, font=("Segoe UI", 8), tags="estatico",
             )
 
     def _cota_segmento(self, a: Ponto, b: Ponto):
@@ -1949,7 +2497,7 @@ class PainelDesenho2D(tk.Frame):
             if self._offset_seg is None:
                 achado = segmento_mais_proximo(
                     cursor,
-                    self._segmentos_externa(),
+                    self._segmentos_offset(),
                     max_dist=max(0.8, self._abertura_m() * 3),
                 )
                 if achado is not None:
@@ -2023,11 +2571,16 @@ class PainelDesenho2D(tk.Frame):
                         tags="volante",
                     )
                 else:
-                    a2, b2 = offset_segmento(a, b, dist, lado)
+                    if self._offset_para_paredes():
+                        a2, b2 = self._parede_offset_preview(a, b, dist, lado)
+                    else:
+                        a2, b2 = offset_segmento(a, b, dist, lado)
                     x1, y1 = self._mundo_para_tela(a2.x, a2.y)
                     x2, y2 = self._mundo_para_tela(b2.x, b2.y)
                     c.create_line(
-                        x1, y1, x2, y2, fill=COR_HALL, width=3, dash=(6, 4), tags="volante"
+                        x1, y1, x2, y2,
+                        fill=self._cor_camada(self._offset_alvo()),
+                        width=3, dash=(6, 4), tags="volante",
                     )
                 texto = (
                     f"Dist. {self._buffer} m  (Enter)"
@@ -2072,13 +2625,31 @@ class PainelDesenho2D(tk.Frame):
                 for p in pts:
                     sx, sy = self._mundo_para_tela(p.x, p.y)
                     coords.extend((sx, sy))
-                cor_ativa = COR_EXTERNA if self.camada_ativa == "externa" else COR_HALL
+                cor_ativa = self._cor_camada()
                 c.create_polygon(
                     *coords, outline=cor_ativa, fill="#d7e8f2", dash=(4, 3), tags="volante"
                 )
             elif len(self.pontos) >= 2 and not self.fechado:
                 fx, fy = self._mundo_para_tela(self.pontos[0].x, self.pontos[0].y)
                 c.create_line(x2, y2, fx, fy, fill="#9aaa73", dash=(3, 4), tags="volante")
+
+        ancora = self._ancora_inicio(snap)
+        if ancora is not None:
+            # Medida a partir da referência: digite a distância e Enter.
+            x1, y1 = self._mundo_para_tela(ancora.x, ancora.y)
+            x2, y2 = self._mundo_para_tela(snap.ponto.x, snap.ponto.y)
+            c.create_line(x1, y1, x2, y2, fill="#43a047", width=2, dash=(6, 4), tags="volante")
+            c.create_rectangle(
+                x1 - 4, y1 - 4, x1 + 4, y1 + 4, outline="#43a047", width=2, tags="volante"
+            )
+            if self._buffer:
+                texto = f"{self._buffer} m  (Enter confirma)"
+            else:
+                texto = f"{formatar_decimal_br(distancia(ancora, snap.ponto), 2)} m"
+            c.create_text(
+                (x1 + x2) / 2, (y1 + y2) / 2 - 14, text=texto, fill="#2e7d32",
+                font=("Segoe UI", 9, "bold"), tags="volante",
+            )
 
         if snap is not None:
             self._desenhar_guias(snap)
@@ -2189,7 +2760,7 @@ class PainelDesenho2D(tk.Frame):
 
     def _texto_live(self, snap: ResultadoSnap | None) -> str:
         if self._ferramenta.startswith("offset"):
-            partes = ["Externa" if self.camada_ativa == "externa" else "Hall"]
+            partes = [self._nome_camada()]
             partes.append(f"Offset {self._offset_modo or ''}".strip())
             if self._offset_fase == "comprimento":
                 partes.append("esticar comprimento")
@@ -2241,9 +2812,11 @@ class PainelDesenho2D(tk.Frame):
             )
             return f"{n} linha(s) · {formatar_decimal_br(total, 2)} m"
 
-        partes = ["Externa" if self.camada_ativa == "externa" else "Hall"]
+        partes = [self._nome_camada()]
         if snap and snap.rotulo:
             partes.append(snap.rotulo)
+        if not self._buffer and self._ancora_inicio(snap) is not None:
+            partes.append("digite a distância a partir do ponto verde e Enter")
         if self.pontos:
             if self.fechado:
                 res = resultado_desenho(self.pontos, fechado=True)
@@ -2254,7 +2827,7 @@ class PainelDesenho2D(tk.Frame):
                 if snap and self._origem_atual():
                     compr += distancia(self._origem_atual(), snap.ponto)
                 partes.append(f"Perím. {formatar_decimal_br(compr, 2)} m")
-                if len(self.pontos) >= 2:
+                if len(self.pontos) >= 2 and not self._eh_parede(self.camada_ativa):
                     pts = list(self.pontos)
                     if snap:
                         pts.append(snap.ponto)
@@ -2267,7 +2840,7 @@ class PainelDesenho2D(tk.Frame):
 
     def _desenhar_guias(self, snap: ResultadoSnap):
         w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
-        ancoras = list(snap.ancoras_guia)
+        ancoras = list(snap.ancoras_guia) if snap.tipo != "perto" else []
         origem = self._origem_atual()
         if origem is not None and snap.tipo in {"orto", "guia", "grade", "polar", "igual"}:
             ancoras.append(origem)

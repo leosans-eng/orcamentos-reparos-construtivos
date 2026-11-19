@@ -143,6 +143,37 @@ def apagar_segmentos(
     return [pontos[i] for i in idx], False
 
 
+def trechos_restantes(
+    pontos: Sequence[Ponto], fechado: bool, indices: Iterable[int]
+) -> list[list[Ponto]]:
+    """Linhas que sobram depois de apagar as indicadas (pode ser mais de uma).
+
+    Usado nas paredes internas: apagar o meio de uma parede deixa duas.
+    """
+    n = len(pontos)
+    todos = list(indices_segmentos(n, fechado))
+    apagar = {i for i in indices if i in todos}
+    if not apagar:
+        return [list(pontos)] if n >= 2 else []
+    if fechado and n >= 3:
+        inicio = (min(apagar) + 1) % n
+        ordem = [(inicio + k) % n for k in range(n)]
+    else:
+        ordem = todos
+    trechos: list[list[Ponto]] = []
+    atual: list[int] = []
+    for i in ordem:
+        if i in apagar:
+            if atual:
+                trechos.append(atual)
+            atual = []
+        else:
+            atual.append(i)
+    if atual:
+        trechos.append(atual)
+    return [[pontos[t[0]]] + [pontos[(i + 1) % n] for i in t] for t in trechos]
+
+
 def ajustar_comprimento(
     pontos: Sequence[Ponto], fechado: bool, indice: int, comprimento: float
 ) -> list[Ponto]:

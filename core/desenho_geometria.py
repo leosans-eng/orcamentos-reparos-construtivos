@@ -18,12 +18,13 @@ _PRIORIDADE = {
     "int": 2,
     "meio": 3,
     "perp": 4,
-    "igual": 5,
-    "guia": 6,
-    "orto": 7,
-    "polar": 8,
-    "grade": 9,
-    "livre": 10,
+    "perto": 5,
+    "igual": 6,
+    "guia": 7,
+    "orto": 8,
+    "polar": 9,
+    "grade": 10,
+    "livre": 11,
 }
 
 ROTULO_SNAP = {
@@ -32,6 +33,7 @@ ROTULO_SNAP = {
     "int": "Int",
     "meio": "Meio",
     "perp": "Perp",
+    "perto": "Na linha",
     "igual": "Igual",
     "guia": "Guia",
     "orto": "Orto",
@@ -59,6 +61,9 @@ class ConfigSnap:
     grade: bool = True
     passo_grade: float = 0.1
     guias: bool = True
+    # "Na linha": gruda em qualquer ponto de uma linha (usado nas paredes,
+    # para a ponta encostar exatamente na parede vizinha).
+    perto: bool = False
 
 
 @dataclass(frozen=True)
@@ -128,6 +133,16 @@ def projetar_polar(origem: Ponto, cursor: Ponto, passo_graus: float = 45.0) -> P
     return Ponto(origem.x + proj * ux, origem.y + proj * uy)
 
 
+def _direcao_exata(graus: float) -> tuple[float, float]:
+    """Vetor unitário do ângulo; 0°/90°/180°/270° sem resíduo de arredondamento."""
+    if graus % 90 == 0:
+        return {0: (1.0, 0.0), 90: (0.0, 1.0), 180: (-1.0, 0.0), 270: (0.0, -1.0)}[
+            int(graus) % 360
+        ]
+    rad = radians(graus)
+    return cos(rad), sin(rad)
+
+
 def assistir_angulo(
     origem: Ponto,
     cursor: Ponto,
@@ -144,8 +159,7 @@ def assistir_angulo(
         return None
     melhor: tuple[float, Ponto] | None = None
     for graus in angulos:
-        rad = radians(graus)
-        ux, uy = cos(rad), sin(rad)
+        ux, uy = _direcao_exata(graus)
         proj = dx * ux + dy * uy
         if proj < 0:
             continue
@@ -193,6 +207,75 @@ def pe_perpendicular(p: Ponto, a: Ponto, b: Ponto) -> Ponto | None:
     if quase_iguais(pe, a) or quase_iguais(pe, b) or quase_iguais(pe, p):
         return None
     return pe
+
+
+def ponto_na_reta_com_x(origem: Ponto, alvo: Ponto, x: float) -> Ponto | None:
+    """Ponto da semirreta origem→alvo que tem a coordenada X dada."""
+    dx = alvo.x - origem.x
+    if abs(dx) < EPSILON:
+        return None
+    t = (x - origem.x) / dx
+    if t <= EPSILON:
+        return None
+    return Ponto(x, origem.y + t * (alvo.y - origem.y))
+
+
+def ponto_na_reta_com_y(origem: Ponto, alvo: Ponto, y: float) -> Ponto | None:
+    """Ponto da semirreta origem→alvo que tem a coordenada Y dada."""
+    dy = alvo.y - origem.y
+    if abs(dy) < EPSILON:
+        return None
+    t = (y - origem.y) / dy
+    if t <= EPSILON:
+        return None
+    return Ponto(origem.x + t * (alvo.x - origem.x), y)
+
+
+def intersecao_semirreta_segmento(
+    origem: Ponto, alvo: Ponto, a: Ponto, b: Ponto
+) -> Ponto | None:
+    """Onde a semirreta origem→alvo encontra o segmento a–b (ou None)."""
+    rx, ry = alvo.x - origem.x, alvo.y - origem.y
+    sx, sy = b.x - a.x, b.y - a.y
+    den = rx * sy - ry * sx
+    if abs(den) < EPSILON:
+        return None
+    qx, qy = a.x - origem.x, a.y - origem.y
+    t = (qx * sy - qy * sx) / den
+    u = (qx * ry - qy * rx) / den
+    if t <= EPSILON or u < -1e-9 or u > 1.0 + 1e-9:
+        return None
+    return Ponto(origem.x + t * rx, origem.y + t * ry)
+
+
+def estender_ate_linhas(
+    a: Ponto, b: Ponto, segmentos: Sequence[tuple[Ponto, Ponto]]
+) -> tuple[Ponto, Ponto]:
+    """Estica (ou encurta) a–b até as linhas mais próximas de cada lado.
+
+    Usado no Offset de paredes: a parede nova vai de uma parede à outra.
+    Se não houver linha de um lado, aquela ponta fica onde está.
+    """
+    meio = Ponto((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
+    u = unidade_direcao(a, b)
+    atras, frente = None, None
+    for c, d in segmentos:
+        sx, sy = d.x - c.x, d.y - c.y
+        den = u.x * sy - u.y * sx
+        if abs(den) < EPSILON:
+            continue
+        qx, qy = c.x - meio.x, c.y - meio.y
+        t = (qx * sy - qy * sx) / den
+        w = (qx * u.y - qy * u.x) / den
+        if w < -1e-9 or w > 1 + 1e-9:
+            continue
+        if t > 1e-6 and (frente is None or t < frente):
+            frente = t
+        elif t < -1e-6 and (atras is None or t > atras):
+            atras = t
+    novo_a = a if atras is None else Ponto(meio.x + u.x * atras, meio.y + u.y * atras)
+    novo_b = b if frente is None else Ponto(meio.x + u.x * frente, meio.y + u.y * frente)
+    return novo_a, novo_b
 
 
 def intersecao_segmentos(a1: Ponto, a2: Ponto, b1: Ponto, b2: Ponto) -> Ponto | None:
@@ -414,6 +497,9 @@ def resolver_snap(
                     constrained = assistido
                     tipo_base = "polar" if config.polar else "orto"
 
+    # Com Orto/Polar valendo, o ponto final precisa ficar na direção travada.
+    travado = origem is not None and tipo_base in ("orto", "polar")
+
     candidatos: list[tuple[int, float, ResultadoSnap]] = []
 
     if config.osnap:
@@ -441,6 +527,26 @@ def resolver_snap(
                         candidatos, pe, "perp", cursor, constrained, abertura * 0.9
                     )
 
+        if travado:
+            # Onde a direção travada (Orto/Polar) encontra uma linha.
+            for a, b in segmentos:
+                inter = intersecao_semirreta_segmento(origem, constrained, a, b)
+                if inter is not None and not quase_iguais(inter, origem):
+                    _considerar(
+                        candidatos, inter, "int", cursor, constrained, abertura
+                    )
+        elif config.perto:
+            for a, b in segmentos:
+                _considerar(
+                    candidatos,
+                    ponto_no_segmento(cursor, a, b),
+                    "perto",
+                    cursor,
+                    constrained,
+                    abertura * 0.75,
+                    (a, b),
+                )
+
         segs = list(segmentos)
         for i, (a1, a2) in enumerate(segs):
             for b1, b2 in segs[i + 1 :]:
@@ -456,6 +562,19 @@ def resolver_snap(
             for v in vertices
             if origem is None or not quase_iguais(v, origem)
         ]
+        if travado:
+            # A guia marca o ponto SOBRE a direção travada: assim a linha
+            # continua 100% reta e ainda alinha com o outro vértice.
+            for v in verts:
+                for alvo in (
+                    ponto_na_reta_com_y(origem, constrained, v.y),
+                    ponto_na_reta_com_x(origem, constrained, v.x),
+                ):
+                    if alvo is not None:
+                        _considerar(
+                            candidatos, alvo, "guia", cursor, constrained, ab_guia, (v,)
+                        )
+            verts = []  # as guias livres abaixo entortariam a linha
         for v in verts:
             if abs(cursor.y - v.y) <= ab_guia or abs(constrained.y - v.y) <= ab_guia:
                 _considerar(
@@ -533,6 +652,13 @@ def resolver_snap(
 
     ponto = constrained
     tipo = tipo_base
+    if config.grade and config.passo_grade > 0 and travado:
+        # Arredonda o COMPRIMENTO, não as coordenadas: a direção não muda.
+        compr = distancia(origem, ponto)
+        arred = round(compr / config.passo_grade) * config.passo_grade
+        if arred > EPSILON:
+            return ResultadoSnap(ponto_na_direcao(origem, ponto, arred), tipo)
+        return ResultadoSnap(ponto, tipo)
     if config.grade and config.passo_grade > 0:
         grade = snap_grade(ponto, config.passo_grade)
         if not quase_iguais(grade, ponto):
@@ -563,11 +689,18 @@ def desenho_camadas_para_dict(
     externa_fechado: bool,
     hall_pontos: Sequence[Ponto],
     hall_fechado: bool,
+    paredes: Sequence[tuple[Sequence[Ponto], bool]] = (),
 ) -> dict:
-    return {
+    dados = {
         "externa": camada_para_dict(externa_pontos, fechado=externa_fechado),
         "hall": camada_para_dict(hall_pontos, fechado=hall_fechado),
     }
+    paredes = [(pts, fechado) for pts, fechado in paredes if len(pts) >= 2]
+    if paredes:
+        dados["paredes"] = [
+            camada_para_dict(pts, fechado=fechado) for pts, fechado in paredes
+        ]
+    return dados
 
 
 def dict_para_pontos(dados) -> tuple[list[Ponto], bool]:
@@ -596,10 +729,20 @@ def dict_para_camadas(dados) -> dict[str, tuple[list[Ponto], bool]]:
             "hall": ([], False),
         }
     if isinstance(dados.get("externa"), dict) or isinstance(dados.get("hall"), dict):
-        return {
+        camadas = {
             "externa": dict_para_pontos(dados.get("externa") or {}),
             "hall": dict_para_pontos(dados.get("hall") or {}),
         }
+        # Paredes internas (ORCCAD avulso): cada uma vira "parede_1", "parede_2"…
+        paredes = dados.get("paredes")
+        if isinstance(paredes, list):
+            n = 0
+            for item in paredes:
+                pts, fechado = dict_para_pontos(item if isinstance(item, dict) else {})
+                if len(pts) >= 2:
+                    n += 1
+                    camadas[f"parede_{n}"] = (pts, fechado)
+        return camadas
     # Formato legado: um único polígono = externa.
     return {
         "externa": dict_para_pontos(dados),

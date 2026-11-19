@@ -24,6 +24,8 @@ from core.area_comum import (
     CHAVES_PCT_CONDOMINIO,
     CHAVES_PCT_ESTRUTURA,
     ESQUADRIAS_MODELO,
+    LOCAL_CONDOMINIO,
+    LOCAL_RESIDENCIAL,
     PERCENTUAIS_MODELO,
     TIPO_OUTRA,
     TIPO_RESIDENCIAL,
@@ -290,27 +292,25 @@ class EstruturaTela:
         return saida
 
 
-class _PercentualResidencial:
-    """Um percentual "de todos os blocos residenciais", para a aba 2.
+class _PercentualDoLocal:
+    """Um percentual das estruturas de um local da aba 2.
 
-    A aba 2 ainda não sabe em qual estrutura cada anomalia está: ler devolve o
-    valor do primeiro bloco residencial; gravar vale para todos eles.
+    Ex.: "Troca de telhas" de "Blocos residenciais" lê o primeiro bloco
+    residencial e, ao gravar, vale para todos os blocos residenciais.
     """
 
-    def __init__(self, aba, chave):
-        self._aba = aba
+    def __init__(self, estruturas, chave):
+        self._estruturas = estruturas
         self._chave = chave
 
     def get(self) -> str:
-        for estrutura in self._aba.estruturas:
-            if estrutura.residencial:
-                return estrutura.vars_pct[self._chave].get()
+        for estrutura in self._estruturas:
+            return estrutura.vars_pct[self._chave].get()
         return ""
 
     def set(self, valor) -> None:
-        for estrutura in self._aba.estruturas:
-            if estrutura.residencial:
-                estrutura.vars_pct[self._chave].set(valor)
+        for estrutura in self._estruturas:
+            estrutura.vars_pct[self._chave].set(valor)
 
 
 # ---------------------------------------------------------------------------
@@ -386,11 +386,26 @@ class AbaDadosIniciais:
             self._remontar_lista()
         self.mostrar_desenho()
 
-    def percentuais_aba2(self) -> dict:
-        """Percentuais que a aba 2 lê/grava: blocos residenciais + condomínio."""
-        saida = {chave: _PercentualResidencial(self, chave) for chave in CHAVES_PCT_ESTRUTURA}
+    def estruturas_do_local(self, local) -> list[EstruturaTela]:
+        if local == LOCAL_CONDOMINIO:
+            return list(self.estruturas)
+        if local == LOCAL_RESIDENCIAL:
+            return [e for e in self.estruturas if e.residencial]
+        return [e for e in self.estruturas if e.id == local]
+
+    def percentuais_do_local(self, local) -> dict:
+        """Percentuais que uma anomalia do `local` lê e grava na aba 1.
+
+        Os de cobertura, fachada e hall valem para as estruturas do local; os
+        de caixas e calçadas são sempre os do condomínio.
+        """
+        estruturas = self.estruturas_do_local(local)
+        saida = {chave: _PercentualDoLocal(estruturas, chave) for chave in CHAVES_PCT_ESTRUTURA}
         saida.update(self.vars_pct_cond)
         return saida
+
+    def percentuais_aba2(self) -> dict:
+        return self.percentuais_do_local(LOCAL_RESIDENCIAL)
 
     def primeira_residencial(self) -> EstruturaTela | None:
         return next((e for e in self.estruturas if e.residencial), None)
@@ -677,8 +692,9 @@ class AbaDadosIniciais:
             linha += 1
         if pct:
             self._subtitulo(corpo, "Percentuais de reparos")
+            origem = estrutura.id if estrutura else LOCAL_CONDOMINIO
             self._montar_percentuais(corpo, vars_pct, qtd_pct, pct, largura,
-                                     parte.get("selador"))
+                                     parte.get("selador"), origem)
         if (estrutura.id if estrutura else "cond", parte["id"]) in self._recolhidos:
             corpo.pack_forget()
         return cartao
@@ -786,7 +802,8 @@ class AbaDadosIniciais:
             lbl.grid(row=fim + 1, column=col, sticky="w")
             estrutura.esq_total[campo] = lbl
 
-    def _montar_percentuais(self, corpo, vars_pct, qtd_pct, chaves, largura_rotulo, selador):
+    def _montar_percentuais(self, corpo, vars_pct, qtd_pct, chaves, largura_rotulo, selador,
+                            origem):
         """Duas colunas compactas; a da esquerda alinha com os campos de cima."""
         c = self.c
         g = tk.Frame(corpo, bg=c.fundo_cartao)
@@ -813,7 +830,8 @@ class AbaDadosIniciais:
             entrada.bind("<FocusIn>",
                          lambda _e, k=chave, v=var: self.f._ao_focar_percentual(k, v), add="+")
             entrada.bind("<FocusOut>",
-                         lambda _e, k=chave, w=entrada, v=var: self.f._ao_sair_percentual(k, w, v),
+                         lambda _e, k=chave, w=entrada, v=var: self.f._ao_sair_percentual(
+                             k, w, v, origem),
                          add="+")
             tk.Label(campo, text="%", font=FONTE, fg=c.texto_suave,
                      bg=c.fundo_cartao).pack(side="left", padx=(ESPACO_UNIDADE, 0))
@@ -1047,15 +1065,20 @@ class AbaDadosIniciais:
         self.aba.after_idle(lambda: self.ir_para(estrutura))
 
     def _remover(self, estrutura):
-        if not messagebox.askyesno(
-            "Remover estrutura",
-            f"Remover «{estrutura.nome}»?\nAs medidas e a planta dela serão apagadas.",
-            parent=self.f.winfo_toplevel(),
-        ):
+        mensagem = f"Remover «{estrutura.nome}»?\nAs medidas e a planta dela serão apagadas."
+        anomalias = self.f._anomalias_no_local(estrutura.id)
+        if anomalias:
+            qtd = len(anomalias)
+            mensagem += (
+                f"\n\n{'A anomalia' if qtd == 1 else f'As {qtd} anomalias'} dela na aba 2 "
+                f"{'também será removida' if qtd == 1 else 'também serão removidas'}."
+            )
+        if not messagebox.askyesno("Remover estrutura", mensagem, parent=self.f.winfo_toplevel()):
             return
         restantes = [e.coletar() for e in self.estruturas if e is not estrutura]
         if self.atual is estrutura:
             self.atual = None
+        self.f._remover_anomalias_do_local(estrutura.id)
         self.aplicar_estruturas(restantes)
         self.f._estruturas_mudaram(f"Remover estrutura «{estrutura.nome}»")
 

@@ -283,7 +283,8 @@ def novo_item_anomalia_nova(
 
 
 def nova_anomalia_orcamento(
-    *, nome="", reparo_id="", reparo_nome="", percentual="100", variaveis=None
+    *, nome="", reparo_id="", reparo_nome="", percentual="100", variaveis=None,
+    local="residencial",
 ) -> dict:
     linha = {
         "id": novo_id(),
@@ -291,6 +292,7 @@ def nova_anomalia_orcamento(
         "reparo_id": str(reparo_id or "").strip(),
         "reparo_nome": str(reparo_nome or "").strip(),
         "percentual": str(percentual if percentual is not None else "100").strip() or "100",
+        "local": str(local or "").strip() or "residencial",
     }
     guardadas = _variaveis_normalizadas(variaveis)
     if guardadas:
@@ -513,6 +515,61 @@ def quantitativos_do_rascunho(dados: dict):
     return QuantitativosEstruturas(partes, extras)
 
 
+# ---------------------------------------------------------------- locais
+# Cada anomalia da aba 2 acontece num local, e usa os quantitativos dele.
+LOCAL_RESIDENCIAL = "residencial"
+LOCAL_CONDOMINIO = "condominio"
+ROTULO_LOCAL_RESIDENCIAL = "Blocos residenciais"
+ROTULO_LOCAL_CONDOMINIO = "Todo o condomínio"
+
+
+def locais_do_rascunho(dados: dict) -> list[tuple[str, str]]:
+    """(chave, rótulo) dos locais: blocos residenciais, cada outra edificação e o condomínio."""
+    locais = [(LOCAL_RESIDENCIAL, ROTULO_LOCAL_RESIDENCIAL)]
+    for estrutura in (dados or {}).get("estruturas") or []:
+        if not residencial(estrutura):
+            locais.append((estrutura.get("id"), estrutura.get("nome") or "Outra edificação"))
+    locais.append((LOCAL_CONDOMINIO, ROTULO_LOCAL_CONDOMINIO))
+    return locais
+
+
+def local_valido(dados: dict, local) -> str:
+    """O local, ou "Blocos residenciais" se ele não existe mais."""
+    chaves = {chave for chave, _rotulo in locais_do_rascunho(dados)}
+    return local if local in chaves else LOCAL_RESIDENCIAL
+
+
+def estruturas_do_local(dados: dict, local) -> list[dict]:
+    estruturas = (dados or {}).get("estruturas") or []
+    if local == LOCAL_CONDOMINIO:
+        return list(estruturas)
+    if local == LOCAL_RESIDENCIAL:
+        return [e for e in estruturas if residencial(e)]
+    return [e for e in estruturas if e.get("id") == local]
+
+
+def quantitativos_por_local(dados: dict) -> dict:
+    """Quantitativos de cada local (chave do local -> QuantitativosEstruturas).
+
+    Blocos residenciais e "Todo o condomínio" incluem caixas e calçadas; uma
+    outra edificação usa só as medidas dela.
+    """
+    from core.area_comum_calculos import QuantitativosEstruturas
+
+    condominio = quantitativos_do_condominio(dados)
+    extras = {chave: condominio.get(chave, 0.0) for chave in CHAVES_QTD_CONDOMINIO}
+    por_id = {
+        e.get("id"): quantitativos_da_estrutura(e)
+        for e in (dados or {}).get("estruturas") or []
+    }
+    saida = {}
+    for chave, _rotulo in locais_do_rascunho(dados):
+        partes = [por_id[e.get("id")] for e in estruturas_do_local(dados, chave)]
+        tem_condominio = chave in (LOCAL_RESIDENCIAL, LOCAL_CONDOMINIO)
+        saida[chave] = QuantitativosEstruturas(partes, extras if tem_condominio else None)
+    return saida
+
+
 def novo_rascunho() -> dict:
     padrao_pct = percentuais_padrao()
     return {
@@ -672,6 +729,7 @@ def normalizar_rascunho(dados) -> dict:
             reparo_nome=item.get("reparo_nome"),
             percentual=item.get("percentual") or "100",
             variaveis=item.get("variaveis"),
+            local=item.get("local"),
         )
         if _texto(item.get("id")):
             linha["id"] = _texto(item.get("id"))

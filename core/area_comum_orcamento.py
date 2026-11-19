@@ -331,6 +331,46 @@ def _flags_etapas_fixas(
     return flags
 
 
+LOCAL_PADRAO = "residencial"
+
+
+def local_da_anomalia(anomalia: dict, quantitativos_por_local: dict | None) -> str:
+    """Local da anomalia; um local que não existe mais volta a "Blocos residenciais"."""
+    local = str((anomalia or {}).get("local") or LOCAL_PADRAO)
+    if quantitativos_por_local and local not in quantitativos_por_local:
+        return LOCAL_PADRAO
+    return local
+
+
+def limites_fachada_por_local(
+    anomalias,
+    catalogo,
+    quantitativos: dict,
+    etapas_por_id=None,
+    quantitativos_por_local: dict | None = None,
+):
+    """limitar_revestimento_fachada dentro de cada local.
+
+    A fachada do salão não "empresta" área para o reboco dos blocos: cada local
+    tem o próprio teto (a área de fachada dele).
+    """
+    if not quantitativos_por_local:
+        return limitar_revestimento_fachada(anomalias, catalogo, quantitativos, etapas_por_id)
+    por_local: dict[str, list] = {}
+    for anomalia in anomalias or []:
+        local = local_da_anomalia(anomalia, quantitativos_por_local)
+        por_local.setdefault(local, []).append(anomalia)
+    limites: dict = {}
+    avisos: dict = {}
+    for local, grupo in por_local.items():
+        lim, av = limitar_revestimento_fachada(
+            grupo, catalogo, quantitativos_por_local[local], etapas_por_id
+        )
+        limites.update(lim)
+        avisos.update(av)
+    return limites, avisos
+
+
 def sincronizar_grupos_anomalias(
     orcamento: OrcamentoCustomizado,
     *,
@@ -338,6 +378,8 @@ def sincronizar_grupos_anomalias(
     catalogo: dict,
     quantitativos: dict,
     etapas_por_id: dict,
+    quantitativos_por_local: dict | None = None,
+    rotulos_locais: dict | None = None,
     sinapi,
     uf: str,
     catalogo_composicoes=None,
@@ -351,6 +393,8 @@ def sincronizar_grupos_anomalias(
     """Reconstrói grupos auto (SP / anomalias / pintura / entulho / limpeza) e preserva manuais.
 
     Ordem final: etapas de início → anomalias → manuais → etapas de fim.
+    Cada anomalia usa os quantitativos do seu local (quantitativos_por_local);
+    as etapas fixas usam `quantitativos` (blocos residenciais).
     """
     catalogo_composicoes = _catalogo_composicoes(catalogo_composicoes)
     flags = _flags_etapas_fixas(
@@ -380,11 +424,8 @@ def sincronizar_grupos_anomalias(
         por_origem_fixa[chave] = grupo
 
     grupos_anomalia: list[dict] = []
-    limites_fachada, _avisos_fachada = limitar_revestimento_fachada(
-        anomalias,
-        catalogo,
-        quantitativos,
-        etapas_por_id,
+    limites_fachada, _avisos_fachada = limites_fachada_por_local(
+        anomalias, catalogo, quantitativos, etapas_por_id, quantitativos_por_local
     )
     for anomalia in anomalias or []:
         nome = str(anomalia.get("nome") or "").strip()
@@ -399,10 +440,13 @@ def sincronizar_grupos_anomalias(
         if reparo is None:
             continue
         titulo = _titulo_grupo_anomalia(anomalia, reparo)
+        local = local_da_anomalia(anomalia, quantitativos_por_local)
+        if local != LOCAL_PADRAO and (rotulos_locais or {}).get(local):
+            titulo = f"{titulo} — {rotulos_locais[local]}"
         grupo = _montar_grupo_itens_sinapi(
             nome=titulo,
             itens=itens_efetivos_reparo(reparo, etapas_por_id),
-            quantitativos=quantitativos,
+            quantitativos=(quantitativos_por_local or {}).get(local, quantitativos),
             percentual=anomalia.get("percentual"),
             sinapi=sinapi,
             uf=uf,

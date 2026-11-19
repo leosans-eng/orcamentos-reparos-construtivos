@@ -25,6 +25,7 @@ from ui.widgets import (
     aplicar_icone_janela,
     centralizar_janela,
     formatar_decimal_br,
+    parse_decimal_br,
     preparar_toplevel,
     vincular_tooltip,
 )
@@ -68,6 +69,9 @@ class JanelaORCCAD:
         self._job_feedback = None
         self._refs_icones: list = []
         self._vars_medidas: dict[tuple[str, str], tk.StringVar] = {}
+        self._tabela = None
+        self._linhas_comodos: list = []  # widgets das linhas de cômodos
+        self._assinatura_comodos = None
         self._resultados: dict[str, ResultadoDesenho | None] = {
             "externa": None,
             "hall": None,
@@ -100,7 +104,9 @@ class JanelaORCCAD:
         raiz.columnconfigure(0, weight=1)
         raiz.rowconfigure(0, weight=1)
 
-        self.painel = PainelDesenho2D(raiz, on_resultado=self._ao_resultado)
+        self.painel = PainelDesenho2D(
+            raiz, on_resultado=self._ao_resultado, paredes=not self.vinculado
+        )
         self.painel.grid(row=0, column=0, sticky="nsew")
 
         lado = ttk.Frame(raiz, padding=10)
@@ -203,6 +209,7 @@ class JanelaORCCAD:
         cores = self._cores
         tabela = ttk.Frame(lado)
         tabela.pack(anchor="w", fill="x")
+        self._tabela = tabela
         tabela.columnconfigure(1, weight=1, uniform="medida")
         tabela.columnconfigure(2, weight=1, uniform="medida")
         for coluna, texto in ((1, "Área"), (2, "Perímetro")):
@@ -268,6 +275,204 @@ class JanelaORCCAD:
         parte = "da externa" if camada == "externa" else "do hall"
         self._mostrar_feedback(f"Copiado: {texto} ({medida} {parte})")
 
+    def _copiar_valor(self, valor: float, descricao: str):
+        texto = formatar_decimal_br(valor, 2)
+        try:
+            self.janela.clipboard_clear()
+            self.janela.clipboard_append(texto)
+        except tk.TclError:
+            return
+        self._mostrar_feedback(f"Copiado: {texto} ({descricao})")
+
+    # ------------------------------------------------------------ cômodos
+
+    def _atualizar_comodos(self):
+        """Linhas de cômodos na mesma grade da tabela de medidas."""
+        if self._tabela is None or self.vinculado:
+            return
+        comodos = self.painel.comodos()
+        tem_paredes = self.painel.tem_paredes()
+        espessura = self.painel.espessura_paredes
+        assinatura = (
+            tem_paredes,
+            espessura,
+            tuple(
+                (c.nome, round(c.area_exibida, 4), round(c.perimetro_exibido, 4))
+                for c in comodos
+            ),
+        )
+        if assinatura == self._assinatura_comodos:
+            return
+        self._assinatura_comodos = assinatura
+        for widget in self._linhas_comodos:
+            widget.destroy()
+        self._linhas_comodos = []
+        self.painel.destacar_comodo(None)
+        if not tem_paredes:
+            return
+
+        cores = self._cores
+        tabela = self._tabela
+        linha = 3
+        separador = ttk.Separator(tabela)
+        separador.grid(row=linha, column=0, columnspan=3, sticky="ew", pady=(10, 6))
+        self._linhas_comodos.append(separador)
+        linha += 1
+
+        # Espessura das paredes (0 = medidas pelo eixo das paredes).
+        rotulo_esp = ttk.Label(tabela, text="Espessura das paredes")
+        rotulo_esp.grid(row=linha, column=0, sticky="w", padx=(0, 12), pady=(0, 6))
+        quadro_esp = ttk.Frame(tabela)
+        quadro_esp.grid(row=linha, column=1, columnspan=2, sticky="e", pady=(0, 6))
+        var_esp = tk.StringVar(value=formatar_decimal_br(espessura * 100, 1))
+        entrada_esp = ttk.Entry(quadro_esp, textvariable=var_esp, width=5, justify="right")
+        entrada_esp.pack(side="left")
+        ttk.Label(quadro_esp, text=" cm").pack(side="left")
+        vincular_tooltip(
+            entrada_esp,
+            "Desconta as paredes das medidas dos cômodos.\n"
+            "A linha Externa é a face de fora: a parede fica toda para dentro.\n"
+            "Paredes internas são o eixo: metade para cada lado.\n"
+            "0 = medidas pelo eixo.",
+        )
+        entrada_esp.bind("<Return>", lambda _e: self._aplicar_espessura(var_esp))
+        entrada_esp.bind("<KP_Enter>", lambda _e: self._aplicar_espessura(var_esp))
+        entrada_esp.bind("<FocusOut>", lambda _e: self._aplicar_espessura(var_esp))
+        self._linhas_comodos += [rotulo_esp, quadro_esp]
+        linha += 1
+
+        titulo = ttk.Label(tabela, text="Cômodos", font=("Segoe UI", 9, "bold"))
+        titulo.grid(row=linha, column=0, sticky="w", pady=(0, 2))
+        self._linhas_comodos.append(titulo)
+        if espessura > 0:
+            for coluna, texto in ((1, "Área útil"), (2, "Perím. útil")):
+                cabecalho = ttk.Label(tabela, text=texto, foreground=cores.texto_suave)
+                cabecalho.grid(row=linha, column=coluna, sticky="e", pady=(0, 2))
+                self._linhas_comodos.append(cabecalho)
+        linha += 1
+
+        if not comodos:
+            aviso = ttk.Label(
+                tabela, text="Nenhum cômodo fechado", foreground=cores.texto_suave
+            )
+            aviso.grid(row=linha, column=0, columnspan=3, sticky="w")
+            self._linhas_comodos.append(aviso)
+            return
+
+        sufixo = " útil" if espessura > 0 else ""
+        for indice, comodo in enumerate(comodos):
+            nome = ttk.Label(tabela, text=comodo.nome, cursor="xterm")
+            nome.grid(row=linha, column=0, sticky="w", padx=(0, 12), pady=1)
+            nome.bind(
+                "<Double-Button-1>",
+                lambda _e, i=indice, w=nome: self._editar_nome_comodo(i, w),
+            )
+            vincular_tooltip(nome, "Clique duas vezes para dar um nome")
+            celulas = [nome]
+            for coluna, valor, unidade, medida in (
+                (1, comodo.area_exibida, "m²", "área" + sufixo),
+                (2, comodo.perimetro_exibido, "m", "perímetro" + sufixo),
+            ):
+                celula = self._celula_copiavel(
+                    tabela,
+                    f"{formatar_decimal_br(valor, 2)} {unidade}",
+                    valor,
+                    f"{medida} de {comodo.nome}",
+                    bold=False,
+                )
+                celula.grid(row=linha, column=coluna, sticky="e", pady=1)
+                celulas.append(celula)
+            for celula in celulas:
+                celula.bind(
+                    "<Enter>",
+                    lambda _e, i=indice: self.painel.destacar_comodo(i),
+                    add="+",
+                )
+                celula.bind(
+                    "<Leave>", lambda _e: self.painel.destacar_comodo(None), add="+"
+                )
+            self._linhas_comodos += celulas
+            linha += 1
+
+        total_area = sum(c.area_exibida for c in comodos)
+        total_perim = sum(c.perimetro_exibido for c in comodos)
+        rotulo_total = ttk.Label(tabela, text="Total", font=("Segoe UI", 9, "bold"))
+        rotulo_total.grid(row=linha, column=0, sticky="w", pady=(4, 0))
+        self._linhas_comodos.append(rotulo_total)
+        for coluna, valor, unidade, medida in (
+            (1, total_area, "m²", f"área{sufixo} total dos cômodos"),
+            (2, total_perim, "m", f"soma dos perímetros{sufixo} dos cômodos"),
+        ):
+            celula = self._celula_copiavel(
+                tabela, f"{formatar_decimal_br(valor, 2)} {unidade}", valor, medida
+            )
+            celula.grid(row=linha, column=coluna, sticky="e", pady=(4, 0))
+            self._linhas_comodos.append(celula)
+
+    def _aplicar_espessura(self, var: tk.StringVar):
+        texto = var.get().strip() or "0"
+        try:
+            cm = parse_decimal_br(texto)
+        except ValueError:
+            cm = -1
+        if cm < 0 or cm > 100:
+            var.set(formatar_decimal_br(self.painel.espessura_paredes * 100, 1))
+            self._mostrar_feedback("Espessura inválida: use de 0 a 100 cm.")
+            return "break"
+        self.painel.definir_espessura(cm / 100.0)
+        return "break"
+
+    def _editar_nome_comodo(self, indice: int, rotulo: ttk.Label):
+        """Troca o nome na tabela por um campo de texto (Enter confirma)."""
+        info = rotulo.grid_info()
+        var = tk.StringVar(value=rotulo.cget("text"))
+        entrada = ttk.Entry(self._tabela, textvariable=var, width=16)
+        entrada.grid(
+            row=info["row"], column=0, sticky="we", padx=(0, 12), pady=1
+        )
+        entrada.focus_set()
+        entrada.select_range(0, "end")
+        terminou = False
+
+        def aplicar(_e=None):
+            nonlocal terminou
+            if terminou:
+                return "break"
+            terminou = True
+            texto = var.get()
+            entrada.destroy()
+            self.painel.renomear_comodo(indice, texto)
+            return "break"
+
+        def cancelar(_e=None):
+            nonlocal terminou
+            terminou = True
+            entrada.destroy()
+            return "break"
+
+        entrada.bind("<Return>", aplicar)
+        entrada.bind("<KP_Enter>", aplicar)
+        entrada.bind("<Escape>", cancelar)
+        entrada.bind("<FocusOut>", aplicar)
+        self._linhas_comodos.append(entrada)
+
+    def _celula_copiavel(self, parent, texto, valor, descricao, *, bold=True):
+        cores = self._cores
+        celula = ttk.Label(
+            parent,
+            text=texto,
+            font=("Segoe UI", 9, "bold" if bold else "normal"),
+            anchor="e",
+            cursor="hand2",
+        )
+        celula.bind("<Button-1>", lambda _e: self._copiar_valor(valor, descricao))
+        celula.bind(
+            "<Enter>", lambda _e: celula.configure(foreground=cores.titulo), add="+"
+        )
+        celula.bind("<Leave>", lambda _e: celula.configure(foreground=""), add="+")
+        vincular_tooltip(celula, "Clique para copiar")
+        return celula
+
     def _mostrar_feedback(self, texto: str):
         self.var_feedback.set(texto)
         if self._job_feedback is not None:
@@ -328,7 +533,7 @@ class JanelaORCCAD:
         self.janela.bind("<Control-o>", lambda _e: self._abrir_arquivo())
 
     def _tem_desenho(self) -> bool:
-        return bool(self.painel.tem_pontos("externa") or self.painel.tem_pontos("hall"))
+        return self.painel.tem_desenho()
 
     def tem_alteracoes(self) -> bool:
         """Há algo desenhado que ainda não foi salvo em arquivo?"""
@@ -471,6 +676,7 @@ class JanelaORCCAD:
                 unidade = "m²" if tipo == "area" else "m"
                 var.set(f"{formatar_decimal_br(valor, 2)} {unidade}")
         self._atualizar_arquivo()
+        self._atualizar_comodos()
 
         for chave, (var, tipo, camada) in self._vars_campos.items():
             texto = valor_para_campo(self._resultados.get(camada), tipo)

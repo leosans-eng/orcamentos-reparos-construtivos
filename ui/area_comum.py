@@ -11,10 +11,15 @@ from tkinter import filedialog, messagebox, ttk
 
 from core.area_comum import (
     BDI_PADRAO,
+    CHAVES_PCT_CONDOMINIO,
+    LOCAL_CONDOMINIO,
+    LOCAL_RESIDENCIAL,
+    estruturas_do_local,
+    locais_do_rascunho,
     nova_anomalia_orcamento,
     novo_rascunho,
     normalizar_rascunho,
-    quantitativos_do_rascunho,
+    quantitativos_por_local,
     rascunho_tem_conteudo,
 )
 from core.area_comum_anomalias import (
@@ -25,12 +30,12 @@ from core.area_comum_anomalias import (
     percentuais_aba1_validos,
     percentuais_dos_fatores,
     perguntas_variaveis_reparo,
-    limitar_revestimento_fachada,
     reparo_recomendado,
     valores_considerados_reparo,
 )
 from core.area_comum_calculos import numero, parse_expressao
 from core.area_comum_orcamento import (
+    limites_fachada_por_local,
     migrar_extras_para_grupos,
     sincronizar_grupos_anomalias,
 )
@@ -301,6 +306,8 @@ class AreaComumFrame(tk.Frame):
         self._binds_historico = []
         self._catalogo = {}
         self._quantitativos = {}
+        self._quantitativos_por_local: dict = {}
+        self._locais: list[tuple[str, str]] = [(LOCAL_RESIDENCIAL, "Blocos residenciais")]
         self._anomalias_orcamento = []
         self._etapas = []
         self._etapa_por_id = {}
@@ -708,9 +715,10 @@ class AreaComumFrame(tk.Frame):
         """
         return self.aba_dados.percentuais_aba2()
 
-    def _tipos_para_reparo(self) -> tuple[str, str]:
+    def _tipos_para_reparo(self, local=LOCAL_RESIDENCIAL) -> tuple[str, str]:
         """Tipo de estrutura e de cobertura usados para sugerir o reparo."""
-        estrutura = self.aba_dados.primeira_residencial() or self.aba_dados.atual
+        do_local = self.aba_dados.estruturas_do_local(local)
+        estrutura = (do_local[0] if do_local else None) or self.aba_dados.atual
         if estrutura is None:
             return "", ""
         return (
@@ -723,6 +731,65 @@ class AreaComumFrame(tk.Frame):
         self._marcar_sujo()
         self._registrar_historico(descricao)
         self._recalcular()
+        self._redesenhar_anomalias_orcamento()
+
+    def _anomalias_no_local(self, local) -> list[dict]:
+        return [
+            linha for linha in self._anomalias_orcamento
+            if str(linha.get("local") or LOCAL_RESIDENCIAL) == local
+        ]
+
+    def _remover_anomalias_do_local(self, local) -> None:
+        """A estrutura foi removida: as anomalias dela saem junto."""
+        self._anomalias_orcamento = [
+            linha for linha in self._anomalias_orcamento
+            if str(linha.get("local") or LOCAL_RESIDENCIAL) != local
+        ]
+
+    def _escolher_local(self, titulo, mensagem, atual=LOCAL_RESIDENCIAL):
+        """Lista dos locais; devolve a chave escolhida ou None."""
+        rotulos = [rotulo for _chave, rotulo in self._locais]
+        chave_por_rotulo = {rotulo: chave for chave, rotulo in self._locais}
+        escolhido = self._escolher_lista(
+            titulo,
+            mensagem,
+            rotulos,
+            selecionar=dict(self._locais).get(atual),
+        )
+        return chave_por_rotulo.get(escolhido) if escolhido else None
+
+    def _alterar_local_anomalia(self, item_id):
+        linha = next(
+            (item for item in self._anomalias_orcamento if item.get("id") == item_id),
+            None,
+        )
+        if linha is None:
+            return
+        atual = self._local_da_linha(linha)
+        nome = linha.get("nome") or "anomalia"
+        novo = self._escolher_local("Local da anomalia", f"Onde acontece «{nome}»?", atual)
+        if novo is None or novo == atual:
+            return
+        reparo = self._reparo_da_linha(linha) or {}
+        faltantes = self._coletar_percentuais_faltantes(reparo, novo)
+        if faltantes is None:
+            return
+        self._gravar_percentuais_aba1(faltantes, novo)
+        linha["local"] = novo
+        self._aplicar_percentuais_aba1(
+            list(reparo.get("percentuais_aba1") or []),
+            linha.get("percentual") or "100",
+            origem_nome=nome,
+            excluir_id=linha.get("id"),
+            local=novo,
+        )
+        self._marcar_sujo()
+        self._registrar_historico("Alterar local da anomalia")
+        self._recalcular()
+        self._redesenhar_anomalias_orcamento()
+        if hasattr(self, "tree_anomalias") and self.tree_anomalias.exists(item_id):
+            self.tree_anomalias.selection_set(item_id)
+            self.tree_anomalias.see(item_id)
 
     def _ao_modificar_observacoes(self, _event=None):
         """Mantém uma cópia do texto fora do widget.
@@ -789,7 +856,7 @@ class AreaComumFrame(tk.Frame):
         self._estilizar_tree_anomalias()
         self.tree_anomalias = ttk.Treeview(
             tabela,
-            columns=("reparo", "percentual", "valor", "valor_atual"),
+            columns=("local", "reparo", "percentual", "valor", "valor_atual"),
             show="tree headings",
             selectmode="browse",
             style="Anomalias.Treeview",
@@ -798,11 +865,13 @@ class AreaComumFrame(tk.Frame):
         self.tree_anomalias.tag_configure("impar", background=self._cor_linha_impar)
         self.tree_anomalias.tag_configure("aviso", background=self._cor_linha_aviso)
         self.tree_anomalias.heading("#0", text="Anomalia")
+        self.tree_anomalias.heading("local", text="Local", anchor="w")
         self.tree_anomalias.heading("reparo", text="Reparo", anchor="center")
         self.tree_anomalias.heading("percentual", text="% qtd.", anchor="center")
         self.tree_anomalias.heading("valor", text="Quantitativo considerado", anchor="e")
         self.tree_anomalias.heading("valor_atual", text="Valor atual", anchor="e")
         self.tree_anomalias.column("#0", width=260)
+        self.tree_anomalias.column("local", width=150, anchor="w")
         self.tree_anomalias.column("reparo", width=200, anchor="center")
         # "% qtd." e "Valor atual" têm conteúdo curto: largura fixa, sem esticar.
         # O espaço que sobra na tela vai para as colunas de texto.
@@ -1674,8 +1743,12 @@ class AreaComumFrame(tk.Frame):
                 pass
         self._job_calculo = None
         self._sincronizar_percentual_pintura_fachada()
-        # Blocos residenciais somados + itens do condomínio (ver quantitativos_do_rascunho).
-        self._quantitativos = quantitativos_do_rascunho(self.aba_dados.dados_para_calculo())
+        # Cada local (blocos residenciais, cada outra edificação, todo o
+        # condomínio) tem os próprios quantitativos; cada anomalia usa o do seu.
+        dados = self.aba_dados.dados_para_calculo()
+        self._locais = locais_do_rascunho(dados)
+        self._quantitativos_por_local = quantitativos_por_local(dados)
+        self._quantitativos = self._quantitativos_por_local[LOCAL_RESIDENCIAL]
         self.aba_dados.atualizar_exibicao()
         self._atualizar_rotulo_percentual_pintura()
 
@@ -2432,13 +2505,20 @@ class AreaComumFrame(tk.Frame):
         if not reparos:
             self._mostrar_feedback("Essa anomalia ainda não tem reparo cadastrado.", "orange")
             return
+        local = LOCAL_RESIDENCIAL
+        # Só pergunta o local quando há outras edificações (salão, guarita...).
+        if len(self._locais) > 2:
+            local = self._escolher_local("Local da anomalia", f"Onde acontece «{nome}»?")
+            if local is None:
+                return
         reparo = reparos[0]
         if len(reparos) > 1:
             nomes = [r.get("nome") or f"Reparo {i+1}" for i, r in enumerate(reparos)]
+            tipo_estrutura, tipo_cobertura = self._tipos_para_reparo(local)
             sugerido, dica = reparo_recomendado(
                 anomalias[nome],
-                tipo_estrutura=self._tipos_para_reparo()[0],
-                tipo_cobertura=self._tipos_para_reparo()[1],
+                tipo_estrutura=tipo_estrutura,
+                tipo_cobertura=tipo_cobertura,
             )
             selecionar = None
             if sugerido is not None:
@@ -2456,26 +2536,28 @@ class AreaComumFrame(tk.Frame):
             if not escolhido:
                 return
             reparo = reparos[nomes.index(escolhido)]
-        percentuais_novos = self._coletar_percentuais_faltantes(reparo)
+        percentuais_novos = self._coletar_percentuais_faltantes(reparo, local)
         if percentuais_novos is None:
             return
         percentual = "100"
         variaveis = self._coletar_variaveis_reparo(reparo)
         if variaveis is None:
             return
-        self._gravar_percentuais_aba1(percentuais_novos)
+        self._gravar_percentuais_aba1(percentuais_novos, local)
         nova = nova_anomalia_orcamento(
             nome=nome,
             reparo_id=reparo.get("id"),
             reparo_nome=reparo.get("nome"),
             percentual=percentual,
             variaveis=variaveis,
+            local=local,
         )
         self._aplicar_percentuais_aba1(
             list(reparo.get("percentuais_aba1") or []),
             percentual,
             origem_nome=nome,
             excluir_id=nova.get("id"),
+            local=local,
         )
         self._anomalias_orcamento.append(nova)
         self._redesenhar_anomalias_orcamento()
@@ -2519,7 +2601,13 @@ class AreaComumFrame(tk.Frame):
                 valores = self._valores_linha_anomalia(linha, limites_fachada)
                 tags = self._tags_linha_anomalia(indice, linha, reduzidas)
             else:
-                valores = (linha.get("reparo_nome") or "Reparo padrão", "", "", "")
+                valores = (
+                    self._rotulo_local(linha),
+                    linha.get("reparo_nome") or "Reparo padrão",
+                    "",
+                    "",
+                    "",
+                )
                 tags = ("par" if indice % 2 else "impar",)
             self.tree_anomalias.insert(
                 "",
@@ -2554,6 +2642,7 @@ class AreaComumFrame(tk.Frame):
 
     def _valores_linha_anomalia(self, linha, limites_fachada=None) -> tuple:
         return (
+            self._rotulo_local(linha),
             linha.get("reparo_nome") or "Reparo padrão",
             f"{linha.get('percentual') or '100'}%",
             self._texto_valor_reparo(linha, limites_fachada=limites_fachada),
@@ -2603,12 +2692,32 @@ class AreaComumFrame(tk.Frame):
 
     def _limites_fachada(self):
         """(limites, avisos) da redução de revestimento de fachada, para todas as linhas."""
-        return limitar_revestimento_fachada(
+        return limites_fachada_por_local(
             self._anomalias_orcamento,
             self._catalogo,
             self._quantitativos or {},
             getattr(self, "_etapa_por_id", None),
+            self._quantitativos_por_local,
         )
+
+    # ------------------------------------------------- locais das anomalias
+    def _local_da_linha(self, linha) -> str:
+        local = str((linha or {}).get("local") or LOCAL_RESIDENCIAL)
+        if local not in dict(self._locais):
+            return LOCAL_RESIDENCIAL
+        return local
+
+    def _rotulo_local(self, linha) -> str:
+        return dict(self._locais).get(self._local_da_linha(linha), "Blocos residenciais")
+
+    def _q_da_linha(self, linha) -> dict:
+        return self._quantitativos_por_local.get(self._local_da_linha(linha)) or (
+            self._quantitativos or {}
+        )
+
+    def _ids_estruturas_do_local(self, local) -> set:
+        dados = {"estruturas": [{"id": e.id, "tipo": e.tipo} for e in self.aba_dados.estruturas]}
+        return {e["id"] for e in estruturas_do_local(dados, local)}
 
     def _texto_valor_reparo(
         self, linha, *, aplicar_limite=True, limites_fachada=None
@@ -2624,7 +2733,7 @@ class AreaComumFrame(tk.Frame):
             limites, avisos = limites_fachada or self._limites_fachada()
         pares = valores_considerados_reparo(
             reparo,
-            self._quantitativos or {},
+            self._q_da_linha(linha),
             linha.get("percentual"),
             getattr(self, "_etapa_por_id", None),
             linha.get("variaveis"),
@@ -2646,12 +2755,7 @@ class AreaComumFrame(tk.Frame):
     def _aviso_reducao_fachada(self, item_id) -> str:
         if not item_id:
             return ""
-        _limites, avisos = limitar_revestimento_fachada(
-            self._anomalias_orcamento,
-            self._catalogo,
-            self._quantitativos or {},
-            getattr(self, "_etapa_por_id", None),
-        )
+        _limites, avisos = self._limites_fachada()
         nomes = avisos.get(str(item_id)) or ()
         if not nomes:
             return ""
@@ -2765,14 +2869,37 @@ class AreaComumFrame(tk.Frame):
         reparo = self._reparo_da_linha(linha) or {}
         return list(reparo.get("percentuais_aba1") or [])
 
-    def _anomalias_que_usam_percentual(self, chave, excluir_id=None) -> list[dict]:
+    def _anomalias_que_usam_percentual(
+        self, chave, excluir_id=None, *, local=None, origem=None
+    ) -> list[dict]:
+        """Anomalias cujo reparo usa o percentual `chave` da aba 1.
+
+        local: só as que dividem estruturas com esse local (o mesmo campo da
+        aba 1). origem: só as que cobrem a estrutura (ou o condomínio) em que o
+        campo foi editado.
+        """
+        if local is not None:
+            alvo = self._ids_estruturas_do_local(local)
+        elif origem is not None and origem != LOCAL_CONDOMINIO:
+            alvo = {origem}
+        else:
+            alvo = None
+        do_condominio = chave in CHAVES_PCT_CONDOMINIO
         resultado = []
         excluir = str(excluir_id or "")
         for linha in self._anomalias_orcamento:
             if excluir and str(linha.get("id") or "") == excluir:
                 continue
-            if chave in self._chaves_percentuais_linha(linha):
-                resultado.append(linha)
+            if chave not in self._chaves_percentuais_linha(linha):
+                continue
+            local_linha = self._local_da_linha(linha)
+            if do_condominio:
+                # Caixas e calçadas só existem em Blocos residenciais e Todo o condomínio.
+                if local_linha not in (LOCAL_RESIDENCIAL, LOCAL_CONDOMINIO):
+                    continue
+            elif alvo is not None and not (alvo & self._ids_estruturas_do_local(local_linha)):
+                continue
+            resultado.append(linha)
         return resultado
 
     def _percentuais_iguais(self, a, b) -> bool:
@@ -2788,23 +2915,27 @@ class AreaComumFrame(tk.Frame):
         *,
         origem_nome,
         excluir_id=None,
+        local=LOCAL_RESIDENCIAL,
     ) -> bool:
+        pcts = self.aba_dados.percentuais_do_local(local)
         chaves = [
             c
             for c in (chaves or [])
-            if c in self.var_percentuais and c != "pintura_fachada"
+            if c in pcts and c != "pintura_fachada"
         ]
         if not chaves:
             return False
         novo_fmt = formatar_decimal_br(numero(percentual_texto, percentual=True))
         conflitos = []
         for chave in chaves:
-            atual = (self.var_percentuais[chave].get() or "").strip()
+            atual = (pcts[chave].get() or "").strip()
             if not atual:
                 continue
             if self._percentuais_iguais(atual, novo_fmt):
                 continue
-            donos = self._anomalias_que_usam_percentual(chave, excluir_id=excluir_id)
+            donos = self._anomalias_que_usam_percentual(
+                chave, excluir_id=excluir_id, local=local
+            )
             conflitos.append((chave, atual, donos))
         pular = set()
         if conflitos:
@@ -2832,10 +2963,10 @@ class AreaComumFrame(tk.Frame):
             for chave in chaves:
                 if chave in pular:
                     continue
-                atual = (self.var_percentuais[chave].get() or "").strip()
+                atual = (pcts[chave].get() or "").strip()
                 if atual and self._percentuais_iguais(atual, novo_fmt):
                     continue
-                self.var_percentuais[chave].set(novo_fmt)
+                pcts[chave].set(novo_fmt)
                 mudou = True
         finally:
             self._sincronizando_percentuais = False
@@ -2874,22 +3005,33 @@ class AreaComumFrame(tk.Frame):
         )
 
     def _coluna_tree_anomalias(self, event) -> str:
+        """Nome da coluna sob o mouse ("local", "reparo", "percentual"...).
+
+        Pelo nome, e não pela posição (#1, #2…), para que acrescentar uma
+        coluna não troque a ação dos cliques.
+        """
         try:
             coluna = self.tree_anomalias.identify_column(event.x)
             linha = self.tree_anomalias.identify_row(event.y)
         except tk.TclError:
             return ""
-        if not linha:
+        if not linha or not coluna.startswith("#"):
             return ""
-        return coluna
+        indice = int(coluna[1:])
+        if indice == 0:
+            return "anomalia"
+        colunas = self.tree_anomalias["columns"]
+        return colunas[indice - 1] if indice <= len(colunas) else ""
 
     def _dica_celula_anomalia(self, event) -> tuple[str, bool]:
         coluna = self._coluna_tree_anomalias(event)
-        if coluna == "#1":
+        if coluna == "local":
+            return "Alterar local", True
+        if coluna == "reparo":
             return "Alterar reparo", True
-        if coluna == "#2":
+        if coluna == "percentual":
             return "Alterar percentual", True
-        if coluna != "#3":
+        if coluna != "valor":
             return "", False
         partes = []
         clicavel = self._linha_tem_variavel(event)
@@ -3046,21 +3188,23 @@ class AreaComumFrame(tk.Frame):
             self._limpar_selecao_anomalias()
             return
         coluna = self._coluna_tree_anomalias(event)
-        if coluna not in ("#1", "#2", "#3"):
+        if coluna not in ("local", "reparo", "percentual", "valor"):
             return
-        if coluna == "#3" and not self._linha_tem_variavel(event):
+        if coluna == "valor" and not self._linha_tem_variavel(event):
             return
         self.tree_anomalias.selection_set(row)
-        if coluna == "#1":
+        if coluna == "local":
+            self.after_idle(lambda: self._alterar_local_anomalia(row))
+        elif coluna == "reparo":
             self.after_idle(lambda: self._alterar_reparo_anomalia(row))
-        elif coluna == "#2":
+        elif coluna == "percentual":
             self.after_idle(lambda: self._alterar_percentual_anomalia(row))
         else:
             self.after_idle(lambda: self._alterar_variaveis_anomalia(row))
         return "break"
 
     def _ao_duplo_clique_anomalia(self, event=None):
-        if event is not None and self._coluna_tree_anomalias(event) != "#2":
+        if event is not None and self._coluna_tree_anomalias(event) != "percentual":
             return
         selecao = self.tree_anomalias.selection()
         if not selecao:
@@ -3135,6 +3279,7 @@ class AreaComumFrame(tk.Frame):
                     novo,
                     origem_nome=linha.get("nome") or "",
                     excluir_id=linha.get("id"),
+                    local=self._local_da_linha(linha),
                 )
         linha["percentual"] = novo
         self._marcar_sujo()
@@ -3166,10 +3311,11 @@ class AreaComumFrame(tk.Frame):
         nomes = [r.get("nome") or f"Reparo {i + 1}" for i, r in enumerate(reparos)]
         atual = linha.get("reparo_nome") or ""
         selecionar = atual if atual in nomes else None
+        tipo_estrutura, tipo_cobertura = self._tipos_para_reparo(self._local_da_linha(linha))
         _sugerido, dica = reparo_recomendado(
             cadastro,
-            tipo_estrutura=self._tipos_para_reparo()[0],
-            tipo_cobertura=self._tipos_para_reparo()[1],
+            tipo_estrutura=tipo_estrutura,
+            tipo_cobertura=tipo_cobertura,
         )
         escolhido = self._escolher_lista(
             "Trocar reparo",
@@ -3181,7 +3327,8 @@ class AreaComumFrame(tk.Frame):
         if not escolhido or escolhido == atual:
             return
         reparo = reparos[nomes.index(escolhido)]
-        percentuais_novos = self._coletar_percentuais_faltantes(reparo)
+        local = self._local_da_linha(linha)
+        percentuais_novos = self._coletar_percentuais_faltantes(reparo, local)
         if percentuais_novos is None:
             return
         variaveis = self._coletar_variaveis_reparo(
@@ -3189,7 +3336,7 @@ class AreaComumFrame(tk.Frame):
         )
         if variaveis is None:
             return
-        self._gravar_percentuais_aba1(percentuais_novos)
+        self._gravar_percentuais_aba1(percentuais_novos, local)
         linha["reparo_id"] = reparo.get("id") or ""
         linha["reparo_nome"] = reparo.get("nome") or escolhido
         if variaveis:
@@ -3201,6 +3348,7 @@ class AreaComumFrame(tk.Frame):
             linha.get("percentual") or "100",
             origem_nome=nome,
             excluir_id=linha.get("id"),
+            local=local,
         )
         self._marcar_sujo()
         self._registrar_historico("Alterar reparo da anomalia")
@@ -3215,7 +3363,8 @@ class AreaComumFrame(tk.Frame):
         var = var if var is not None else self.var_percentuais[chave]
         self._pct_em_edicao[chave] = var.get()
 
-    def _ao_sair_percentual(self, chave, widget, var=None):
+    def _ao_sair_percentual(self, chave, widget, var=None, origem=None):
+        """origem: id da estrutura (ou "condominio") do campo editado na aba 1."""
         self._resolver_formula(widget, percentual=True)
         var = var if var is not None else self.var_percentuais[chave]
         if (
@@ -3239,7 +3388,7 @@ class AreaComumFrame(tk.Frame):
             self._marcar_sujo()
             self._agendar_calculo()
             return
-        ligadas = self._anomalias_que_usam_percentual(chave)
+        ligadas = self._anomalias_que_usam_percentual(chave, origem=origem)
         if not ligadas:
             return
         bruto = str(atual or "").strip()
@@ -3266,10 +3415,16 @@ class AreaComumFrame(tk.Frame):
             self._registrar_historico("Sincronizar percentual da anomalia")
             self._recalcular()
 
-    def _percentuais_pintura_das_anomalias(self) -> list[float]:
+    def _percentuais_pintura_das_anomalias(self, estrutura_id=None) -> list[float]:
+        """% das anomalias de pintura que cobrem a estrutura (padrão: o 1º bloco residencial)."""
+        if estrutura_id is None:
+            primeira = self.aba_dados.primeira_residencial()
+            estrutura_id = primeira.id if primeira else None
         valores = []
         for linha in self._anomalias_orcamento:
             if "pintura_fachada" not in self._chaves_percentuais_linha(linha):
+                continue
+            if estrutura_id not in self._ids_estruturas_do_local(self._local_da_linha(linha)):
                 continue
             try:
                 valores.append(numero(linha.get("percentual") or "100", percentual=True))
@@ -3290,19 +3445,22 @@ class AreaComumFrame(tk.Frame):
             return True
 
     def _sincronizar_percentual_pintura_fachada(self):
+        """Pintura da fachada de cada estrutura = maior % das anomalias de
+        pintura que acontecem nela (se o usuário não fixou o valor à mão)."""
         if self._pintura_fachada_manual:
-            return
-        valores = self._percentuais_pintura_das_anomalias()
-        if not valores:
-            return
-        fmt = formatar_decimal_br(max(valores))
-        var = self.var_percentuais["pintura_fachada"]
-        atual = (var.get() or "").strip()
-        if atual and self._percentuais_iguais(atual, fmt):
             return
         self._sincronizando_percentuais = True
         try:
-            var.set(fmt)
+            for estrutura in self.aba_dados.estruturas:
+                valores = self._percentuais_pintura_das_anomalias(estrutura.id)
+                if not valores:
+                    continue
+                fmt = formatar_decimal_br(max(valores))
+                var = estrutura.vars_pct["pintura_fachada"]
+                atual = (var.get() or "").strip()
+                if atual and self._percentuais_iguais(atual, fmt):
+                    continue
+                var.set(fmt)
         finally:
             self._sincronizando_percentuais = False
 
@@ -3320,7 +3478,9 @@ class AreaComumFrame(tk.Frame):
             return
         self.var_percentual_pintura.set(f"{texto}%")
 
-    def _coletar_percentuais_faltantes(self, reparo) -> dict[str, str] | None:
+    def _coletar_percentuais_faltantes(
+        self, reparo, local=LOCAL_RESIDENCIAL
+    ) -> dict[str, str] | None:
         """Pergunta os percentuais da aba 1 que a fórmula usa e ainda estão vazios.
 
         None se o usuário cancelar. Os que a anomalia já declara são preenchidos
@@ -3328,13 +3488,14 @@ class AreaComumFrame(tk.Frame):
         """
         declarados = set(percentuais_aba1_validos((reparo or {}).get("percentuais_aba1")))
         declarados.discard("pintura_fachada")
+        pcts = self.aba_dados.percentuais_do_local(local)
         respostas: dict[str, str] = {}
         for chave in percentuais_dos_fatores(
             reparo, getattr(self, "_etapa_por_id", None)
         ):
-            if chave in declarados or chave not in self.var_percentuais:
+            if chave in declarados or chave not in pcts:
                 continue
-            if (self.var_percentuais[chave].get() or "").strip():
+            if (pcts[chave].get() or "").strip():
                 continue
             rotulo = ROTULOS_PERCENTUAIS_ABA1.get(chave, chave)
             valor = self._perguntar_percentual_aba1(rotulo)
@@ -3370,13 +3531,14 @@ class AreaComumFrame(tk.Frame):
                 continue
             return formatar_decimal_br(valor)
 
-    def _gravar_percentuais_aba1(self, valores: dict[str, str]) -> None:
+    def _gravar_percentuais_aba1(self, valores: dict[str, str], local=LOCAL_RESIDENCIAL) -> None:
         if not valores:
             return
+        pcts = self.aba_dados.percentuais_do_local(local)
         self._sincronizando_percentuais = True
         try:
             for chave, valor in valores.items():
-                var = self.var_percentuais.get(chave)
+                var = pcts.get(chave)
                 if var is not None:
                     var.set(valor)
         finally:
@@ -4355,6 +4517,8 @@ class AreaComumFrame(tk.Frame):
             anomalias=self._anomalias_orcamento,
             catalogo=self._catalogo,
             quantitativos=self._quantitativos,
+            quantitativos_por_local=self._quantitativos_por_local,
+            rotulos_locais=dict(self._locais),
             etapas_por_id=self._etapa_por_id,
             sinapi=self.ctx.sinapi,
             uf=uf,

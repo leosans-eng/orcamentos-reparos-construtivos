@@ -100,7 +100,7 @@ class HubFrame(tk.Frame):
             "Orçamentos",
             [
                 {
-                    "titulo": "Orçamento\nCustomizado",
+                    "titulo": "Orçamento Customizado",
                     "descricao": "Monte um orçamento livre, com as etapas e os itens que quiser",
                     "modulo": "orcamento_customizado",
                     "habilitado": True,

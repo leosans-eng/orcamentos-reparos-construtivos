@@ -212,5 +212,11 @@ def area_comum_rascunhos_dir() -> Path:
     return pasta
 
 
+def orccad_desenhos_dir() -> Path:
+    pasta = dados_usuario_dir() / "orccad_desenhos"
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta
+
+
 def area_comum_autosave_path() -> Path:
     return area_comum_rascunhos_dir() / "_autosave.json"

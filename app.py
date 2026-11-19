@@ -54,6 +54,7 @@ class OrcApp:
 
         self.janela.title(TITULOS_JANELA["hub"])
         self.janela.minsize(940, 620)
+        self.janela.protocol("WM_DELETE_WINDOW", self._ao_fechar_programa)
         centralizar_janela_principal(
             self.janela, LARGURA_JANELA_PADRAO, ALTURA_JANELA_PADRAO
         )
@@ -301,7 +302,26 @@ class OrcApp:
             pode_alterar_cadastros=self._pode_alterar_cadastros(),
         )
 
+    def _orccad_pode_fechar(self) -> bool:
+        """Se houver desenho avulso não salvo, pergunta antes (False = desistiu)."""
+        if self._janela_orccad is None:
+            return True
+        try:
+            return self._janela_orccad.pode_fechar()
+        except tk.TclError:
+            return True
+
+    def _ao_fechar_programa(self):
+        if not self._orccad_pode_fechar():
+            return
+        try:
+            self.janela.destroy()
+        except tk.TclError:
+            pass
+
     def _logout(self):
+        if not self._orccad_pode_fechar():
+            return
         from atualizacao import reiniciar_coordenador_atualizacao
         from core.api_client import get_client
         from core.composicoes_proprias_storage import limpar_cache as limpar_cache_composicoes

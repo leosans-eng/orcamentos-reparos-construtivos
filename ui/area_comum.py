@@ -746,10 +746,18 @@ class AreaComumFrame(tk.Frame):
             if str(linha.get("local") or LOCAL_RESIDENCIAL) != local
         ]
 
-    def _escolher_local(self, titulo, mensagem, atual=LOCAL_RESIDENCIAL):
-        """Lista dos locais; devolve a chave escolhida ou None."""
-        rotulos = [rotulo for _chave, rotulo in self._locais]
-        chave_por_rotulo = {rotulo: chave for chave, rotulo in self._locais}
+    def _escolher_local(self, titulo, mensagem, atual=LOCAL_RESIDENCIAL, *, so_agrupados=False):
+        """Lista dos locais; devolve a chave escolhida ou None.
+
+        so_agrupados: sem os blocos residenciais separados (ao adicionar uma
+        anomalia, para não alongar a lista à toa).
+        """
+        locais = self._locais
+        if so_agrupados:
+            separados = {e.id for e in self.aba_dados.estruturas if e.residencial}
+            locais = [(c, r) for c, r in locais if c not in separados]
+        rotulos = [rotulo for _chave, rotulo in locais]
+        chave_por_rotulo = {rotulo: chave for chave, rotulo in locais}
         escolhido = self._escolher_lista(
             titulo,
             mensagem,
@@ -856,7 +864,7 @@ class AreaComumFrame(tk.Frame):
         self._estilizar_tree_anomalias()
         self.tree_anomalias = ttk.Treeview(
             tabela,
-            columns=("local", "reparo", "percentual", "valor", "valor_atual"),
+            columns=("reparo", "local", "percentual", "valor", "valor_atual"),
             show="tree headings",
             selectmode="browse",
             style="Anomalias.Treeview",
@@ -865,14 +873,14 @@ class AreaComumFrame(tk.Frame):
         self.tree_anomalias.tag_configure("impar", background=self._cor_linha_impar)
         self.tree_anomalias.tag_configure("aviso", background=self._cor_linha_aviso)
         self.tree_anomalias.heading("#0", text="Anomalia")
-        self.tree_anomalias.heading("local", text="Local", anchor="w")
         self.tree_anomalias.heading("reparo", text="Reparo", anchor="center")
+        self.tree_anomalias.heading("local", text="Local", anchor="center")
         self.tree_anomalias.heading("percentual", text="% qtd.", anchor="center")
         self.tree_anomalias.heading("valor", text="Quantitativo considerado", anchor="e")
         self.tree_anomalias.heading("valor_atual", text="Valor atual", anchor="e")
         self.tree_anomalias.column("#0", width=260)
-        self.tree_anomalias.column("local", width=150, anchor="w")
         self.tree_anomalias.column("reparo", width=200, anchor="center")
+        self.tree_anomalias.column("local", width=150, anchor="center")
         # "% qtd." e "Valor atual" têm conteúdo curto: largura fixa, sem esticar.
         # O espaço que sobra na tela vai para as colunas de texto.
         self.tree_anomalias.column("percentual", width=58, minwidth=50, anchor="center",
@@ -1506,28 +1514,45 @@ class AreaComumFrame(tk.Frame):
         """Abre o ORCCAD com a planta da estrutura que está na tela."""
         from ui.orccad import JanelaORCCAD
 
-        if self._janela_orccad is not None:
-            try:
-                if self._janela_orccad.janela.winfo_exists():
-                    self._janela_orccad.trazer_frente()
-                    return
-            except tk.TclError:
-                self._janela_orccad = None
-
         estrutura = self.aba_dados.atual
         if estrutura is None:
             return
+        janela = self._janela_orccad
+        if janela is not None:
+            try:
+                aberta = bool(janela.janela.winfo_exists())
+            except tk.TclError:
+                aberta = False
+            if not aberta:
+                self._janela_orccad = None
+            elif self._orccad_estrutura_id == estrutura.id:
+                janela.trazer_frente()
+                return
+            else:
+                # Aberto com a planta de outra estrutura: troca para a da tela.
+                anterior = self.aba_dados.estrutura_por_id(self._orccad_estrutura_id)
+                nome_anterior = anterior.nome if anterior else "outra estrutura"
+                if janela.alterado_desde_abertura() and not messagebox.askyesno(
+                    "Trocar de planta",
+                    f"O ORCCAD está com a planta de «{nome_anterior}», ainda não salva "
+                    "no orçamento.\n\n"
+                    f"Descartar essas alterações e abrir a planta de «{estrutura.nome}»?",
+                    parent=self.winfo_toplevel(),
+                ):
+                    janela.trazer_frente()
+                    return
+                janela._fechar()
+                self._janela_orccad = None
+
         self._orccad_estrutura_id = estrutura.id
         self._janela_orccad = JanelaORCCAD(
             self.winfo_toplevel(),
             on_salvar_principal=self._ao_salvar_desenho_principal,
             on_fechar=self._ao_fechar_orccad,
             desenho_inicial=estrutura.desenho,
+            nome_planta=estrutura.nome,
+            com_hall=estrutura.residencial,
         )
-        try:
-            self._janela_orccad.janela.title(f"ORC — Desenho de metragens · {estrutura.nome}")
-        except tk.TclError:
-            pass
 
     def _ao_fechar_orccad(self):
         self._janela_orccad = None
@@ -2506,9 +2531,14 @@ class AreaComumFrame(tk.Frame):
             self._mostrar_feedback("Essa anomalia ainda não tem reparo cadastrado.", "orange")
             return
         local = LOCAL_RESIDENCIAL
-        # Só pergunta o local quando há outras edificações (salão, guarita...).
-        if len(self._locais) > 2:
-            local = self._escolher_local("Local da anomalia", f"Onde acontece «{nome}»?")
+        # Só pergunta o local quando há outras edificações (salão, guarita...);
+        # blocos residenciais separados se escolhem depois, clicando em "Local".
+        if any(not e.residencial for e in self.aba_dados.estruturas):
+            local = self._escolher_local(
+                "Local da anomalia",
+                f"Onde acontece «{nome}»?",
+                so_agrupados=True,
+            )
             if local is None:
                 return
         reparo = reparos[0]
@@ -2602,8 +2632,8 @@ class AreaComumFrame(tk.Frame):
                 tags = self._tags_linha_anomalia(indice, linha, reduzidas)
             else:
                 valores = (
-                    self._rotulo_local(linha),
                     linha.get("reparo_nome") or "Reparo padrão",
+                    self._rotulo_local(linha),
                     "",
                     "",
                     "",
@@ -2642,8 +2672,8 @@ class AreaComumFrame(tk.Frame):
 
     def _valores_linha_anomalia(self, linha, limites_fachada=None) -> tuple:
         return (
-            self._rotulo_local(linha),
             linha.get("reparo_nome") or "Reparo padrão",
+            self._rotulo_local(linha),
             f"{linha.get('percentual') or '100'}%",
             self._texto_valor_reparo(linha, limites_fachada=limites_fachada),
             self._texto_valor_atual_anomalia(linha),

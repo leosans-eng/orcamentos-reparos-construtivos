@@ -101,11 +101,13 @@ _PASSO_GRADE_SNAP = 0.1
 class PainelDesenho2D(tk.Frame):
     """Widget reutilizável: desenho em metros com Orto, Polar e snap."""
 
-    def __init__(self, parent, *, on_resultado=None, paredes=False):
+    def __init__(self, parent, *, on_resultado=None, paredes=False, hall=True):
         cores = cores_tema(parent)
         super().__init__(parent, bg=cores.fundo)
         self._cores = cores
         self.on_resultado = on_resultado
+        # Sem hall (ex.: salão de festas): sem a camada HALL nem o Offset que a cria.
+        self._com_hall = bool(hall)
         self._camadas = {
             "externa": {"pontos": [], "fechado": False},
             "hall": {"pontos": [], "fechado": False},
@@ -551,7 +553,7 @@ class PainelDesenho2D(tk.Frame):
                 self.espessura_paredes = 0.0
         if self.tem_desenho():
             self.enquadrar_quando_visivel()
-            self._set_status("Planta carregada. Edite Externa/Hall ou salve no orçamento.")
+            self._set_status("Planta carregada.")
         else:
             self._set_status(self._msg_inicio())
 
@@ -637,10 +639,9 @@ class PainelDesenho2D(tk.Frame):
         barra = ttk.Frame(self, padding=(8, 6))
         barra.pack(fill="x")
 
-        camadas_chip = [
-            ("externa", "EXTERNA", COR_EXTERNA),
-            ("hall", "HALL", COR_HALL),
-        ]
+        camadas_chip = [("externa", "EXTERNA", COR_EXTERNA)]
+        if self._com_hall:
+            camadas_chip.append(("hall", "HALL", COR_HALL))
         if self._com_paredes:
             camadas_chip.append(("paredes", "PAREDES", COR_PAREDE))
         dicas_camada = {
@@ -677,6 +678,8 @@ class PainelDesenho2D(tk.Frame):
                 cor_icone=estilos.icone,
                 refs=self._refs_icones,
             )
+            if nome_icone.startswith("cad-offset") and not (self._com_hall or self._com_paredes):
+                return botao  # o Offset cria o hall; sem hall, fica de fora
             botao.pack(side="left", padx=padx)
             vincular_tooltip(botao, f"{titulo}\n{detalhe}" if detalhe else titulo)
             return botao

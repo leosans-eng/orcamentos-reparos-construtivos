@@ -58,9 +58,15 @@ class JanelaORCCAD:
         on_salvar_principal=None,
         on_fechar=None,
         desenho_inicial=None,
+        nome_planta: str = "",
+        com_hall: bool = True,
     ):
         self.on_salvar_principal = on_salvar_principal
         self.on_fechar = on_fechar
+        # Na Área Comum, cada estrutura tem a própria planta (nome_planta);
+        # outras edificações (salão, guarita...) não têm hall.
+        self.nome_planta = str(nome_planta or "").strip()
+        self.com_hall = bool(com_hall)
         # Aberto pela Área Comum, o desenho alimenta o orçamento; aberto pelo
         # Hub, serve só para medir a planta e pode ser salvo em arquivo.
         self.vinculado = on_salvar_principal is not None
@@ -105,7 +111,10 @@ class JanelaORCCAD:
         raiz.rowconfigure(0, weight=1)
 
         self.painel = PainelDesenho2D(
-            raiz, on_resultado=self._ao_resultado, paredes=not self.vinculado
+            raiz,
+            on_resultado=self._ao_resultado,
+            paredes=not self.vinculado,
+            hall=self.com_hall,
         )
         self.painel.grid(row=0, column=0, sticky="nsew")
 
@@ -119,16 +128,21 @@ class JanelaORCCAD:
             text="Medidas para cálculos" if vinculado else "Medidas",
             font=("Segoe UI", 11, "bold"),
         ).pack(anchor="w")
-        ttk.Label(
-            lado,
-            text=(
-                "Desenhe a EXTERNA e o HALL (Offset ou do zero) "
-                "para obter as medidas."
-                if vinculado
-                else "Desenhe a planta para ver a área e o perímetro."
-            ),
-            wraplength=280,
-        ).pack(anchor="w", pady=(4, 10))
+        if self.nome_planta:
+            ttk.Label(
+                lado,
+                text=f"Planta: {self.nome_planta}",
+                foreground=cores.titulo,
+                font=("Segoe UI", 9, "bold"),
+            ).pack(anchor="w", pady=(2, 10))
+        elif not vinculado:
+            ttk.Label(
+                lado,
+                text="Desenhe a planta para ver a área e o perímetro.",
+                wraplength=280,
+            ).pack(anchor="w", pady=(4, 10))
+        else:
+            ttk.Frame(lado, height=10).pack(anchor="w")
 
         self._montar_tabela_medidas(lado)
 
@@ -165,6 +179,7 @@ class JanelaORCCAD:
         if desenho_inicial:
             self.painel.carregar(desenho_inicial)
         self._desenho_salvo = self.painel.exportar()
+        self._desenho_aberto = self._desenho_salvo
         self._atualizar_arquivo()
         self.janela.after_idle(lambda: self.painel.canvas.focus_set())
         self.janela.after_idle(self.painel.enquadrar_quando_visivel)
@@ -178,14 +193,11 @@ class JanelaORCCAD:
             text="Campos da Área Comum",
             font=("Segoe UI", 9, "bold"),
         ).pack(anchor="w", pady=(0, 4))
-        ttk.Label(
-            lado,
-            text="Externa (azul) e Hall (verde) alimentam grupos diferentes.",
-            wraplength=280,
-        ).pack(anchor="w", pady=(0, 6))
 
         camada_atual = None
         for chave, rotulo, tipo, camada in CAMPOS_DESENHO_AREA_COMUM:
+            if camada == "hall" and not self.com_hall:
+                continue
             if camada != camada_atual:
                 camada_atual = camada
                 ttk.Label(
@@ -216,9 +228,8 @@ class JanelaORCCAD:
             ttk.Label(tabela, text=texto, foreground=cores.texto_suave).grid(
                 row=0, column=coluna, sticky="e", pady=(0, 2)
             )
-        for linha, (camada, nome) in enumerate(
-            (("externa", "Externa"), ("hall", "Hall")), start=1
-        ):
+        camadas = [("externa", "Externa")] + ([("hall", "Hall")] if self.com_hall else [])
+        for linha, (camada, nome) in enumerate(camadas, start=1):
             ttk.Label(tabela, text=nome, font=("Segoe UI", 9, "bold")).grid(
                 row=linha, column=0, sticky="w", padx=(0, 12), pady=1
             )
@@ -535,6 +546,13 @@ class JanelaORCCAD:
     def _tem_desenho(self) -> bool:
         return self.painel.tem_desenho()
 
+    def alterado_desde_abertura(self) -> bool:
+        """O desenho mudou desde que a janela abriu (ou desde a última gravação)?"""
+        try:
+            return self.painel.exportar() != self._desenho_aberto
+        except tk.TclError:
+            return False
+
     def tem_alteracoes(self) -> bool:
         """Há algo desenhado que ainda não foi salvo em arquivo?"""
         if self.vinculado or not hasattr(self, "painel"):
@@ -546,6 +564,8 @@ class JanelaORCCAD:
 
     def _atualizar_titulo(self):
         titulo = "ORC — Desenho de metragens"
+        if self.nome_planta:
+            titulo += f" · {self.nome_planta}"
         if self._caminho is not None:
             titulo += f" — {self._caminho.name}"
         try:
@@ -713,7 +733,7 @@ class JanelaORCCAD:
             )
             return
         hall = self._resultados.get("hall")
-        if hall is None or not hall.fechado:
+        if self.com_hall and (hall is None or not hall.fechado):
             if not messagebox.askyesno(
                 "Hall incompleto",
                 "O HALL ainda não está completo.\n\n"

@@ -937,8 +937,12 @@ class AbaDadosIniciais:
         if "fachada" in r:
             r["fachada"].configure(text=_total(q, "area_fachada_total_m2", "m²"))
         if "hall" in r:
-            texto = _total(q, "area_piso_hall_total_m2", "m²")
-            r["hall"].configure(text=texto.replace("no total", "de piso no total"))
+            partes = []
+            if q.get("area_piso_hall_total_m2"):
+                partes.append(f"{_n(q['area_piso_hall_total_m2'])} m² de piso")
+            if q.get("area_alvenaria_hall_total_m2"):
+                partes.append(f"{_n(q['area_alvenaria_hall_total_m2'])} m² de paredes")
+            r["hall"].configure(text=" · ".join(partes) + (" no total" if partes else ""))
 
     # ============================================================ estrutura na tela
     def _escolher(self, estrutura):

@@ -524,9 +524,15 @@ ROTULO_LOCAL_CONDOMINIO = "Todo o condomínio"
 
 
 def locais_do_rascunho(dados: dict) -> list[tuple[str, str]]:
-    """(chave, rótulo) dos locais: blocos residenciais, cada outra edificação e o condomínio."""
+    """(chave, rótulo) dos locais, nesta ordem: todos os blocos residenciais,
+    cada bloco residencial separado (só se houver mais de um), cada outra
+    edificação e o condomínio inteiro."""
+    estruturas = (dados or {}).get("estruturas") or []
+    residenciais = [e for e in estruturas if residencial(e)]
     locais = [(LOCAL_RESIDENCIAL, ROTULO_LOCAL_RESIDENCIAL)]
-    for estrutura in (dados or {}).get("estruturas") or []:
+    if len(residenciais) > 1:
+        locais += [(e.get("id"), e.get("nome") or "Bloco") for e in residenciais]
+    for estrutura in estruturas:
         if not residencial(estrutura):
             locais.append((estrutura.get("id"), estrutura.get("nome") or "Outra edificação"))
     locais.append((LOCAL_CONDOMINIO, ROTULO_LOCAL_CONDOMINIO))

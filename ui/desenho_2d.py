@@ -687,7 +687,8 @@ class PainelDesenho2D(tk.Frame):
             (0, 0),
             "Polilinha",
             "Desenhe de ponto a ponto na camada ativa.\n"
-            "Clique nos vértices ou digite a medida em metros e Enter.",
+            "Clique nos vértices ou digite a medida em metros e Enter.\n"
+            "Atalho: L.",
         )
         _btn(
             "square-outline",
@@ -802,7 +803,7 @@ class PainelDesenho2D(tk.Frame):
             "  arrastar ← esquerda: cruzamento verde (tudo o que tocar)\n"
             "  Clique substitui · Shift+clique adiciona/remove · clique no vazio limpa\n"
             "  Shift+janela acrescenta à seleção · Esc limpa\n"
-            "Seleção: M move · Delete apaga · quadrados azuis (grips) arrastam vértices\n"
+            "L: linha (polilinha) · Seleção: M move · Delete apaga · grips arrastam vértices\n"
             "Duplo clique numa linha: digitar o novo comprimento\n"
             "Offset: 1º distância vazia · 2º comprimento (digite ou arraste)\n"
             "Shift: trava H/V · F11: guias · digite medida + Enter\n"
@@ -1921,6 +1922,11 @@ class PainelDesenho2D(tk.Frame):
             return "break"
         if tecla == "m" and not self._buffer and self._ferramenta == "selecao":
             self.iniciar_mover()
+            return "break"
+        if tecla == "l" and not self._buffer:
+            # Como no AutoCAD: L = LINE (se já estiver desenhando, continua).
+            if self._ferramenta != "polilinha":
+                self._usar("polilinha")
             return "break"
         return None
 

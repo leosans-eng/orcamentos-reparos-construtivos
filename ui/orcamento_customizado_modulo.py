@@ -31,6 +31,42 @@ class OrcamentoCustomizadoModulo(tk.Frame):
             return
         self._mostrar_selecao()
 
+    # ------------------------------------------------- troca de tema
+    # Trocar o tema recria a tela. As alterações já são gravadas no servidor a
+    # cada edição; aqui só se guarda onde o usuário estava (o orçamento
+    # aberto) e o histórico de Desfazer, para reabrir tudo igual.
+
+    def exportar_estado_tema(self):
+        editor = self._frame_editor
+        if editor is None or self._orcamento_aberto_id is None:
+            return None
+        # Tenta gravar o que estiver pendente; se falhar, o orçamento em
+        # memória vai junto e continua marcado como "não salvo".
+        gravado = editor._persistir_orcamento_atual()
+        return {
+            "orcamento_id": self._orcamento_aberto_id,
+            "orcamento": None if gravado else editor.orcamento,
+            "undo": list(editor._historico_undo),
+            "redo": list(editor._historico_redo),
+        }
+
+    def importar_estado_tema(self, estado):
+        if not estado:
+            return
+        self._abrir_editor(estado["orcamento_id"])
+        editor = self._frame_editor
+        if editor is None:
+            return
+        if estado.get("orcamento") is not None:
+            editor.orcamento = estado["orcamento"]
+            editor._orcamento_sujo = True
+            editor._aplicar_orcamento_na_interface()
+            editor._atualizar_grade()
+        editor._historico_undo[:] = estado.get("undo") or []
+        editor._historico_redo[:] = estado.get("redo") or []
+        editor._snapshot_base = editor._capturar_snapshot()
+        editor._atualizar_botoes_historico()
+
     def _mostrar_selecao(self):
         if self._frame_editor is not None:
             self._frame_editor.pack_forget()

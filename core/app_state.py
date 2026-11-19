@@ -41,6 +41,15 @@ NOMES_GRUPOS_REPARO = {
 }
 
 
+def cor_estado_sinapi(estado: str, cores) -> str:
+    """Cor do quadradinho da SINAPI (rodapé e Configurações)."""
+    if estado == "ok":
+        return "#66bb6a" if cores.escuro else "#2e7d32"
+    if estado == "erro":
+        return cores.perigo
+    return "#ffb74d" if cores.escuro else "#e09100"  # andamento / atenção
+
+
 class AppContext:
     def __init__(self):
         self.sinapi = SinapiBase.vazio()
@@ -272,15 +281,8 @@ class AppContext:
                 return
             from ui.temas import cores_tema
 
-            cores = cores_tema(quadrado)
             estado, explicacao = self.estado_sinapi()
-            cor = {
-                "ok": "#66bb6a" if cores.escuro else "#2e7d32",
-                "andamento": "#ffb74d" if cores.escuro else "#e09100",
-                "atencao": "#ffb74d" if cores.escuro else "#e09100",
-                "erro": cores.perigo,
-            }[estado]
-            quadrado.configure(bg=cor)
+            quadrado.configure(bg=cor_estado_sinapi(estado, cores_tema(quadrado)))
             self.dica_sinapi = explicacao
         except tk.TclError:
             pass

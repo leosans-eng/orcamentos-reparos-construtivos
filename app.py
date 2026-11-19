@@ -41,6 +41,8 @@ class OrcApp:
         self._modulo_atual = None
         self._frames = {}
         self.pediu_logout = False
+        # Trabalho guardado dos módulos durante a troca de tema (nome -> estado).
+        self._estados_tema: dict = {}
         self._after_sinapi = None
 
         self.janela = tk.Tk()
@@ -176,7 +178,7 @@ class OrcApp:
             pass
 
     def _abrir_configuracoes(self):
-        abrir_dialogo_configuracoes(self.janela, self.ctx)
+        abrir_dialogo_configuracoes(self.janela, self.ctx, offline=self.offline)
 
     def _atualizar_botao_configuracoes(self, cores):
         btn = getattr(self.ctx, "btn_configuracoes_rodape", None)
@@ -214,12 +216,33 @@ class OrcApp:
             if nome == "hub":
                 continue
             frame = self._frames.pop(nome)
+            # Os módulos são recriados com as cores novas; antes, cada um
+            # entrega uma "foto" do trabalho em andamento para não perdê-lo.
+            exportar = getattr(frame, "exportar_estado_tema", None)
+            if callable(exportar):
+                try:
+                    self._estados_tema[nome] = exportar()
+                except Exception as exc:  # noqa: BLE001 — trocar tema não pode travar
+                    print(f"[ORC] Não foi possível guardar o estado de {nome}: {exc}")
             try:
                 frame.destroy()
             except tk.TclError:
                 pass
         if atual and atual != "hub":
             self.mostrar_modulo(atual)
+
+    def _restaurar_estado_tema(self, nome):
+        """Devolve ao módulo recém-criado o trabalho guardado na troca de tema."""
+        estado = self._estados_tema.pop(nome, None)
+        if estado is None:
+            return
+        importar = getattr(self._frames.get(nome), "importar_estado_tema", None)
+        if not callable(importar):
+            return
+        try:
+            importar(estado)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ORC] Não foi possível restaurar o estado de {nome}: {exc}")
 
     def _aplicar_chrome(self):
         cores = cores_tema(self.janela)
@@ -443,6 +466,7 @@ class OrcApp:
                 if nome == "area_privativa":
                     self._frames[nome].ativar_scroll()
                 self._frames[nome].focar()
+                self._restaurar_estado_tema(nome)
         except Exception as exc:
             print(f"[ORC] Falha ao abrir módulo {nome}: {exc}")
             if nome in self._frames and nome != "hub":

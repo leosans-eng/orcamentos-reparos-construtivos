@@ -2540,7 +2540,7 @@ class VistaIsometricaBloco(tk.Frame):
     Desenhado com polígonos do próprio Canvas: paredes da mais distante para a
     mais próxima, a laje da cobertura sobre elas e, por fim, a platibanda (um
     muro fino na borda da laje). Cada parte recebe uma etiqueta
-    ("paredes", "platibanda", "cobertura", "pavimentos") para poder ser
+    ("paredes", "platibanda", "cobertura", "pavimentos", "beiral") para poder ser
     destacada.
     """
 
@@ -2793,6 +2793,17 @@ class VistaIsometricaBloco(tk.Frame):
                     *tela(bx, by, altura_total), *tela(ax, ay, altura_total),
                     fill=fill_p, outline=contorno_p, tags=("platibanda",),
                 )
+
+        # Beiral/calha é uma medida linear: acende só o contorno mais alto.
+        # Por ser a linha mais alta, nada fica na frente dela em nenhum ângulo.
+        if destaque == "beiral":
+            pts_borda = []
+            for x, y in girado:
+                pts_borda.extend(tela(x, y, altura_total))
+            pts_borda.extend(pts_borda[:2])
+            c.create_line(
+                *pts_borda, fill=_ISO_DESTAQUE_LINHA, width=3, tags=("beiral",)
+            )
 
         # 4) Selo com a quantidade de blocos (quadrado, no canto).
         if self._blocos > 1:

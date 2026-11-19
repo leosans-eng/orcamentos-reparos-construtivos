@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import queue
+import threading
 import tkinter as tk
+import traceback
 from tkinter import messagebox, ttk
 
 from core.api_client import get_client
 from core.api_exceptions import ApiError
-from ui.icones import criar_botao_ttk_com_icone, definir_estado_botao_icone
+from ui.icones import IndicadorAmpulheta, criar_botao_ttk_com_icone, definir_estado_botao_icone
 from ui.temas import aplicar_chrome_dialogo
 from ui.widgets import (
     aplicar_icone_janela,
@@ -16,8 +19,13 @@ from ui.widgets import (
     criar_botao_cancelar,
     criar_botao_fechar,
     focar_entrada_apos_exibir,
+    montar_opcoes_senha,
     preparar_toplevel,
 )
+
+
+def _cor_aviso(cores) -> str:
+    return "#ffb74d" if cores.escuro else "#b26a00"
 
 
 def _eh_admin(usuario: dict | None) -> bool:
@@ -81,18 +89,24 @@ class DialogoNovoUsuario(tk.Toplevel):
         self.var_admin = tk.BooleanVar(value=False)
 
         self._entrada_usuario = self._campo(inner, "Usuário:", self.var_usuario, 0, mostrar=None)
-        self._campo(inner, "Senha:", self.var_senha, 2, mostrar="•")
+        entrada_senha = self._campo(inner, "Senha:", self.var_senha, 2, mostrar="•")
         entrada_confirmar = self._campo(
             inner, "Confirmar senha:", self.var_confirmar, 4, mostrar="•"
         )
-        entrada_confirmar.bind("<Return>", lambda _e: self._confirmar())
+        montar_opcoes_senha(
+            inner,
+            [self._entrada_usuario, entrada_senha, entrada_confirmar],
+            ao_confirmar=self._confirmar,
+            bg=cartao,
+            cor_aviso=_cor_aviso(cores),
+        ).grid(row=6, column=0, sticky="ew", pady=(8, 0))
 
         ttk.Checkbutton(
             inner,
             text="Administrador",
             variable=self.var_admin,
             style="Cartao.TCheckbutton",
-        ).grid(row=6, column=0, sticky="w", pady=(10, 0))
+        ).grid(row=7, column=0, sticky="w", pady=(10, 0))
 
         self._lbl_erro = tk.Label(
             painel,
@@ -212,7 +226,13 @@ class DialogoRedefinirSenha(tk.Toplevel):
         self.var_confirmar = tk.StringVar()
         self._entrada_nova = self._campo(inner, "Nova senha:", self.var_nova, 0)
         entrada_confirmar = self._campo(inner, "Confirmar nova senha:", self.var_confirmar, 2)
-        entrada_confirmar.bind("<Return>", lambda _e: self._confirmar())
+        montar_opcoes_senha(
+            inner,
+            [self._entrada_nova, entrada_confirmar],
+            ao_confirmar=self._confirmar,
+            bg=cartao,
+            cor_aviso=_cor_aviso(cores),
+        ).grid(row=4, column=0, sticky="ew", pady=(8, 0))
 
         self._lbl_erro = tk.Label(
             painel,
@@ -286,6 +306,12 @@ class DialogoAdminUsuarios(tk.Toplevel):
         self._refs_icones: list = []
         self._usuarios: list[dict] = []
         self._me: dict | None = None
+        # A lista vem do servidor numa thread (a janela não congela); o
+        # resultado chega por esta fila e é lido pela própria tela.
+        self._fila_lista: queue.Queue = queue.Queue()
+        self._carregando = False
+        self._after_lista = None
+        self._ampulheta = None
 
         self.title("Administrar usuários")
         aplicar_icone_janela(self)
@@ -307,7 +333,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
         ).pack(anchor="w", pady=(0, 4))
         tk.Label(
             painel,
-            text="Crie, ative, promova ou remova usuários da API compartilhada.",
+            text="Crie, ative, promova ou remova usuários da API.",
             font=("Arial", 9),
             fg=cores.texto_suave,
             bg=fundo,
@@ -368,7 +394,7 @@ class DialogoAdminUsuarios(tk.Toplevel):
             refs=self._refs_icones,
         )
         self.btn_excluir.pack(side="left", padx=(0, 4))
-        definir_estado_botao_icone(self.btn_excluir, "disabled")
+        definir_estado_botao_icone(self.btn_excluir, "disabled", apagar=True)
 
         criar_botao_ttk_com_icone(
             linha_botoes,
@@ -407,6 +433,17 @@ class DialogoAdminUsuarios(tk.Toplevel):
         rodape.pack(fill="x", pady=(12, 0))
         criar_botao_fechar(rodape, self.destroy).pack(side="right")
 
+        slot_amp = tk.Frame(rodape, bg=fundo, width=24, height=24)
+        slot_amp.pack(side="left")
+        slot_amp.pack_propagate(False)
+        self._ampulheta = IndicadorAmpulheta(
+            slot_amp, altura=18, cor=cores.titulo, bg=fundo, refs=self._refs_icones
+        )
+        self._lbl_carregando = tk.Label(
+            rodape, text="", font=("Arial", 9), fg=cores.texto_suave, bg=fundo
+        )
+        self._lbl_carregando.pack(side="left", padx=(4, 0))
+
         self.bind("<Escape>", lambda _e: self.destroy())
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.update_idletasks()
@@ -427,14 +464,22 @@ class DialogoAdminUsuarios(tk.Toplevel):
                 return usuario
         return None
 
+    def _eh_voce(self, usuario: dict | None) -> bool:
+        if not usuario or not self._me:
+            return False
+        return str(usuario.get("id")) == str(self._me.get("id"))
+
     def _ao_selecionar(self, _event=None):
         usuario = self._usuario_selecionado()
         tem = usuario is not None
         estado = "normal" if tem else "disabled"
+        # Na própria conta, o servidor recusa desativar, remover admin e
+        # excluir; os botões ficam desativados para nem oferecer.
+        estado_proprio = "disabled" if self._eh_voce(usuario) else estado
         self.btn_senha.config(state=estado)
-        self.btn_ativo.config(state=estado)
-        self.btn_admin.config(state=estado)
-        definir_estado_botao_icone(self.btn_excluir, estado)
+        self.btn_ativo.config(state=estado_proprio)
+        self.btn_admin.config(state=estado_proprio)
+        definir_estado_botao_icone(self.btn_excluir, estado_proprio, apagar=True)
         if not tem:
             self.btn_ativo.config(text="Desativar")
             self.btn_admin.config(text="Tornar admin")
@@ -455,7 +500,8 @@ class DialogoAdminUsuarios(tk.Toplevel):
                 "end",
                 iid=iid,
                 values=(
-                    usuario.get("username", ""),
+                    usuario.get("username", "")
+                    + ("  (você)" if self._eh_voce(usuario) else ""),
                     _rotulo_perfil(usuario),
                     _rotulo_ativo(bool(usuario.get("is_active"))),
                 ),
@@ -467,17 +513,58 @@ class DialogoAdminUsuarios(tk.Toplevel):
         self._ao_selecionar()
 
     def _recarregar(self, selecionar_id: str | None = None):
-        try:
-            self._me = get_client().obter_me()
-            usuarios = get_client().listar_usuarios()
-        except ApiError as exc:
-            messagebox.showwarning(
-                "Administrar usuários",
-                exc.mensagem,
-                parent=self,
-            )
+        if self._carregando:
             return
+        self._carregando = True
+        self._lbl_carregando.config(text="Carregando usuários…")
+        if self._ampulheta is not None:
+            self._ampulheta.iniciar()
+        fila = self._fila_lista
+
+        def trabalho():
+            try:
+                cliente = get_client()
+                fila.put(("ok", (cliente.obter_me(), cliente.listar_usuarios())))
+            except ApiError as exc:
+                fila.put(("erro", exc.mensagem))
+            except Exception:
+                traceback.print_exc()
+                fila.put(("erro", "Não foi possível carregar a lista de usuários."))
+
+        threading.Thread(target=trabalho, daemon=True).start()
+        self._after_lista = self.after(100, lambda: self._receber_lista(selecionar_id))
+
+    def _receber_lista(self, selecionar_id):
+        self._after_lista = None
+        try:
+            status, dado = self._fila_lista.get_nowait()
+        except queue.Empty:
+            self._after_lista = self.after(100, lambda: self._receber_lista(selecionar_id))
+            return
+        self._carregando = False
+        self._lbl_carregando.config(text="")
+        if self._ampulheta is not None:
+            self._ampulheta.parar()
+        if status == "erro":
+            messagebox.showwarning("Administrar usuários", dado, parent=self)
+            return
+        self._me, usuarios = dado
         self._preencher_lista(usuarios, selecionar_id=selecionar_id)
+
+    def destroy(self):
+        if self._after_lista is not None:
+            try:
+                self.after_cancel(self._after_lista)
+            except (tk.TclError, ValueError):
+                pass
+            self._after_lista = None
+        if self._ampulheta is not None:
+            try:
+                self._ampulheta.liberar()
+            except tk.TclError:
+                pass
+            self._ampulheta = None
+        super().destroy()
 
     def _novo_usuario(self):
         def ao_criar(criado: dict):

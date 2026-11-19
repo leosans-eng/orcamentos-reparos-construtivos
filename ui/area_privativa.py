@@ -2215,6 +2215,27 @@ def criar_area_privativa(parent, ctx, on_voltar):
     def desativar_scroll():
         return None
 
+    # Troca de tema: a tela é recriada; o app pede esta "foto" à tela antiga
+    # e entrega à nova, para não perder anomalias, medidas e histórico.
+    def exportar_estado_tema():
+        return {
+            "snap": capturar_snapshot(),
+            "autor": var_proprietario.get(),
+            "undo": list(_historico_undo),
+            "redo": list(_historico_redo),
+        }
+
+    def importar_estado_tema(estado):
+        nonlocal _snapshot_base
+        var_proprietario.set(estado.get("autor", ""))
+        aplicar_snapshot(estado["snap"])
+        _historico_undo[:] = estado.get("undo") or []
+        _historico_redo[:] = estado.get("redo") or []
+        _snapshot_base = capturar_snapshot()
+        atualizar_botoes_historico()
+
+    wrapper.exportar_estado_tema = exportar_estado_tema
+    wrapper.importar_estado_tema = importar_estado_tema
     wrapper.aplicar_sinapi = aplicar_sinapi_na_interface
     wrapper.ativar_scroll = ativar_scroll
     wrapper.desativar_scroll = desativar_scroll

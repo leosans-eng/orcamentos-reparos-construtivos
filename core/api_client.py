@@ -145,8 +145,12 @@ class OrcApiClient:
             timeout=timeout,
         )
         if response.status_code == 401:
-            # O texto padrão do 401 ("Sessão expirada") não faz sentido aqui.
-            raise ApiNaoAutenticadoError("Usuário ou senha incorretos.", 401)
+            # O servidor diz o motivo ("Usuário inexistente", "Senha incorreta").
+            # O texto padrão do 401 ("Sessão expirada") só serve de reserva
+            # para outras telas, não para o login.
+            raise ApiNaoAutenticadoError(
+                self._mensagem_erro(response, "Usuário ou senha incorretos."), 401
+            )
         dados = self._tratar_resposta(response)
         token = dados["access_token"]
         self.access_token = token

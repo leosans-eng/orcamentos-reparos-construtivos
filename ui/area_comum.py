@@ -297,7 +297,7 @@ PARTES_ISOMETRICA = {
     "altura_platibanda_m": "platibanda",
     "area_construida_m2": "cobertura",
     "qtd_aguas_telhado": "cobertura",
-    "perimetro_beiral_m": "cobertura",
+    "perimetro_beiral_m": "beiral",
     "area_cobertura_total_m2": "cobertura",
 }
 
@@ -330,6 +330,7 @@ class AreaComumFrame(tk.Frame):
         self._perguntando_uf = False
         self._aplicando_historico = False
         self._caminho_arquivo = None
+        self._pular_oferta_autosave = False
         self._job_autosave = None
         self._job_municipio = None
         self._job_calculo = None
@@ -427,6 +428,45 @@ class AreaComumFrame(tk.Frame):
             if self.entrada_nome is not None:
                 self.entrada_nome.focus_set()
         except tk.TclError:
+            pass
+
+    # ------------------------------------------------- troca de tema
+    # Trocar o tema recria a tela; o app pede uma "foto" do trabalho à tela
+    # antiga e entrega à nova, com arquivo, "não salvo", histórico e aba.
+
+    def exportar_estado_tema(self) -> dict:
+        try:
+            aba = self.notebook.index("current")
+        except tk.TclError:
+            aba = 0
+        return {
+            "dados": self._capturar_snapshot(),
+            "caminho": self._caminho_arquivo,
+            "sujo": self._sujo,
+            "undo": list(self._historico_undo),
+            "redo": list(self._historico_redo),
+            "aba": aba,
+        }
+
+    def importar_estado_tema(self, estado: dict) -> None:
+        # A tela nova não deve perguntar sobre o autosave: o trabalho vem daqui.
+        self._pular_oferta_autosave = True
+        erro = self._aplicar_rascunho_seguro(
+            estado["dados"], caminho=estado.get("caminho"), normalizar=False
+        )
+        if erro is not None:
+            print(f"[ORC] Área Comum: falha ao restaurar após troca de tema: {erro}")
+            self._pular_oferta_autosave = False
+            return
+        self._sujo = bool(estado.get("sujo"))
+        self._atualizar_rotulo_arquivo()
+        self._historico_undo[:] = estado.get("undo") or []
+        self._historico_redo[:] = estado.get("redo") or []
+        self._snapshot_base = self._capturar_snapshot()
+        self._atualizar_botoes_historico()
+        try:
+            self.notebook.select(int(estado.get("aba") or 0))
+        except (tk.TclError, ValueError):
             pass
 
     def _texto_referencia(self):
@@ -2959,6 +2999,8 @@ class AreaComumFrame(tk.Frame):
         return True
 
     def _oferecer_autosave(self):
+        if self._pular_oferta_autosave:
+            return
         resultado = carregar_autosave()
         if not resultado:
             return

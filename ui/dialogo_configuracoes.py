@@ -4,6 +4,7 @@ from tkinter import messagebox, ttk
 from core.api_client import get_client
 from core.api_config import carregar_config, salvar_config
 from core.api_exceptions import ApiError
+from core.app_state import cor_estado_sinapi
 from ui.dialogo_admin_usuarios import abrir_dialogo_admin_usuarios, usuario_atual_eh_admin
 from ui.icones import criar_botao_ttk_com_icone, criar_label_icone, definir_estado_botao_icone
 from ui.temas import aplicar_chrome_dialogo, aplicar_tema, opcoes_tema, rotulo_tema, salvar_tema, tema_salvo
@@ -13,8 +14,35 @@ from ui.widgets import (
     criar_botao_cancelar,
     criar_botao_fechar,
     focar_entrada_apos_exibir,
+    montar_opcoes_senha,
     preparar_toplevel,
+    vincular_tooltip,
 )
+
+
+def _cor_aviso(cores) -> str:
+    return "#ffb74d" if cores.escuro else "#b26a00"
+
+
+def _texto_ultima_verificacao() -> str:
+    """Ex.: "Última verificação: hoje às 10:35" (lido do status da SINAPI)."""
+    from datetime import date, datetime, timedelta
+
+    from sinapi.atualizador_sinapi import carregar_status
+
+    bruto = carregar_status().get("ultima_verificacao")
+    try:
+        quando = datetime.fromisoformat(str(bruto))
+    except (TypeError, ValueError):
+        return ""
+    hora = quando.strftime("%H:%M")
+    if quando.date() == date.today():
+        dia = "hoje"
+    elif quando.date() == date.today() - timedelta(days=1):
+        dia = "ontem"
+    else:
+        dia = quando.strftime("%d/%m/%Y")
+    return f"Última verificação: {dia} às {hora}"
 
 
 def _formatar_http_status(http: str) -> str:
@@ -75,9 +103,15 @@ class DialogoTrocarSenha(tk.Toplevel):
         self.var_confirmar = tk.StringVar()
 
         self._entrada_atual = self._campo(inner, "Senha atual:", self.var_atual, 0)
-        self._campo(inner, "Nova senha:", self.var_nova, 2)
+        entrada_nova = self._campo(inner, "Nova senha:", self.var_nova, 2)
         entrada_confirmar = self._campo(inner, "Confirmar nova senha:", self.var_confirmar, 4)
-        entrada_confirmar.bind("<Return>", lambda _e: self._confirmar())
+        montar_opcoes_senha(
+            inner,
+            [self._entrada_atual, entrada_nova, entrada_confirmar],
+            ao_confirmar=self._confirmar,
+            bg=cartao,
+            cor_aviso=_cor_aviso(cores),
+        ).grid(row=6, column=0, sticky="ew", pady=(8, 0))
 
         self._lbl_erro = tk.Label(
             painel,
@@ -164,17 +198,18 @@ class DialogoTrocarSenha(tk.Toplevel):
 
 
 class DialogoConfiguracoes(tk.Toplevel):
-    def __init__(self, parent, ctx):
+    def __init__(self, parent, ctx, *, offline=False):
         super().__init__(parent)
         preparar_toplevel(self)
         self.ctx = ctx
+        self.offline = offline
         self._refs_icones: list = []
-        self._trace_status = None
-        self._trace_http = None
+        self._traces: list = []
         self._combo_tema = None
         self._trocando_tema = False
         self._job_tema = None
-        self._eh_admin = usuario_atual_eh_admin()
+        # Sem servidor (modo offline) não há conta nem usuários para mostrar.
+        self._eh_admin = False if offline else usuario_atual_eh_admin()
         self.var_tema = tk.StringVar(master=self)
 
         self.title("Configurações")
@@ -195,18 +230,12 @@ class DialogoConfiguracoes(tk.Toplevel):
         return master if isinstance(master, tk.Tk) else self.winfo_toplevel()
 
     def _soltar_traces(self):
-        if self._trace_status is not None and self.ctx.status_servidor_sinapi is not None:
+        for variavel, trace_id in self._traces:
             try:
-                self.ctx.status_servidor_sinapi.trace_remove("write", self._trace_status)
+                variavel.trace_remove("write", trace_id)
             except tk.TclError:
                 pass
-            self._trace_status = None
-        if self._trace_http is not None and self.ctx.http_servidor_sinapi is not None:
-            try:
-                self.ctx.http_servidor_sinapi.trace_remove("write", self._trace_http)
-            except tk.TclError:
-                pass
-            self._trace_http = None
+        self._traces.clear()
 
     def _montar(self):
         self._soltar_traces()
@@ -254,35 +283,46 @@ class DialogoConfiguracoes(tk.Toplevel):
         )
         self._btn_verificar.pack(side="left")
 
+        # Situação da base: mesmo quadradinho e mesmas cores do rodapé.
         quadro_status = tk.Frame(linha_acao, bg=cartao)
-        quadro_status.pack(side="left", padx=(18, 0))
+        quadro_status.pack(side="left", padx=(18, 0), fill="x", expand=True)
 
-        tk.Label(
-            quadro_status,
-            text="Status Servidor:",
-            font=("Arial", 9),
-            fg=cores.texto_suave,
-            bg=cartao,
-        ).pack(anchor="w")
-
+        linha_situacao = tk.Frame(quadro_status, bg=cartao)
+        linha_situacao.pack(anchor="w")
+        self._quadrado_sinapi = tk.Frame(linha_situacao, width=8, height=8, bg=cores.texto_suave)
+        self._quadrado_sinapi.pack(side="left", padx=(0, 6))
         self._lbl_status = tk.Label(
-            quadro_status,
+            linha_situacao,
             text="",
             font=("Arial", 9, "bold"),
+            fg=cores.texto,
             bg=cartao,
         )
-        self._lbl_status.pack(anchor="w")
+        self._lbl_status.pack(side="left")
 
-        self._lbl_http = tk.Label(
+        self._lbl_detalhe = tk.Label(
             quadro_status,
             text="",
             font=("Arial", 8),
             fg=cores.texto_suave,
             bg=cartao,
-            wraplength=220,
+            wraplength=230,
             justify="left",
         )
-        self._lbl_http.pack(anchor="w")
+        self._lbl_detalhe.pack(anchor="w")
+
+        self._lbl_verificacao = tk.Label(
+            quadro_status,
+            text="",
+            font=("Arial", 8),
+            fg=cores.texto_suave,
+            bg=cartao,
+        )
+        self._lbl_verificacao.pack(anchor="w")
+        # O código de resposta do site da Caixa fica só na dica (é técnico).
+        self._dica_http = ""
+        for widget in (self._quadrado_sinapi, self._lbl_status, self._lbl_verificacao):
+            vincular_tooltip(widget, lambda: self._dica_http or "Sem resposta registrada.")
 
         secao_conta = tk.Frame(
             painel, bg=cartao, highlightbackground=cores.borda_suave, highlightthickness=1
@@ -291,23 +331,38 @@ class DialogoConfiguracoes(tk.Toplevel):
         conta_inner = tk.Frame(secao_conta, bg=cartao, padx=14, pady=12)
         conta_inner.pack(fill="x")
 
-        self._titulo_secao(conta_inner, "build", "Conta", cores)
+        if self.offline:
+            self._titulo_secao(conta_inner, "person", "Modo offline", cores)
+            tk.Label(
+                conta_inner,
+                text=(
+                    "Os dados ficam só neste computador. Conta e "
+                    "usuários não estão disponíveis sem o servidor."
+                ),
+                font=("Arial", 9),
+                fg=cores.texto_suave,
+                bg=cartao,
+                wraplength=330,
+                justify="left",
+            ).pack(anchor="w")
+        else:
+            self._titulo_secao(conta_inner, "person", "Conta", cores)
 
-        usuario = get_client().username or "—"
-        tk.Label(
-            conta_inner,
-            text=f"Usuário conectado: {usuario}",
-            font=("Arial", 9),
-            fg=cores.texto_suave,
-            bg=cartao,
-        ).pack(anchor="w", pady=(0, 8))
+            usuario = get_client().username or "—"
+            tk.Label(
+                conta_inner,
+                text=f"Usuário conectado: {usuario}",
+                font=("Arial", 9),
+                fg=cores.texto_suave,
+                bg=cartao,
+            ).pack(anchor="w", pady=(0, 8))
 
-        ttk.Button(
-            conta_inner,
-            text="Trocar senha",
-            command=self._trocar_senha,
-            style="Compact.TButton",
-        ).pack(anchor="w")
+            ttk.Button(
+                conta_inner,
+                text="Trocar senha",
+                command=self._trocar_senha,
+                style="Compact.TButton",
+            ).pack(anchor="w")
 
         secao_aparencia = tk.Frame(
             painel, bg=cartao, highlightbackground=cores.borda_suave, highlightthickness=1
@@ -381,14 +436,14 @@ class DialogoConfiguracoes(tk.Toplevel):
         botoes.pack(fill="x", pady=(4, 0))
         criar_botao_fechar(botoes, self.destroy).pack(side="right")
 
-        if self.ctx.status_servidor_sinapi is not None:
-            self._trace_status = self.ctx.status_servidor_sinapi.trace_add(
-                "write", lambda *_: self._atualizar_status()
-            )
-        if self.ctx.http_servidor_sinapi is not None:
-            self._trace_http = self.ctx.http_servidor_sinapi.trace_add(
-                "write", lambda *_: self._atualizar_status()
-            )
+        for variavel in (
+            self.ctx.status_sinapi,
+            self.ctx.status_servidor_sinapi,
+            self.ctx.http_servidor_sinapi,
+        ):
+            if variavel is not None:
+                trace_id = variavel.trace_add("write", lambda *_: self._atualizar_status())
+                self._traces.append((variavel, trace_id))
 
         self._atualizar_status()
 
@@ -462,37 +517,42 @@ class DialogoConfiguracoes(tk.Toplevel):
     def _abrir_admin_usuarios(self):
         abrir_dialogo_admin_usuarios(self)
 
-    def _cor_status_servidor(self, status: str) -> str:
-        cores = self._cores
-        if status == "Atualizado":
-            return "#81c784" if cores.escuro else "#2e7d32"
-        if status == "Erro":
-            return "#ffb74d" if cores.escuro else "#ef6c00"
-        if status == "Crítico":
-            return cores.perigo
-        if status == "Verificando...":
-            return cores.titulo
-        return cores.texto_suave
+    _TEXTO_ESTADO_SINAPI = {
+        "ok": "atualizada",
+        "andamento": "verificando…",
+        "atencao": "usando a base deste computador",
+        "erro": "indisponível",
+    }
 
     def _atualizar_status(self):
-        status = "—"
-        http = "—"
-        if self.ctx.status_servidor_sinapi is not None:
-            status = self.ctx.status_servidor_sinapi.get() or "—"
-        if self.ctx.http_servidor_sinapi is not None:
-            http = self.ctx.http_servidor_sinapi.get() or "—"
-
-        self._lbl_status.config(text=status, fg=self._cor_status_servidor(status))
-
-        if http and http != "—":
-            self._lbl_http.config(text=_formatar_http_status(http))
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        estado, explicacao = self.ctx.estado_sinapi()
+        referencia = self.ctx.sinapi_referencia_rotulo
+        if referencia == "BASE AUSENTE":
+            titulo = "Nenhuma base SINAPI carregada"
+        elif referencia == "Carregando...":
+            titulo = "Carregando a base SINAPI…"
         else:
-            self._lbl_http.config(text="")
+            titulo = f"Referência {referencia} · {self._TEXTO_ESTADO_SINAPI[estado]}"
 
-        if status == "Verificando...":
-            definir_estado_botao_icone(self._btn_verificar, "disabled")
-        else:
-            definir_estado_botao_icone(self._btn_verificar, "normal")
+        self._quadrado_sinapi.config(bg=cor_estado_sinapi(estado, self._cores))
+        self._lbl_status.config(text=titulo)
+        # Explicação só quando há algo a dizer além de "atualizada".
+        self._lbl_detalhe.config(text="" if estado in ("ok", "andamento") else explicacao)
+        self._lbl_verificacao.config(text=_texto_ultima_verificacao())
+
+        http = self.ctx.http_servidor_sinapi.get() if self.ctx.http_servidor_sinapi else ""
+        texto_http = _formatar_http_status(http or "")
+        self._dica_http = (
+            f"Resposta do site da Caixa na última consulta: {texto_http}" if texto_http else ""
+        )
+
+        ocupado = estado == "andamento" or self.ctx._sinapi_verificando
+        definir_estado_botao_icone(self._btn_verificar, "disabled" if ocupado else "normal")
 
     def _verificar_sinapi(self):
         if self.ctx._sinapi_verificando:
@@ -512,5 +572,5 @@ class DialogoConfiguracoes(tk.Toplevel):
         super().destroy()
 
 
-def abrir_dialogo_configuracoes(parent, ctx):
-    DialogoConfiguracoes(parent, ctx)
+def abrir_dialogo_configuracoes(parent, ctx, *, offline=False):
+    DialogoConfiguracoes(parent, ctx, offline=offline)

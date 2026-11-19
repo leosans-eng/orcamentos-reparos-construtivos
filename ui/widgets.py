@@ -1700,3 +1700,74 @@ class CampoListaPesquisavel(tk.Frame):
         except (tk.TclError, TypeError, AttributeError):
             pass
 
+
+
+# ---------------------------------------------------------------------------
+# Campos de senha (login, trocar senha, novo usuário, redefinir senha)
+# ---------------------------------------------------------------------------
+
+
+def caps_lock_ligado() -> bool:
+    if sys.platform != "win32":
+        return False
+    try:
+        return bool(ctypes.windll.user32.GetKeyState(0x14) & 1)  # 0x14 = Caps Lock
+    except (AttributeError, OSError):
+        return False
+
+
+def montar_opcoes_senha(parent, entradas, *, ao_confirmar, bg, cor_aviso, texto="Mostrar senhas"):
+    """Linha com "Mostrar senhas" e o aviso de Caps Lock, ligada aos campos.
+
+    - Enter em um campo passa para o próximo; no último, chama ``ao_confirmar``.
+    - O aviso de Caps Lock aparece só enquanto um campo de senha tem o foco.
+    ``entradas`` é a lista de campos na ordem da tela; os de senha são os que
+    têm ``show`` definido. Devolve o Frame da linha (para posicionar).
+    """
+    linha = tk.Frame(parent, bg=bg)
+    var_mostrar = tk.BooleanVar(master=parent, value=False)
+    senhas = [e for e in entradas if str(e.cget("show"))]
+
+    def alternar():
+        for entrada in senhas:
+            try:
+                entrada.configure(show="" if var_mostrar.get() else "•")
+            except tk.TclError:
+                pass
+
+    ttk.Checkbutton(
+        linha,
+        text=texto,
+        variable=var_mostrar,
+        command=alternar,
+        style="Cartao.TCheckbutton",
+    ).pack(side="left")
+    lbl_caps = tk.Label(linha, text="", font=("Segoe UI", 9, "bold"), fg=cor_aviso, bg=bg)
+    lbl_caps.pack(side="right")
+
+    def atualizar_caps(_evento=None):
+        try:
+            foco = parent.focus_get()
+        except (tk.TclError, KeyError):
+            foco = None
+        ligado = foco in senhas and caps_lock_ligado()
+        lbl_caps.config(text="Caps Lock ativado" if ligado else "")
+
+    for indice, entrada in enumerate(entradas):
+        if indice + 1 < len(entradas):
+            proxima = entradas[indice + 1]
+
+            def ir(_e, alvo=proxima):
+                alvo.focus_set()
+                alvo.icursor("end")
+                return "break"
+
+            entrada.bind("<Return>", ir)
+        else:
+            entrada.bind("<Return>", lambda _e: (ao_confirmar(), "break")[1])
+        if entrada in senhas:
+            entrada.bind("<KeyRelease>", atualizar_caps, add="+")
+            entrada.bind("<FocusIn>", atualizar_caps, add="+")
+            entrada.bind("<FocusOut>", lambda _e: parent.after_idle(atualizar_caps), add="+")
+    linha._orc_var_mostrar = var_mostrar  # mantém a variável viva
+    return linha

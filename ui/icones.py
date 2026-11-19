@@ -470,12 +470,14 @@ def _comando_inert():
     return None
 
 
-def definir_estado_botao_icone(botao: ttk.Button, estado: str) -> None:
+def definir_estado_botao_icone(botao: ttk.Button, estado: str, *, apagar: bool = False) -> None:
     """
     Desabilita visualmente sem usar state=disabled do ttk.
 
     O estado nativo do ttk clareia a imagem SVG e deixa um retângulo branco
     estranho; aqui só trocamos ícone/estilo e anulamos o comando.
+    Com ``apagar``, o botão desativado também ganha texto e fundo cinza
+    (estilo "Muted"), para não parecer clicável.
     """
     icone_normal = getattr(botao, "_orc_img_normal", None)
     icone_off = getattr(botao, "_orc_img_disabled", None)
@@ -489,6 +491,8 @@ def definir_estado_botao_icone(botao: ttk.Button, estado: str) -> None:
         }
         if icone_off is not None:
             kwargs["image"] = icone_off
+        if apagar:
+            kwargs["style"] = "Muted.Compact.TButton"
         botao.configure(**kwargs)
         return
 

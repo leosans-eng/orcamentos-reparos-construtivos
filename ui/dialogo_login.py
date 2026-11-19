@@ -1,4 +1,3 @@
-import ctypes
 import gc
 import queue
 import sys
@@ -16,6 +15,7 @@ from ui.icones import IndicadorAmpulheta, criar_botao_ttk_com_icone, definir_est
 from ui.temas import aplicar_tema, cores_tema, estilos_botao
 from ui.widgets import (
     aplicar_icone_janela,
+    caps_lock_ligado,
     centralizar_janela,
 )
 
@@ -33,15 +33,6 @@ SEGUNDOS_ESPERA_ATUALIZACAO = 60
 MSG_ERRO_INESPERADO = (
     "Algo deu errado ao entrar. Tente de novo; se continuar, contate o suporte."
 )
-
-
-def _caps_lock_ligado() -> bool:
-    if sys.platform != "win32":
-        return False
-    try:
-        return bool(ctypes.windll.user32.GetKeyState(0x14) & 1)  # 0x14 = Caps Lock
-    except (AttributeError, OSError):
-        return False
 
 
 class DialogoLogin:
@@ -379,7 +370,7 @@ class DialogoLogin:
             com_foco = self.root.focus_get() is self._entrada_senha
         except (tk.TclError, KeyError):
             com_foco = False
-        ligado = com_foco and _caps_lock_ligado()
+        ligado = com_foco and caps_lock_ligado()
         self._lbl_caps.config(text="Caps Lock ativado" if ligado else "")
 
     def _ao_mostrar_senha(self):

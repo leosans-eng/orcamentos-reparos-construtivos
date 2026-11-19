@@ -43,6 +43,7 @@ class OrcApp:
         self.pediu_logout = False
         # Trabalho guardado dos módulos durante a troca de tema (nome -> estado).
         self._estados_tema: dict = {}
+        self._janela_orccad = None  # ORCCAD aberto pelo Hub (sem orçamento)
         self._after_sinapi = None
 
         self.janela = tk.Tk()
@@ -386,7 +387,28 @@ class OrcApp:
     def _ao_selecionar_modulo_hub(self, modulo):
         # O hub já oculta o cartão para quem não é admin; não consultar a API de novo
         # no clique (isso congelava a UI e, se a rede falhasse, negava o próprio admin).
+        if modulo == "orccad":
+            self._abrir_orccad()
+            return
         self.mostrar_modulo(modulo)
+
+    def _abrir_orccad(self):
+        """ORCCAD avulso: só para medir uma planta, sem ligação com um orçamento."""
+        from ui.orccad import JanelaORCCAD
+
+        if self._janela_orccad is not None:
+            try:
+                if self._janela_orccad.janela.winfo_exists():
+                    self._janela_orccad.trazer_frente()
+                    return
+            except tk.TclError:
+                pass
+            self._janela_orccad = None
+
+        def ao_fechar():
+            self._janela_orccad = None
+
+        self._janela_orccad = JanelaORCCAD(self.janela, on_fechar=ao_fechar)
 
     def mostrar_modulo(self, nome):
         if self.pediu_logout:

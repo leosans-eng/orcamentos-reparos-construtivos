@@ -90,9 +90,12 @@ class JanelaORCCAD:
         lado.grid(row=0, column=1, sticky="ns")
         raiz.columnconfigure(1, minsize=300)
 
+        # Aberto pela Área Comum, o desenho alimenta o orçamento; aberto pelo
+        # Hub, serve só para medir a planta.
+        vinculado = self.on_salvar_principal is not None
         ttk.Label(
             lado,
-            text="Medidas para cálculos",
+            text="Medidas para cálculos" if vinculado else "Medidas",
             font=("Segoe UI", 11, "bold"),
         ).pack(anchor="w")
         ttk.Label(
@@ -100,6 +103,8 @@ class JanelaORCCAD:
             text=(
                 "Desenhe a EXTERNA e o HALL (Offset ou do zero) "
                 "para obter as medidas."
+                if vinculado
+                else "Desenhe a planta para ver a área e o perímetro."
             ),
             wraplength=280,
         ).pack(anchor="w", pady=(4, 10))
@@ -131,36 +136,9 @@ class JanelaORCCAD:
                 "externa → fachada/cobertura; hall → laje/piso/perímetros do hall.",
             )
 
-        ttk.Separator(lado).pack(fill="x", pady=(12, 8))
-        ttk.Label(
-            lado,
-            text="Campos da Área Comum",
-            font=("Segoe UI", 9, "bold"),
-        ).pack(anchor="w", pady=(0, 4))
-        ttk.Label(
-            lado,
-            text="Externa (azul) e Hall (verde) alimentam grupos diferentes.",
-            wraplength=280,
-        ).pack(anchor="w", pady=(0, 6))
-
         self._vars_campos = {}
-        camada_atual = None
-        for chave, rotulo, tipo, camada in CAMPOS_DESENHO_AREA_COMUM:
-            if camada != camada_atual:
-                camada_atual = camada
-                ttk.Label(
-                    lado,
-                    text="Externa" if camada == "externa" else "Hall",
-                    font=("Segoe UI", 8, "bold"),
-                ).pack(anchor="w", pady=(8 if camada == "hall" else 0, 2))
-            linha = ttk.Frame(lado)
-            linha.pack(fill="x", pady=2)
-            ttk.Label(linha, text=rotulo + ":", wraplength=190).pack(
-                side="left", anchor="w"
-            )
-            var = tk.StringVar(value="—")
-            ttk.Label(linha, textvariable=var, width=12, anchor="e").pack(side="right")
-            self._vars_campos[chave] = (var, tipo, camada)
+        if vinculado:
+            self._montar_campos_area_comum(lado)
 
         self.var_feedback = tk.StringVar(value="")
         ttk.Label(
@@ -178,6 +156,38 @@ class JanelaORCCAD:
         self.janela.after_idle(lambda: self.painel.canvas.focus_set())
         self.janela.after_idle(self.painel.enquadrar_quando_visivel)
         self.janela.after(120, self.painel.enquadrar_quando_visivel)
+
+    def _montar_campos_area_comum(self, lado):
+        """Lista os campos da Área Comum que o desenho vai preencher."""
+        ttk.Separator(lado).pack(fill="x", pady=(12, 8))
+        ttk.Label(
+            lado,
+            text="Campos da Área Comum",
+            font=("Segoe UI", 9, "bold"),
+        ).pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            lado,
+            text="Externa (azul) e Hall (verde) alimentam grupos diferentes.",
+            wraplength=280,
+        ).pack(anchor="w", pady=(0, 6))
+
+        camada_atual = None
+        for chave, rotulo, tipo, camada in CAMPOS_DESENHO_AREA_COMUM:
+            if camada != camada_atual:
+                camada_atual = camada
+                ttk.Label(
+                    lado,
+                    text="Externa" if camada == "externa" else "Hall",
+                    font=("Segoe UI", 8, "bold"),
+                ).pack(anchor="w", pady=(8 if camada == "hall" else 0, 2))
+            linha = ttk.Frame(lado)
+            linha.pack(fill="x", pady=2)
+            ttk.Label(linha, text=rotulo + ":", wraplength=190).pack(
+                side="left", anchor="w"
+            )
+            var = tk.StringVar(value="—")
+            ttk.Label(linha, textvariable=var, width=12, anchor="e").pack(side="right")
+            self._vars_campos[chave] = (var, tipo, camada)
 
     def _fmt_camada(self, res: ResultadoDesenho | None, prefixo: str):
         if res is None:

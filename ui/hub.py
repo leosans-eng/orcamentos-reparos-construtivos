@@ -8,6 +8,15 @@ from ui.widgets import aplicar_hover_cartao
 
 LARGURA_CARTAO = 240
 ALTURA_CARTAO = 148
+ESPACO_CARTOES = 12  # entre cartões da mesma seção
+ESPACO_SECOES = 30  # entre "Configurar cadastros" e "Ferramentas"
+# A linha de baixo tem 4 cartões; a caixa dos orçamentos (3 cartões) ocupa a
+# mesma largura, para as bordas das duas linhas ficarem alinhadas.
+LARGURA_TOTAL = 4 * LARGURA_CARTAO + 2 * ESPACO_CARTOES + ESPACO_SECOES
+MARGEM_DESTAQUE = 14  # espaço interno da caixa dos orçamentos (+ 1 de borda)
+LARGURA_CARTAO_DESTAQUE = (
+    LARGURA_TOTAL - 2 * (MARGEM_DESTAQUE + 1) - 2 * ESPACO_CARTOES
+) // 3
 FONTE_TITULO_CARTAO = ("Arial", 12, "bold")
 FONTE_CATEGORIA = ("Segoe UI", 11, "bold")
 ALTURA_ICONE_CARTAO = 20
@@ -85,7 +94,7 @@ class HubFrame(tk.Frame):
         )
         destaque.pack(fill="x", pady=(0, 22), padx=0)
         interno = tk.Frame(destaque, bg=cores.fundo_destaque)
-        interno.pack(fill="x", padx=14, pady=(10, 12))
+        interno.pack(fill="x", padx=MARGEM_DESTAQUE, pady=(10, 12))
         self._montar_secao(
             interno,
             "Orçamentos",
@@ -118,6 +127,7 @@ class HubFrame(tk.Frame):
             cores,
             pady_abaixo=0,
             cor_fundo=cores.fundo_destaque,
+            largura_cartao=LARGURA_CARTAO_DESTAQUE,
         )
 
         inferior = tk.Frame(container, bg=cores.fundo)
@@ -126,7 +136,7 @@ class HubFrame(tk.Frame):
         inferior.columnconfigure(1, weight=0)
 
         cadastros = tk.Frame(inferior, bg=cores.fundo)
-        cadastros.grid(row=0, column=0, sticky="nw", padx=(0, 28))
+        cadastros.grid(row=0, column=0, sticky="nw", padx=(0, ESPACO_SECOES))
         if self.pode_alterar_cadastros:
             titulo_secao = "Configurar cadastros"
             cartoes_cadastros = [
@@ -184,11 +194,11 @@ class HubFrame(tk.Frame):
             pady_abaixo=0,
         )
 
-        consulta = tk.Frame(inferior, bg=cores.fundo)
-        consulta.grid(row=0, column=1, sticky="nw")
+        ferramentas = tk.Frame(inferior, bg=cores.fundo)
+        ferramentas.grid(row=0, column=1, sticky="nw")
         self._montar_secao(
-            consulta,
-            "Consulta",
+            ferramentas,
+            "Ferramentas",
             [
                 {
                     "titulo": "Consulta SINAPI",
@@ -196,6 +206,13 @@ class HubFrame(tk.Frame):
                     "modulo": "consulta_sinapi",
                     "habilitado": True,
                     "icone_titulo": "search-outline",
+                },
+                {
+                    "titulo": "ORCCAD",
+                    "descricao": "Desenhe uma planta e veja a área e o perímetro na hora",
+                    "modulo": "orccad",
+                    "habilitado": True,
+                    "icone_titulo": "cube-outline",
                 },
             ],
             cores,
@@ -206,7 +223,15 @@ class HubFrame(tk.Frame):
         self._ligar_clique_fora(self)
 
     def _montar_secao(
-        self, parent, titulo, cartoes, cores, *, pady_abaixo=16, cor_fundo=None
+        self,
+        parent,
+        titulo,
+        cartoes,
+        cores,
+        *,
+        pady_abaixo=16,
+        cor_fundo=None,
+        largura_cartao=LARGURA_CARTAO,
     ):
         if cor_fundo is None:
             cor_fundo = cores.fundo
@@ -241,6 +266,8 @@ class HubFrame(tk.Frame):
                 habilitado=cartao.get("habilitado", True),
                 coluna=indice,
                 linha=0,
+                largura=largura_cartao,
+                ultimo=indice == len(cartoes) - 1,
                 aviso=cartao.get("aviso"),
                 icone_titulo=cartao.get("icone_titulo"),
                 cores=cores,
@@ -309,8 +336,9 @@ class HubFrame(tk.Frame):
         linha=0,
         aviso=None,
         icone_titulo=None,
+        largura=LARGURA_CARTAO,
+        ultimo=False,
     ):
-        largura = LARGURA_CARTAO
         altura = ALTURA_CARTAO
         cor_fundo = cores.fundo_cartao if habilitado else cores.fundo_cartao_off
         cor_borda = cores.borda if habilitado else cores.borda_suave
@@ -326,7 +354,10 @@ class HubFrame(tk.Frame):
             highlightthickness=2,
             cursor="hand2" if habilitado else "arrow",
         )
-        cartao.grid(row=linha, column=coluna, padx=(0, 12), pady=4, sticky="n")
+        # O último cartão não leva espaço à direita: assim a borda dele
+        # coincide com a borda da seção.
+        espaco = 0 if ultimo else ESPACO_CARTOES
+        cartao.grid(row=linha, column=coluna, padx=(0, espaco), pady=4, sticky="n")
         cartao.grid_propagate(False)
         cartao.rowconfigure(1, weight=1)
         cartao.columnconfigure(0, weight=1)

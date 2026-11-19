@@ -6,7 +6,7 @@ import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 
-VERSAO_RASCUNHO = 5
+VERSAO_RASCUNHO = 6
 BDI_PADRAO = "30,62"
 
 TIPOS_ESTRUTURA = (
@@ -345,7 +345,176 @@ def novo_extra_orcamento(
     }
 
 
+# ---------------------------------------------------------------- estruturas
+# Um condomínio tem uma ou mais estruturas: N unidades iguais com a mesma
+# planta (ex.: "Bloco padrão × 15", "Bloco adaptado × 3", "Salão de festas × 1").
+# Blocos residenciais somam entre si; outras edificações (salão, guarita,
+# portaria...) ficam de fora do "por bloco" e não têm hall nem apartamentos.
+
+TIPO_RESIDENCIAL = "residencial"
+TIPO_OUTRA = "outra"
+
+CHAVES_MEDIDA_CONDOMINIO = ("caixas_inspecao_bloco", "caixas_gordura_bloco")
+CHAVES_PCT_CONDOMINIO = ("troca_tampas_inspecao", "troca_tampas_gordura", "troca_calcadas")
+CHAVES_MEDIDA_ESTRUTURA = tuple(
+    chave
+    for chave, _rotulo in CAMPOS_MEDIDA_EDITAVEIS
+    if chave != "qtd_blocos" and chave not in CHAVES_MEDIDA_CONDOMINIO
+)
+CHAVES_PCT_ESTRUTURA = tuple(
+    item[0] for item in PERCENTUAIS_MODELO if item[0] not in CHAVES_PCT_CONDOMINIO
+)
+# Só existem em bloco residencial.
+CHAVES_MEDIDA_SO_RESIDENCIAL = (
+    "qtd_aptos_por_pavimento",
+    "perimetro_hall_parede_pav_m",
+    "perimetro_hall_rodape_pav_m",
+    "area_laje_hall_pav_m2",
+    "area_piso_hall_pav_m2",
+)
+CHAVES_PCT_SO_RESIDENCIAL = (
+    "troca_revestimento_paredes_hall",
+    "troca_revestimento_tetos_hall",
+    "troca_pisos_hall",
+    "troca_rodape_hall",
+    "pintura_paredes_hall",
+    "pintura_teto_hall",
+)
+# Esquadrias de outra edificação (fixas por enquanto), com o rótulo a mostrar.
+ESQUADRIAS_OUTRA_EDIFICACAO = {
+    "j1": "J1",
+    "j2": "J2",
+    "cobogo_1": "Cobogó 1",
+    "cobogo_2": "Cobogó 2",
+    "porta_hall": "Porta",
+}
+# Quantitativos que vêm do condomínio, não das estruturas.
+CHAVES_QTD_CONDOMINIO = (
+    "caixas_inspecao_bloco",
+    "caixas_inspecao_total",
+    "caixas_gordura_bloco",
+    "caixas_gordura_total",
+    "pct_troca_tampas_inspecao_un",
+    "pct_troca_tampas_gordura_un",
+    "pct_troca_calcadas_m2",
+)
+
+
+def _desenho_vazio() -> dict:
+    return {
+        "externa": {"pontos": [], "fechado": False},
+        "hall": {"pontos": [], "fechado": False},
+    }
+
+
+def residencial(estrutura: dict) -> bool:
+    return (estrutura or {}).get("tipo") != TIPO_OUTRA
+
+
+def esquadrias_da_estrutura(tipo: str) -> list[tuple[dict, str]]:
+    """Modelos de esquadria usados no tipo de estrutura, com o rótulo a mostrar."""
+    if tipo == TIPO_OUTRA:
+        return [
+            (modelo, ESQUADRIAS_OUTRA_EDIFICACAO[modelo["id"]])
+            for modelo in ESQUADRIAS_MODELO
+            if modelo["id"] in ESQUADRIAS_OUTRA_EDIFICACAO
+        ]
+    return [(modelo, modelo["rotulo"]) for modelo in ESQUADRIAS_MODELO]
+
+
+def nova_estrutura(nome="Bloco padrão", tipo=TIPO_RESIDENCIAL, quantidade="") -> dict:
+    padrao_pct = percentuais_padrao()
+    return {
+        "id": novo_id(),
+        "nome": _texto(nome) or "Bloco padrão",
+        "tipo": TIPO_OUTRA if tipo == TIPO_OUTRA else TIPO_RESIDENCIAL,
+        "quantidade": _texto(quantidade),
+        "tipo_estrutura": "",
+        "tipo_cobertura": "",
+        "medidas": {chave: MEDIDAS_PADRAO.get(chave, "") for chave in CHAVES_MEDIDA_ESTRUTURA},
+        "percentuais": {chave: padrao_pct[chave] for chave in CHAVES_PCT_ESTRUTURA},
+        "esquadrias": [esquadria_vazia(item) for item in ESQUADRIAS_MODELO],
+        "desenho": _desenho_vazio(),
+    }
+
+
+def normalizar_estrutura(origem) -> dict:
+    base = nova_estrutura()
+    if not isinstance(origem, dict):
+        return base
+    if _texto(origem.get("id")):
+        base["id"] = _texto(origem.get("id"))
+    base["nome"] = _texto(origem.get("nome")) or base["nome"]
+    base["tipo"] = TIPO_OUTRA if origem.get("tipo") == TIPO_OUTRA else TIPO_RESIDENCIAL
+    base["quantidade"] = _texto(origem.get("quantidade"))
+    base["tipo_estrutura"] = _opcao_conhecida(origem.get("tipo_estrutura"), TIPOS_ESTRUTURA)
+    base["tipo_cobertura"] = _opcao_conhecida(origem.get("tipo_cobertura"), TIPOS_COBERTURA)
+    medidas = origem.get("medidas") if isinstance(origem.get("medidas"), dict) else {}
+    for chave in CHAVES_MEDIDA_ESTRUTURA:
+        if chave in medidas:
+            base["medidas"][chave] = _texto(medidas.get(chave))
+    percentuais = _percentuais_normalizados(origem.get("percentuais"))
+    base["percentuais"] = {chave: percentuais[chave] for chave in CHAVES_PCT_ESTRUTURA}
+    base["esquadrias"] = _esquadrias_normalizadas(origem.get("esquadrias"))
+    base["desenho"] = _desenho_normalizado(origem.get("desenho"))
+    return base
+
+
+def quantitativos_da_estrutura(estrutura: dict, *, blocos=None) -> dict:
+    """Quantitativos de uma estrutura (todas as suas unidades iguais)."""
+    from core.area_comum_calculos import calcular_quantitativos
+
+    estrutura = estrutura or {}
+    medidas = dict(estrutura.get("medidas") or {})
+    medidas["qtd_blocos"] = estrutura.get("quantidade") if blocos is None else blocos
+    percentuais = dict(estrutura.get("percentuais") or {})
+    if not residencial(estrutura):
+        for chave in CHAVES_MEDIDA_SO_RESIDENCIAL:
+            medidas[chave] = ""
+        for chave in CHAVES_PCT_SO_RESIDENCIAL:
+            percentuais[chave] = ""
+    usadas = {modelo["id"] for modelo, _r in esquadrias_da_estrutura(estrutura.get("tipo"))}
+    esquadrias = [e for e in estrutura.get("esquadrias") or [] if e.get("id") in usadas]
+    return calcular_quantitativos(medidas, esquadrias, percentuais)
+
+
+def blocos_residenciais(dados: dict) -> float:
+    """Soma das unidades de todas as estruturas residenciais ("por bloco")."""
+    from core.area_comum_calculos import numero
+
+    return sum(
+        numero(e.get("quantidade"))
+        for e in (dados or {}).get("estruturas") or []
+        if residencial(e)
+    )
+
+
+def quantitativos_do_condominio(dados: dict) -> dict:
+    """Caixas e calçadas: valem para o condomínio, com "por bloco" = blocos residenciais."""
+    from core.area_comum_calculos import calcular_quantitativos
+
+    iniciais = (dados or {}).get("dados_iniciais") or {}
+    medidas = dict(iniciais.get("medidas") or {})
+    medidas["qtd_blocos"] = blocos_residenciais(dados)
+    return calcular_quantitativos(medidas, [], dict(iniciais.get("percentuais") or {}))
+
+
+def quantitativos_do_rascunho(dados: dict):
+    """O que as abas 2 e 3 usam: blocos residenciais somados + itens do condomínio."""
+    from core.area_comum_calculos import QuantitativosEstruturas
+
+    partes = [
+        quantitativos_da_estrutura(e)
+        for e in (dados or {}).get("estruturas") or []
+        if residencial(e)
+    ]
+    condominio = quantitativos_do_condominio(dados)
+    extras = {chave: condominio.get(chave, 0.0) for chave in CHAVES_QTD_CONDOMINIO}
+    return QuantitativosEstruturas(partes, extras)
+
+
 def novo_rascunho() -> dict:
+    padrao_pct = percentuais_padrao()
     return {
         "versao": VERSAO_RASCUNHO,
         "atualizado_em": "",
@@ -356,19 +525,10 @@ def novo_rascunho() -> dict:
         },
         "dados_iniciais": {
             "bdi_percent": BDI_PADRAO,
-            "medidas": {
-                **{chave: "" for chave, _rotulo in CAMPOS_MEDIDA_EDITAVEIS},
-                **MEDIDAS_PADRAO,
-            },
-            "percentuais": percentuais_padrao(),
-            "desenho_principal": {
-                "externa": {"pontos": [], "fechado": False},
-                "hall": {"pontos": [], "fechado": False},
-            },
-            "tipo_estrutura": "",
-            "tipo_cobertura": "",
+            "medidas": {chave: "" for chave in CHAVES_MEDIDA_CONDOMINIO},
+            "percentuais": {chave: padrao_pct[chave] for chave in CHAVES_PCT_CONDOMINIO},
         },
-        "esquadrias": [esquadria_vazia(item) for item in ESQUADRIAS_MODELO],
+        "estruturas": [nova_estrutura()],
         "anomalias_orcamento": [],
         "considerar_servicos_preliminares": True,
         "considerar_pintura": True,
@@ -431,6 +591,42 @@ def _opcao_conhecida(valor, opcoes) -> str:
     return texto if texto in opcoes else ""
 
 
+def _estrutura_do_formato_antigo(dados: dict, iniciais: dict):
+    """Rascunho de um bloco só -> (medidas do condomínio, percentuais, estrutura)."""
+    medidas_origem = iniciais.get("medidas") if isinstance(iniciais.get("medidas"), dict) else {}
+    # Nomes antigos de alguns campos (rascunhos da prévia).
+    alias = {
+        "qtd_aptos_por_pavimento": ("qtd_unidades", "qtd_aptos_por_pavimento"),
+        "area_construida_m2": ("area_fachada_m2", "area_construida_m2"),
+        "pe_direito_m": ("altura_edificacao_m", "pe_direito_m"),
+    }
+    medidas = {}
+    for chave, _rotulo in CAMPOS_MEDIDA_EDITAVEIS:
+        valor = ""
+        for cand in alias.get(chave, (chave,)):
+            valor = _texto(medidas_origem.get(cand) or iniciais.get(cand))
+            if valor:
+                break
+        if not valor and chave in MEDIDAS_PADRAO:
+            valor = MEDIDAS_PADRAO[chave]
+        medidas[chave] = valor
+    percentuais = _percentuais_normalizados(iniciais.get("percentuais"))
+    estrutura = normalizar_estrutura(
+        {
+            "nome": "Bloco padrão",
+            "tipo": TIPO_RESIDENCIAL,
+            "quantidade": medidas.get("qtd_blocos", ""),
+            "tipo_estrutura": iniciais.get("tipo_estrutura"),
+            "tipo_cobertura": iniciais.get("tipo_cobertura"),
+            "medidas": medidas,
+            "percentuais": percentuais,
+            "esquadrias": dados.get("esquadrias"),
+            "desenho": iniciais.get("desenho_principal") or dados.get("desenho_principal"),
+        }
+    )
+    return medidas, percentuais, estrutura
+
+
 def normalizar_rascunho(dados) -> dict:
     base = novo_rascunho()
     if not isinstance(dados, dict):
@@ -452,41 +648,19 @@ def normalizar_rascunho(dados) -> dict:
     bdi = _texto(iniciais.get("bdi_percent"))
     base["dados_iniciais"]["bdi_percent"] = bdi or BDI_PADRAO
 
-    medidas_origem = iniciais.get("medidas") if isinstance(iniciais.get("medidas"), dict) else {}
-    # Compatibilidade com rascunhos da prévia (v1).
-    alias = {
-        "qtd_blocos": ("qtd_blocos",),
-        "qtd_pavimentos": ("qtd_pavimentos",),
-        "qtd_aptos_por_pavimento": ("qtd_unidades", "qtd_aptos_por_pavimento"),
-        "area_construida_m2": ("area_fachada_m2", "area_construida_m2"),
-        "pe_direito_m": ("altura_edificacao_m", "pe_direito_m"),
-    }
-    for chave, _rotulo in CAMPOS_MEDIDA_EDITAVEIS:
-        valor = ""
-        for cand in alias.get(chave, (chave,)):
-            texto = _texto(medidas_origem.get(cand) or iniciais.get(cand))
-            if texto:
-                valor = texto
-                break
-        if not valor:
-            valor = _texto(medidas_origem.get(chave))
-        if not valor and chave in MEDIDAS_PADRAO:
-            valor = MEDIDAS_PADRAO[chave]
-        base["dados_iniciais"]["medidas"][chave] = valor
-
-    base["dados_iniciais"]["percentuais"] = _percentuais_normalizados(
-        iniciais.get("percentuais")
-    )
-    base["dados_iniciais"]["desenho_principal"] = _desenho_normalizado(
-        iniciais.get("desenho_principal") or dados.get("desenho_principal")
-    )
-    base["dados_iniciais"]["tipo_estrutura"] = _opcao_conhecida(
-        iniciais.get("tipo_estrutura"), TIPOS_ESTRUTURA
-    )
-    base["dados_iniciais"]["tipo_cobertura"] = _opcao_conhecida(
-        iniciais.get("tipo_cobertura"), TIPOS_COBERTURA
-    )
-    base["esquadrias"] = _esquadrias_normalizadas(dados.get("esquadrias"))
+    estruturas = dados.get("estruturas")
+    if isinstance(estruturas, list) and any(isinstance(e, dict) for e in estruturas):
+        base["estruturas"] = [normalizar_estrutura(e) for e in estruturas if isinstance(e, dict)]
+        medidas_cond = iniciais.get("medidas") if isinstance(iniciais.get("medidas"), dict) else {}
+        pct_cond = _percentuais_normalizados(iniciais.get("percentuais"))
+    else:
+        # Formato anterior (um bloco só): vira a estrutura "Bloco padrão".
+        medidas_cond, pct_cond, unica = _estrutura_do_formato_antigo(dados, iniciais)
+        base["estruturas"] = [unica]
+    for chave in CHAVES_MEDIDA_CONDOMINIO:
+        base["dados_iniciais"]["medidas"][chave] = _texto(medidas_cond.get(chave))
+    for chave in CHAVES_PCT_CONDOMINIO:
+        base["dados_iniciais"]["percentuais"][chave] = pct_cond.get(chave, "")
 
     orcamento = []
     for item in dados.get("anomalias_orcamento") or []:
@@ -594,32 +768,43 @@ def rascunho_tem_conteudo(dados: dict) -> bool:
     if condominio["nome"] or condominio["municipio"] or condominio["uf"]:
         return True
     iniciais = dados["dados_iniciais"]
-    medidas = iniciais["medidas"]
-    for chave, _rotulo in CAMPOS_MEDIDA_EDITAVEIS:
-        if chave in MEDIDAS_PADRAO and medidas.get(chave) == MEDIDAS_PADRAO[chave]:
-            continue
-        if medidas.get(chave):
+    if any(iniciais["medidas"].values()):
+        return True
+    padrao_pct = percentuais_padrao()
+    if any(iniciais["percentuais"].get(c, "") != padrao_pct[c] for c in CHAVES_PCT_CONDOMINIO):
+        return True
+    estruturas = dados["estruturas"]
+    if len(estruturas) > 1:
+        return True
+    for estrutura in estruturas:
+        if _estrutura_tem_conteudo(estrutura):
             return True
-    if iniciais.get("tipo_estrutura") or iniciais.get("tipo_cobertura"):
-        return True
-    if iniciais["percentuais"] != percentuais_padrao():
-        return True
-    if any(
-        item.get("dim_x") or item.get("dim_y") or item.get("qtd_por_pav") or item.get("h_peitoril")
-        for item in dados["esquadrias"]
-    ):
-        return True
     if dados["anomalias_orcamento"] or dados.get("extras_orcamento"):
         return True
     grupos = (dados.get("orcamento") or {}).get("grupos") or []
     if grupos:
         return True
-    desenho = iniciais.get("desenho_principal") or {}
-    if isinstance(desenho.get("externa"), dict) or isinstance(desenho.get("hall"), dict):
-        if (desenho.get("externa") or {}).get("pontos") or (desenho.get("hall") or {}).get(
-            "pontos"
-        ):
-            return True
-    elif desenho.get("pontos"):
-        return True
     return bool(dados["observacoes"])
+
+
+def _estrutura_tem_conteudo(estrutura: dict) -> bool:
+    vazia = nova_estrutura()
+    if estrutura.get("quantidade") or estrutura.get("tipo") != vazia["tipo"]:
+        return True
+    if estrutura.get("nome") != vazia["nome"]:
+        return True
+    if estrutura.get("tipo_estrutura") or estrutura.get("tipo_cobertura"):
+        return True
+    if estrutura.get("medidas") != vazia["medidas"]:
+        return True
+    if estrutura.get("percentuais") != vazia["percentuais"]:
+        return True
+    if any(
+        item.get("dim_x") or item.get("dim_y") or item.get("qtd_por_pav") or item.get("h_peitoril")
+        for item in estrutura.get("esquadrias") or []
+    ):
+        return True
+    desenho = estrutura.get("desenho") or {}
+    return bool(
+        (desenho.get("externa") or {}).get("pontos") or (desenho.get("hall") or {}).get("pontos")
+    )

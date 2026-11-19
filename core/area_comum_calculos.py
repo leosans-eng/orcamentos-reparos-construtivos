@@ -273,3 +273,34 @@ def calcular_quantitativos(medidas: dict, esquadrias: list[dict], percentuais: d
     }
     q["esquadrias"] = linhas_esq
     return q
+
+
+def _chave_somavel(chave: str) -> bool:
+    """Totais (já multiplicados pela quantidade de blocos) podem ser somados
+    entre estruturas; valores "por bloco" ou "por pavimento" não."""
+    return chave == "qtd_blocos" or chave.startswith("pct_") or "total" in chave
+
+
+class QuantitativosEstruturas(dict):
+    """Quantitativos de várias estruturas somados (ex.: blocos padrão + adaptados).
+
+    Como dicionário, traz a soma dos totais; valores por bloco/pavimento vêm
+    da primeira estrutura (servem só para exibição). `partes` guarda os
+    quantitativos de cada estrutura: fórmulas que multiplicam fatores devem
+    ser calculadas em cada parte e somadas (ver quantidade_de_item), porque
+    somar antes de multiplicar dá resultado errado quando os blocos diferem.
+    """
+
+    def __init__(self, partes, extras=None):
+        self.partes = [dict(p) for p in partes or []]
+        soma: dict = {}
+        for parte in self.partes:
+            for chave, valor in parte.items():
+                if chave == "esquadrias" or not isinstance(valor, (int, float)):
+                    soma.setdefault(chave, valor)
+                elif _chave_somavel(chave):
+                    soma[chave] = soma.get(chave, 0.0) + valor
+                else:
+                    soma.setdefault(chave, valor)
+        soma.update(extras or {})
+        super().__init__(soma)

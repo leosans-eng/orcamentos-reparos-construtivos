@@ -1323,12 +1323,40 @@ def quantidade_item(tipo_calculo: str, coeficiente: float, quantitativos: dict) 
     return base * coef
 
 
+# Fatores que valem para o condomínio inteiro (não dependem de cada estrutura).
+TIPOS_FATOR_CONDOMINIO = frozenset(
+    {"pct_troca_tampas_inspecao", "pct_troca_tampas_gordura", "pct_troca_calcadas"}
+)
+
+
+def _depende_da_estrutura(item: dict | None) -> bool:
+    """O item usa alguma medida que muda de uma estrutura para outra."""
+    for fator in normalizar_fatores(item or {}):
+        tipo = fator.get("tipo_calculo") or "fixo"
+        if tipo in MAPA_TIPO_QUANTITATIVO and tipo not in TIPOS_FATOR_CONDOMINIO:
+            return True
+    return False
+
+
 def quantidade_de_item(
     item: dict | None,
     quantitativos: dict | None,
     variaveis=None,
 ) -> float:
-    """Combina os fatores com × ou +, na ordem em que foram cadastrados."""
+    """Combina os fatores com × ou +, na ordem em que foram cadastrados.
+
+    Com várias estruturas (QuantitativosEstruturas), a fórmula é calculada em
+    cada uma e somada: 15 blocos de 4 pavimentos + 3 de 6 dão 78 pavimentos,
+    não (4 + 6) × 18. Itens só com valores fixos, perguntas ou fatores do
+    condomínio contam uma vez.
+    """
+    partes = getattr(quantitativos, "partes", None)
+    if partes is not None and _depende_da_estrutura(item):
+        return sum(_quantidade_numa_estrutura(item, parte, variaveis) for parte in partes)
+    return _quantidade_numa_estrutura(item, quantitativos, variaveis)
+
+
+def _quantidade_numa_estrutura(item, quantitativos, variaveis) -> float:
     respostas = mapa_variaveis(variaveis)
     total = None
     for fator in normalizar_fatores(item or {}):

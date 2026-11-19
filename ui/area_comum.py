@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 import tkinter as tk
-import tkinter.font as tkfont
 import traceback
 from copy import deepcopy
 from pathlib import Path
@@ -12,16 +11,10 @@ from tkinter import filedialog, messagebox, ttk
 
 from core.area_comum import (
     BDI_PADRAO,
-    CAMPOS_MEDIDA_AUTO,
-    CAMPOS_MEDIDA_EDITAVEIS,
-    CAMPOS_RESUMO_FACHADA,
-    ESQUADRIAS_MODELO,
-    PERCENTUAIS_MODELO,
-    TIPOS_COBERTURA,
-    TIPOS_ESTRUTURA,
     nova_anomalia_orcamento,
     novo_rascunho,
     normalizar_rascunho,
+    quantitativos_do_rascunho,
     rascunho_tem_conteudo,
 )
 from core.area_comum_anomalias import (
@@ -36,7 +29,7 @@ from core.area_comum_anomalias import (
     reparo_recomendado,
     valores_considerados_reparo,
 )
-from core.area_comum_calculos import calcular_quantitativos, numero, parse_expressao
+from core.area_comum_calculos import numero, parse_expressao
 from core.area_comum_orcamento import (
     migrar_extras_para_grupos,
     sincronizar_grupos_anomalias,
@@ -81,10 +74,10 @@ from core.orcamento_storage import (
     obter_orcamento_dict,
 )
 from core.sinapi_busca import deve_fixar_estado_sinapi, estados_com_codigo, obter_item_sinapi
+from ui.area_comum_dados import AbaDadosIniciais
 from ui.calculadora import abrir_calculadora
 from ui.dialogo_previa_composicao import DialogoPreviaComposicao
 from ui.dialogo_config_anomalias_area_comum import DialogoConfigAnomaliasAreaComum
-from ui.desenho_2d import CHAVES_MEDIDA_ORCCAD, PreviaDesenho2D, VistaIsometricaBloco
 from ui.grade_orcamento import GradeOrcamento
 from ui.icones import (
     carregar_png_icone,
@@ -135,14 +128,6 @@ def _nome_arquivo_sugerido(nome_condominio: str, municipio: str = "", uf: str = 
     return f"{texto}.json"
 
 
-def _fmt(valor, casas=2, *, inteiro=False) -> str:
-    if valor is None or valor == 0:
-        return "—"
-    if inteiro:
-        return formatar_decimal_br(valor, 0)
-    return formatar_decimal_br(valor, casas)
-
-
 def _numero_br_fixo(valor, casas: int = 2) -> str:
     """Sempre com as casas pedidas, inclusive zeros à direita."""
     try:
@@ -170,37 +155,12 @@ def _texto_campo_numerico(bruto, *, percentual=False, casas=None) -> str:
     return _numero_br_fixo(valor, casas) if casas is not None else formatar_decimal_br(valor)
 
 
-def _fmt_medida(valor, unidade: str) -> str:
-    if valor is None or valor == 0:
-        return "—"
-    return f"{_numero_br_fixo(valor)} {unidade}"
-
-
-CHAVES_INTEIRAS = {
-    "qtd_aptos_por_bloco",
-    "qtd_aptos_total",
-    "caixas_inspecao_total",
-    "caixas_gordura_total",
-}
-
-
 def _formatar_moeda(valor):
     return formatar_moeda_br(valor)
 
 
 def _formatar_quantidade(valor):
     return formatar_decimal_br(valor, casas=4)
-
-
-def _largura_combo_para_opcoes(combo, textos) -> int:
-    """Largura em caracteres do campo de texto (a seta do combo fica além disso)."""
-    try:
-        fonte = tkfont.Font(font=combo.cget("font") or "TkDefaultFont")
-    except tk.TclError:
-        fonte = tkfont.nametofont("TkDefaultFont")
-    px = max((fonte.measure(str(texto)) for texto in textos), default=60)
-    zero = max(fonte.measure("0"), 1)
-    return max(1, (px + zero - 1) // zero)
 
 
 def _combo_popdown_aberto(combo) -> bool:
@@ -287,7 +247,7 @@ def _formatar_bdi(valor):
 # Campo ou quantitativo da aba 1 -> parte que acende na visão isométrica.
 PARTES_ISOMETRICA = {
     "qtd_pavimentos": "pavimentos",
-    "pe_direito_m": "pavimentos",
+    "pe_direito_m": "pe_direito",
     "perimetro_paredes_externas_bloco_m": "paredes",
     "perimetro_paredes_externas_total_m": "paredes",
     "area_fachada_bloco_m2": "paredes",
@@ -352,47 +312,13 @@ class AreaComumFrame(tk.Frame):
         self.entrada_municipio = None
         self.combo_uf = None
         self.combo_uf_dados = None
-        self._desenho_principal = {
-            "externa": {"pontos": [], "fechado": False},
-            "hall": {"pontos": [], "fechado": False},
-        }
         self._janela_orccad = None
+        self._orccad_estrutura_id = None
 
         self.var_nome = tk.StringVar()
         self.var_municipio = tk.StringVar()
         self.var_uf = tk.StringVar(value=PLACEHOLDER_ESTADO)
         self.var_bdi = tk.StringVar(value=BDI_PADRAO)
-        self.var_tipo_estrutura = tk.StringVar(value=PLACEHOLDER_ESTADO)
-        self.var_tipo_cobertura = tk.StringVar(value=PLACEHOLDER_ESTADO)
-        self.var_medidas = {
-            chave: tk.StringVar() for chave, _rotulo in CAMPOS_MEDIDA_EDITAVEIS
-        }
-        self.var_medidas_auto = {
-            chave: tk.StringVar(value="—") for chave, _rotulo, _unidade in CAMPOS_MEDIDA_AUTO
-        }
-        self.var_resumo = {
-            chave: tk.StringVar(value="—") for chave, _rotulo, _un in CAMPOS_RESUMO_FACHADA
-        }
-        self.var_percentuais = {item[0]: tk.StringVar(value=item[2]) for item in PERCENTUAIS_MODELO}
-        self.var_pct_qtd = {item[0]: tk.StringVar(value="—") for item in PERCENTUAIS_MODELO}
-        self.var_esquadrias = {}
-        for modelo in ESQUADRIAS_MODELO:
-            self.var_esquadrias[modelo["id"]] = {
-                "dim_x": tk.StringVar(),
-                "dim_y": tk.StringVar(),
-                "h_peitoril": tk.StringVar(),
-                "qtd_por_pav": tk.StringVar(),
-                "perimetro": tk.StringVar(value="—"),
-                "pingadeira": tk.StringVar(value="—"),
-                "area": tk.StringVar(value="—"),
-                "sem_perimetro": bool(modelo.get("sem_perimetro")),
-            }
-        self.var_esquadrias_total = {
-            "qtd_por_pav": tk.StringVar(value="—"),
-            "perimetro": tk.StringVar(value="—"),
-            "pingadeira": tk.StringVar(value="—"),
-            "area": tk.StringVar(value="—"),
-        }
         self.var_arquivo = tk.StringVar(value="Rascunho novo")
         self.var_feedback = tk.StringVar(value="")
         self.var_total = tk.StringVar(value="Total geral: R$ 0,00")
@@ -413,7 +339,6 @@ class AreaComumFrame(tk.Frame):
             "limpeza_geral": tk.StringVar(value="(—)"),
         }
         self.var_rotulo_condominio = tk.StringVar(value="")
-        self.var_legenda_desenho = tk.StringVar(value="Ainda não há planta salva.")
 
         self._montar()
         self._vincular_sujeira()
@@ -605,15 +530,8 @@ class AreaComumFrame(tk.Frame):
     def _montar_condominio_dados(self, parent):
         cores = self._cores
         fundo = cores.fundo
-        faixa = tk.LabelFrame(
-            parent,
-            text="Condomínio",
-            bg=fundo,
-            fg=cores.texto,
-            padx=10,
-            pady=8,
-        )
-        faixa.pack(fill="x", pady=(8, 8), padx=8)
+        faixa = tk.Frame(parent, bg=fundo)
+        faixa.pack(fill="x", pady=(10, 10), padx=12)
 
         tk.Label(faixa, text="Nome:", bg=fundo, fg=cores.texto).grid(row=0, column=0, sticky="w")
         self.entrada_nome = ttk.Entry(faixa, textvariable=self.var_nome)
@@ -684,97 +602,6 @@ class AreaComumFrame(tk.Frame):
             "Recalcula as etapas e itens a partir das anomalias e percentuais",
         )
 
-    def _caixa(self, parent, var, rotulo, unidade="", wraplength=168, *, compacta=False):
-        cores = self._cores
-        caixa = tk.Frame(
-            parent,
-            bg=cores.fundo_cartao_off,
-            highlightbackground=cores.borda_suave,
-            highlightthickness=1,
-            padx=6 if compacta else 8,
-            pady=1 if compacta else 4,
-        )
-        texto = rotulo if compacta or not unidade else f"{rotulo} ({unidade})"
-        fonte_valor = ("Segoe UI", 9 if compacta else 10, "bold")
-        valor = tk.Label(
-            caixa,
-            textvariable=var,
-            bg=cores.fundo_cartao_off,
-            fg=cores.titulo,
-            font=fonte_valor,
-        )
-        legenda = tk.Label(
-            caixa,
-            text=texto,
-            bg=cores.fundo_cartao_off,
-            fg=cores.texto_suave,
-            font=("Segoe UI", 8),
-            wraplength=wraplength,
-            justify="left" if compacta else "center",
-            anchor="w" if compacta else "center",
-        )
-        if compacta:
-            caixa.valor_num = valor
-            caixa.unidade = unidade
-            unidade_lbl = tk.Label(
-                caixa,
-                text=unidade,
-                bg=cores.fundo_cartao_off,
-                fg=cores.titulo,
-                font=fonte_valor,
-            )
-            caixa.valor_un = unidade_lbl
-            caixa.folga_un = 4
-            valor.configure(anchor="e")
-            unidade_lbl.configure(anchor="w")
-            valor.grid(row=0, column=0, sticky="nes")
-            unidade_lbl.grid(row=0, column=1, sticky="nsw", padx=(caixa.folga_un, 0))
-            legenda.grid(row=0, column=2, sticky="nsw", padx=(6, 0))
-            caixa.rowconfigure(0, weight=1)
-            caixa.columnconfigure(2, weight=1)
-        else:
-            valor.pack()
-            legenda.pack()
-        return caixa
-
-    def _grade_caixas(self, parent, itens, colunas=5, *, compacta=False, wraplength=168):
-        """Cria as caixas de valor e as devolve, na mesma ordem de `itens`."""
-        caixas = []
-        todas = []
-        for indice, item in enumerate(itens):
-            var, rotulo = item[0], item[1]
-            unidade = item[2] if len(item) > 2 else ""
-            linha, col = divmod(indice, colunas)
-            caixa = self._caixa(
-                parent,
-                var,
-                rotulo,
-                unidade,
-                wraplength=wraplength,
-                compacta=compacta,
-            )
-            caixa.grid(
-                row=linha,
-                column=col,
-                sticky="nsew",
-                padx=(0, 6),
-                pady=2 if compacta else 4,
-            )
-            todas.append(caixa)
-            if compacta:
-                caixas.append(caixa)
-                var.trace_add("write", self._agendar_alinhamento_caixas)
-        for col in range(colunas):
-            parent.columnconfigure(col, weight=1)
-        if caixas:
-            grupos = getattr(self, "_grupos_caixas_compactas", None)
-            if grupos is None:
-                grupos = []
-                self._grupos_caixas_compactas = grupos
-            grupos.append(caixas)
-            self._agendar_alinhamento_caixas()
-        return todas
-
     def _ligar_destaque_isometrico(self, widgets, parte, *, campo=None):
         """Acende `parte` na visão isométrica com o mouse sobre `widgets`
         e, se houver `campo`, enquanto ele estiver sendo editado."""
@@ -824,47 +651,6 @@ class AreaComumFrame(tk.Frame):
         if vista is not None:
             vista.destacar(self._destaque_mouse or self._destaque_foco)
 
-    def _igualar_altura_titulos(self, *titulos):
-        """A borda do quadro passa no meio do título. Alturas diferentes deslocam essa linha."""
-        try:
-            if not all(titulo.winfo_exists() for titulo in titulos):
-                return
-            self.update_idletasks()
-            altura = max(titulo.winfo_reqheight() for titulo in titulos)
-            for titulo in titulos:
-                titulo.configure(width=max(titulo.winfo_reqwidth(), 1), height=altura)
-                titulo.pack_propagate(False)
-        except tk.TclError:
-            return
-
-    def _agendar_alinhamento_caixas(self, *_args):
-        if getattr(self, "_job_alinhar_caixas", None) is not None:
-            return
-        self._job_alinhar_caixas = self.after_idle(self._aplicar_alinhamento_caixas)
-
-    def _aplicar_alinhamento_caixas(self):
-        self._job_alinhar_caixas = None
-        try:
-            self.update_idletasks()
-        except tk.TclError:
-            return
-        for caixas in getattr(self, "_grupos_caixas_compactas", ()):
-            maior = 0
-            maior_un = 0
-            for caixa in caixas:
-                try:
-                    maior = max(maior, caixa.valor_num.winfo_reqwidth())
-                    if caixa.valor_un is not None:
-                        maior_un = max(
-                            maior_un,
-                            caixa.valor_un.winfo_reqwidth() + caixa.folga_un,
-                        )
-                except tk.TclError:
-                    return
-            for caixa in caixas:
-                caixa.columnconfigure(0, minsize=maior)
-                caixa.columnconfigure(1, minsize=maior_un)
-
     def _vincular_selecionar_tudo(self, widget):
         def _selecionar(_event=None):
             def aplicar():
@@ -909,396 +695,34 @@ class AreaComumFrame(tk.Frame):
             pass
 
     def _montar_aba_dados(self):
-        cores = self._cores
-        fundo = cores.fundo
-        interior = self._aba_rolavel("1. Dados iniciais")
-        self._montar_condominio_dados(interior)
+        self.aba_dados = AbaDadosIniciais(self, self.notebook)
+        self.previa_desenho = self.aba_dados.planta
+        self.vista_bloco = self.aba_dados.iso
 
-        bloco_qtd = tk.LabelFrame(
-            interior,
-            text="Características do Empreendimento",
-            bg=fundo,
-            fg=cores.texto,
-            padx=10,
-            pady=8,
+    @property
+    def var_percentuais(self) -> dict:
+        """Percentuais da aba 1 que a aba 2 lê e grava.
+
+        Os de cobertura, fachada e hall valem para todos os blocos
+        residenciais; os de caixas e calçadas, para o condomínio.
+        """
+        return self.aba_dados.percentuais_aba2()
+
+    def _tipos_para_reparo(self) -> tuple[str, str]:
+        """Tipo de estrutura e de cobertura usados para sugerir o reparo."""
+        estrutura = self.aba_dados.primeira_residencial() or self.aba_dados.atual
+        if estrutura is None:
+            return "", ""
+        return (
+            estado_do_combo(estrutura.var_tipo_estrutura.get()),
+            estado_do_combo(estrutura.var_tipo_cobertura.get()),
         )
-        bloco_qtd.pack(fill="x", pady=(8, 8), padx=8)
-        bloco_qtd.columnconfigure(0, weight=1)
-        bloco_qtd.columnconfigure(1, weight=1, minsize=320)
-        bloco_qtd.rowconfigure(0, weight=1)
 
-        campos = tk.Frame(bloco_qtd, bg=fundo)
-        campos.grid(row=0, column=0, sticky="nsew")
-        campos.columnconfigure(1, weight=1)
-        campos.columnconfigure(3, weight=1)
-
-        caracteristicas = (
-            ("tipo_estrutura", "Tipo de estrutura", TIPOS_ESTRUTURA, self.var_tipo_estrutura),
-            ("tipo_cobertura", "Tipo de cobertura", TIPOS_COBERTURA, self.var_tipo_cobertura),
-        )
-        textos_tipos = (PLACEHOLDER_ESTADO, *TIPOS_ESTRUTURA, *TIPOS_COBERTURA)
-        largura_tipos = None
-        for col_grupo, (_chave, rotulo, opcoes, var) in enumerate(caracteristicas):
-            col = col_grupo * 2
-            tk.Label(
-                campos, text=rotulo + ":", bg=fundo, fg=cores.texto, anchor="w"
-            ).grid(row=0, column=col, sticky="w", pady=2, padx=(0, 6))
-            combo = ttk.Combobox(
-                campos,
-                textvariable=var,
-                values=(PLACEHOLDER_ESTADO, *opcoes),
-                state="readonly",
-            )
-            if largura_tipos is None:
-                largura_tipos = _largura_combo_para_opcoes(combo, textos_tipos)
-            combo.configure(width=largura_tipos)
-            combo.grid(row=0, column=col + 1, sticky="w", pady=2, padx=(0, 18))
-            combo.bind("<<ComboboxSelected>>", lambda _e: self._ao_alterar_campo())
-            _vincular_combo_fecha_ao_rolar(combo)
-
-        linha_vazia = tk.Frame(campos, bg=fundo, height=16)
-        linha_vazia.grid(row=1, column=0, columnspan=4, sticky="ew")
-        linha_vazia.grid_propagate(False)
-
-        for indice, (chave, rotulo) in enumerate(CAMPOS_MEDIDA_EDITAVEIS):
-            linha = 2 + indice // 2
-            col = (indice % 2) * 2
-            lbl_campo = tk.Label(
-                campos, text=rotulo + ":", bg=fundo, fg=cores.texto, anchor="w"
-            )
-            lbl_campo.grid(row=linha, column=col, sticky="w", pady=2, padx=(0, 6))
-            # Mesmo widget em todos (tk.Entry): no Windows o ttk ignora
-            # fieldbackground, e misturar ttk/tk desalinha a coluna.
-            fundo_campo = (
-                cores.fundo_cartao_off
-                if chave in CHAVES_MEDIDA_ORCCAD
-                else cores.fundo_cartao
-            )
-            entrada = tk.Entry(
-                campos,
-                textvariable=self.var_medidas[chave],
-                width=12,
-                bg=fundo_campo,
-                fg=cores.texto,
-                insertbackground=cores.texto,
-                relief="solid",
-                bd=1,
-                highlightthickness=0,
-            )
-            entrada.grid(row=linha, column=col + 1, sticky="w", pady=2, padx=(0, 18))
-            self._vincular_campo_numerico(entrada)
-            self._entradas_caracteristicas.add(entrada)
-            entrada.bind("<Escape>", lambda _e: self._tirar_foco_campo(), add="+")
-            parte = PARTES_ISOMETRICA.get(chave)
-            if parte:
-                self._ligar_destaque_isometrico([lbl_campo, entrada], parte, campo=entrada)
-
-        linha_auto = 2 + (len(CAMPOS_MEDIDA_EDITAVEIS) + 1) // 2
-        tk.Label(
-            campos,
-            text="Quantitativos calculados automaticamente",
-            bg=fundo,
-            fg=cores.titulo,
-            font=("Segoe UI", 9, "bold"),
-            anchor="w",
-        ).grid(row=linha_auto, column=0, columnspan=4, sticky="w", pady=(10, 2))
-        caixas_auto = tk.Frame(campos, bg=fundo)
-        caixas_auto.grid(row=linha_auto + 1, column=0, columnspan=4, sticky="ew")
-        caixas = self._grade_caixas(
-            caixas_auto,
-            [
-                (self.var_medidas_auto[chave], rotulo, unidade)
-                for chave, rotulo, unidade in CAMPOS_MEDIDA_AUTO
-            ],
-            colunas=2,
-            compacta=True,
-            wraplength=150,
-        )
-        for (chave, _rotulo, _unidade), caixa in zip(CAMPOS_MEDIDA_AUTO, caixas):
-            if chave in PARTES_ISOMETRICA:
-                self._ligar_destaque_isometrico([caixa], PARTES_ISOMETRICA[chave])
-
-        lado_desenho = tk.Frame(bloco_qtd, bg=fundo)
-        lado_desenho.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
-        lado_desenho.rowconfigure(1, weight=1)
-        lado_desenho.rowconfigure(3, weight=1)
-        lado_desenho.columnconfigure(0, weight=1)
-        criar_botao_ttk_com_icone(
-            lado_desenho,
-            texto="Abrir ORCCAD",
-            nome_icone="cube-outline",
-            command=self._abrir_orccad,
-            estilo=self._estilos.compacto,
-            cor_icone=self._estilos.icone,
-            refs=self._refs_icones,
-        ).grid(row=0, column=0, sticky="w")
-        self.previa_desenho = PreviaDesenho2D(lado_desenho, largura=340, altura=220)
-        self.previa_desenho.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
-        tk.Label(
-            lado_desenho,
-            textvariable=self.var_legenda_desenho,
-            bg=fundo,
-            fg=cores.titulo,
-            font=("Segoe UI", 8),
-            anchor="w",
-            justify="left",
-            wraplength=340,
-        ).grid(row=2, column=0, sticky="ew", pady=(4, 0))
-        self.vista_bloco = VistaIsometricaBloco(lado_desenho, largura=340, altura=220)
-        self.vista_bloco.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
-
-        faixa_esq = tk.Frame(interior, bg=fundo)
-        faixa_esq.pack(fill="x", pady=(0, 8), padx=8)
-
-        titulo_esq = tk.Frame(faixa_esq, bg=fundo)
-        tk.Label(
-            titulo_esq,
-            text="Medidas das esquadrias",
-            bg=fundo,
-            fg=cores.texto,
-        ).pack(side="left")
-        caixa_info_esq = tk.Frame(
-            titulo_esq,
-            bg=fundo,
-            highlightbackground=cores.borda_suave,
-            highlightthickness=1,
-            bd=0,
-            cursor="hand2",
-        )
-        caixa_info_esq.pack(side="left", padx=(4, 0))
-        info_esq = tk.Label(
-            caixa_info_esq,
-            text="?",
-            bg=fundo,
-            fg=cores.texto_suave,
-            font=("Segoe UI", 8),
-            cursor="hand2",
-            relief="flat",
-            bd=0,
-            padx=3,
-            pady=0,
-        )
-        info_esq.pack()
-        texto_dica_esq = (
-            "Perímetro, pingadeira e área são por pavimento.\n"
-            "A área de esquadrias (janelas, porta do hall e cobogós) "
-            "é descontada da fachada.\n"
-            "Área de janelas, perímetro e pingadeira não incluem "
-            "a porta do hall nem os cobogós."
-        )
-        vincular_tooltip(caixa_info_esq, texto_dica_esq)
-        vincular_tooltip(info_esq, texto_dica_esq)
-        bloco_esq = tk.LabelFrame(
-            faixa_esq,
-            labelwidget=titulo_esq,
-            bg=fundo,
-            fg=cores.texto,
-            padx=10,
-            pady=8,
-        )
-        bloco_esq.pack(side="left", fill="y", anchor="n")
-        self._bloco_esquadrias = bloco_esq
-        janela_esq = self.winfo_toplevel()
-        janela_esq.bind("<Escape>", self._ao_esc_esquadrias, add="+")
-        janela_esq.bind("<Button-1>", self._ao_clique_fora_esquadrias, add="+")
-
-        cabecalhos = (
-            "Esquadria",
-            "Dim. X (m)",
-            "Dim. Y (m)",
-            "H peitoril (m)",
-            "Qtde. por pav.",
-            "Perímetro",
-            "Pingadeira",
-            "Área",
-        )
-        for col, texto in enumerate(cabecalhos):
-            tk.Label(
-                bloco_esq,
-                text=texto,
-                bg=fundo,
-                fg=cores.texto,
-                font=("Segoe UI", 8, "bold"),
-            ).grid(row=0, column=col, padx=4, pady=(0, 4), sticky="w")
-
-        for indice, modelo in enumerate(ESQUADRIAS_MODELO, start=1):
-            ident = modelo["id"]
-            vars_e = self.var_esquadrias[ident]
-            tk.Label(bloco_esq, text=modelo["rotulo"], bg=fundo, fg=cores.texto, anchor="w").grid(
-                row=indice, column=0, sticky="w", padx=4, pady=2
-            )
-            for col, chave_e in enumerate(("dim_x", "dim_y", "h_peitoril", "qtd_por_pav"), start=1):
-                entrada_e = ttk.Entry(bloco_esq, textvariable=vars_e[chave_e], width=9)
-                entrada_e.grid(row=indice, column=col, padx=4)
-                self._vincular_campo_numerico(entrada_e, casas=2)
-            for col, chave in enumerate(("perimetro", "pingadeira", "area"), start=5):
-                tk.Label(
-                    bloco_esq,
-                    textvariable=vars_e[chave],
-                    bg=cores.fundo_cartao_off,
-                    fg=cores.titulo,
-                    width=12,
-                    relief="solid",
-                    bd=1,
-                ).grid(row=indice, column=col, padx=4, pady=2)
-
-        linha_total = len(ESQUADRIAS_MODELO) + 1
-        tk.Label(
-            bloco_esq,
-            text="TOTAL POR PAVIMENTO",
-            bg=fundo,
-            fg=cores.titulo,
-            font=("Segoe UI", 9, "bold"),
-            anchor="w",
-        ).grid(
-            row=linha_total,
-            column=0,
-            columnspan=4,
-            sticky="w",
-            padx=4,
-            pady=(6, 2),
-        )
-        tk.Label(
-            bloco_esq,
-            textvariable=self.var_esquadrias_total["qtd_por_pav"],
-            bg=cores.fundo_cartao_off,
-            fg=cores.titulo,
-            font=("Segoe UI", 9, "bold"),
-            width=10,
-            relief="solid",
-            bd=1,
-        ).grid(row=linha_total, column=4, padx=4, pady=(6, 2))
-        for col, chave in enumerate(("perimetro", "pingadeira", "area"), start=5):
-            tk.Label(
-                bloco_esq,
-                textvariable=self.var_esquadrias_total[chave],
-                bg=cores.fundo_cartao_off,
-                fg=cores.titulo,
-                font=("Segoe UI", 9, "bold"),
-                width=12,
-                relief="solid",
-                bd=1,
-            ).grid(row=linha_total, column=col, padx=4, pady=(6, 2))
-
-        titulo_res = tk.Frame(faixa_esq, bg=fundo)
-        tk.Label(
-            titulo_res,
-            text="Quantitativos de esquadrias e fachada",
-            bg=fundo,
-            fg=cores.texto,
-        ).pack(side="left")
-        bloco_res = tk.LabelFrame(
-            faixa_esq,
-            labelwidget=titulo_res,
-            bg=fundo,
-            fg=cores.texto,
-            padx=10,
-            pady=8,
-        )
-        bloco_res.pack(side="left", fill="both", expand=True, anchor="n", padx=(12, 0))
-        self.after_idle(lambda: self._igualar_altura_titulos(titulo_esq, titulo_res))
-        grade_res = tk.Frame(bloco_res, bg=fundo)
-        grade_res.pack(fill="both", expand=True)
-        caixas = self._grade_caixas(
-            grade_res,
-            [
-                (self.var_resumo[chave], rotulo, unidade)
-                for chave, rotulo, unidade in CAMPOS_RESUMO_FACHADA
-            ],
-            colunas=2,
-            compacta=True,
-            wraplength=180,
-        )
-        for (chave, _rotulo, _unidade), caixa in zip(CAMPOS_RESUMO_FACHADA, caixas):
-            if chave in PARTES_ISOMETRICA:
-                self._ligar_destaque_isometrico([caixa], PARTES_ISOMETRICA[chave])
-
-        titulo_pct = tk.Frame(interior, bg=fundo)
-        tk.Label(
-            titulo_pct,
-            text="Percentuais de quantitativos",
-            bg=fundo,
-            fg=cores.texto,
-        ).pack(side="left")
-        ttk.Checkbutton(
-            titulo_pct,
-            text="2 demãos de fundo selador",
-            variable=self.var_duas_demaos_selador,
-            command=self._ao_trocar_demaos_selador,
-        ).pack(side="right", padx=(24, 0))
-        bloco_pct = tk.LabelFrame(
-            interior,
-            labelwidget=titulo_pct,
-            bg=fundo,
-            fg=cores.texto,
-            padx=10,
-            pady=8,
-        )
-        bloco_pct.pack(fill="x", pady=(0, 8), padx=8)
-
-        colunas_pct = 3
-        colunas_frame = []
-        for col_grupo in range(colunas_pct):
-            if col_grupo:
-                sep = tk.Frame(bloco_pct, bg=cores.borda_suave, width=1)
-                sep.pack(side="left", fill="y", padx=10, pady=2)
-            col_frame = tk.Frame(bloco_pct, bg=fundo)
-            col_frame.pack(side="left", fill="both", expand=True, anchor="n")
-            colunas_frame.append(col_frame)
-
-        for indice, (chave, rotulo, _padrao, _qtd_chave, _unidade) in enumerate(
-            PERCENTUAIS_MODELO
-        ):
-            col_grupo = indice % colunas_pct
-            linha = indice // colunas_pct
-            parent = colunas_frame[col_grupo]
-            tk.Label(
-                parent,
-                text=rotulo + " (%):",
-                bg=fundo,
-                fg=cores.texto,
-                anchor="w",
-            ).grid(row=linha, column=0, sticky="w", pady=3, padx=(0, 6))
-            entrada_pct = ttk.Entry(
-                parent, textvariable=self.var_percentuais[chave], width=5
-            )
-            entrada_pct.grid(row=linha, column=1, sticky="w", pady=3, padx=(0, 4))
-            self._vincular_campo_numerico(entrada_pct, percentual=True)
-            entrada_pct.bind(
-                "<FocusIn>",
-                lambda _e, c=chave: self._ao_focar_percentual(c),
-                add="+",
-            )
-            entrada_pct.bind(
-                "<FocusOut>",
-                lambda _e, c=chave, w=entrada_pct: self._ao_sair_percentual(c, w),
-                add="+",
-            )
-            tk.Label(
-                parent,
-                textvariable=self.var_pct_qtd[chave],
-                bg=cores.fundo_cartao_off,
-                fg=cores.titulo,
-                width=10,
-                relief="solid",
-                bd=1,
-                anchor="e",
-            ).grid(row=linha, column=2, sticky="w", pady=3)
-
-        bloco_obs = tk.LabelFrame(
-            interior,
-            text="Observações",
-            bg=fundo,
-            fg=cores.texto,
-            padx=10,
-            pady=8,
-        )
-        bloco_obs.pack(fill="both", expand=True, pady=(0, 12), padx=8)
-        self.texto_obs = tk.Text(bloco_obs, height=4, wrap="word")
-        self.texto_obs.pack(fill="both", expand=True)
-        self.texto_obs.bind("<KeyRelease>", lambda _e: self._ao_alterar_campo())
-        # <<Modified>> pega também colar pelo mouse e outras alterações.
-        self.texto_obs.bind("<<Modified>>", self._ao_modificar_observacoes)
+    def _estruturas_mudaram(self, descricao: str) -> None:
+        """Estrutura adicionada ou removida na aba 1."""
+        self._marcar_sujo()
+        self._registrar_historico(descricao)
+        self._recalcular()
 
     def _ao_modificar_observacoes(self, _event=None):
         """Mantém uma cópia do texto fora do widget.
@@ -1380,9 +804,13 @@ class AreaComumFrame(tk.Frame):
         self.tree_anomalias.heading("valor_atual", text="Valor atual", anchor="e")
         self.tree_anomalias.column("#0", width=260)
         self.tree_anomalias.column("reparo", width=200, anchor="center")
-        self.tree_anomalias.column("percentual", width=58, anchor="center")
+        # "% qtd." e "Valor atual" têm conteúdo curto: largura fixa, sem esticar.
+        # O espaço que sobra na tela vai para as colunas de texto.
+        self.tree_anomalias.column("percentual", width=58, minwidth=50, anchor="center",
+                                   stretch=False)
         self.tree_anomalias.column("valor", width=220, anchor="e")
-        self.tree_anomalias.column("valor_atual", width=120, anchor="e")
+        self.tree_anomalias.column("valor_atual", width=118, minwidth=100, anchor="e",
+                                   stretch=False)
         self.tree_anomalias.bind("<Button-1>", self._ao_clique_percentual_anomalia, add="+")
         self.tree_anomalias.bind("<Double-1>", self._ao_duplo_clique_anomalia)
         self.tree_anomalias.bind("<Motion>", self._ao_mover_tree_anomalias)
@@ -1882,30 +1310,6 @@ class AreaComumFrame(tk.Frame):
         ).pack(side="left")
         self._atualizar_estado_planilha()
 
-    def _aba_rolavel(self, titulo):
-        cores = self._cores
-        fundo = cores.fundo
-        aba = ttk.Frame(self.notebook)
-        self.notebook.add(aba, text=titulo)
-        canvas = tk.Canvas(aba, highlightthickness=0, bg=fundo)
-        scroll = ttk.Scrollbar(aba, orient="vertical", command=canvas.yview)
-        interior = tk.Frame(canvas, bg=fundo)
-        interior.bind(
-            "<Configure>",
-            lambda _e: canvas.configure(scrollregion=canvas.bbox("all")),
-        )
-        janela = canvas.create_window((0, 0), window=interior, anchor="nw")
-        canvas.configure(yscrollcommand=scroll.set)
-
-        def _ajustar_largura(event):
-            canvas.itemconfigure(janela, width=event.width)
-
-        canvas.bind("<Configure>", _ajustar_largura)
-        canvas.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-        self._vincular_scroll(canvas, interior)
-        return interior
-
     def _vincular_scroll(self, canvas, interior):
         def _rolar(event):
             try:
@@ -1951,15 +1355,8 @@ class AreaComumFrame(tk.Frame):
             self.var_municipio,
             self.var_uf,
             self.var_bdi,
-            self.var_tipo_estrutura,
-            self.var_tipo_cobertura,
-            *self.var_medidas.values(),
-            *self.var_percentuais.values(),
         ]
-        for grupo in self.var_esquadrias.values():
-            variaveis.extend(
-                [grupo["dim_x"], grupo["dim_y"], grupo["h_peitoril"], grupo["qtd_por_pav"]]
-            )
+        # Os campos das estruturas e do condomínio (aba 1) se ligam em AbaDadosIniciais.
         for var in variaveis:
             var.trace_add("write", self._ao_alterar_campo)
 
@@ -2037,6 +1434,7 @@ class AreaComumFrame(tk.Frame):
         self.var_rotulo_condominio.set(texto)
 
     def _abrir_orccad(self):
+        """Abre o ORCCAD com a planta da estrutura que está na tela."""
         from ui.orccad import JanelaORCCAD
 
         if self._janela_orccad is not None:
@@ -2047,94 +1445,57 @@ class AreaComumFrame(tk.Frame):
             except tk.TclError:
                 self._janela_orccad = None
 
+        estrutura = self.aba_dados.atual
+        if estrutura is None:
+            return
+        self._orccad_estrutura_id = estrutura.id
         self._janela_orccad = JanelaORCCAD(
             self.winfo_toplevel(),
             on_salvar_principal=self._ao_salvar_desenho_principal,
             on_fechar=self._ao_fechar_orccad,
-            desenho_inicial=self._desenho_principal,
+            desenho_inicial=estrutura.desenho,
         )
+        try:
+            self._janela_orccad.janela.title(f"ORC — Desenho de metragens · {estrutura.nome}")
+        except tk.TclError:
+            pass
 
     def _ao_fechar_orccad(self):
         self._janela_orccad = None
 
     def _ao_salvar_desenho_principal(self, desenho, valores):
-        self._desenho_principal = deepcopy(
+        estrutura = self.aba_dados.estrutura_por_id(self._orccad_estrutura_id)
+        if estrutura is None:
+            self._mostrar_feedback("A estrutura dessa planta foi removida.", "orange")
+            return
+        estrutura.desenho = deepcopy(
             desenho
             or {
                 "externa": {"pontos": [], "fechado": False},
                 "hall": {"pontos": [], "fechado": False},
             }
         )
+        preenchidos = 0
         for chave, texto in (valores or {}).items():
-            if chave in self.var_medidas and texto:
-                self.var_medidas[chave].set(texto)
+            var = estrutura.vars_medida.get(chave)
+            if var is not None and texto:
+                var.set(texto)
+                preenchidos += 1
+        self.aba_dados.atual = estrutura
         self._atualizar_previa_desenho()
         self._marcar_sujo()
-        self._registrar_historico("Planta do condomínio")
+        self._registrar_historico(f"Planta de «{estrutura.nome}»")
         self._recalcular()
-        n = len(valores or {})
         self._mostrar_feedback(
-            f"Planta salva: {n} campo(s) de metragem preenchido(s).",
+            f"Planta de {estrutura.nome} salva: {preenchidos} campo(s) de metragem preenchido(s).",
             "green",
         )
 
     def _atualizar_previa_desenho(self):
-        if hasattr(self, "previa_desenho"):
-            self.previa_desenho.definir(self._desenho_principal)
-        from core.desenho_geometria import dict_para_camadas, resultado_desenho
+        self.aba_dados.mostrar_desenho()
 
-        camadas = dict_para_camadas(self._desenho_principal)
-        ext_pts, ext_fech = camadas["externa"]
-        hall_pts, hall_fech = camadas["hall"]
-        self._atualizar_vista_bloco(ext_pts, ext_fech)
-        if len(ext_pts) < 2 and len(hall_pts) < 2:
-            self.var_legenda_desenho.set("Ainda não há planta salva.")
-            return
-        partes = []
-        if len(ext_pts) >= 2:
-            res = resultado_desenho(ext_pts, fechado=ext_fech)
-            if res.fechado:
-                partes.append(
-                    f"Externa — Área: {formatar_decimal_br(res.area_m2, 2)} m² · "
-                    f"Perímetro: {formatar_decimal_br(res.perimetro_m, 2)} m"
-                )
-            else:
-                partes.append(
-                    f"Externa (aberta) — Perímetro: "
-                    f"{formatar_decimal_br(res.perimetro_m, 2)} m"
-                )
-        if len(hall_pts) >= 2:
-            res_h = resultado_desenho(hall_pts, fechado=hall_fech)
-            if res_h.fechado:
-                partes.append(
-                    f"Hall — Área: {formatar_decimal_br(res_h.area_m2, 2)} m² · "
-                    f"Perímetro: {formatar_decimal_br(res_h.perimetro_m, 2)} m"
-                )
-            else:
-                partes.append(
-                    f"Hall (aberto) — Perímetro: "
-                    f"{formatar_decimal_br(res_h.perimetro_m, 2)} m"
-                )
-        self.var_legenda_desenho.set("\n".join(partes))
-
-    def _atualizar_vista_bloco(self, pontos=None, fechado=None):
-        if not hasattr(self, "vista_bloco"):
-            return
-        if pontos is None:
-            from core.desenho_geometria import dict_para_camadas
-
-            camadas = dict_para_camadas(self._desenho_principal)
-            pontos, fechado = camadas["externa"]
-        pe = numero(self.var_medidas["pe_direito_m"].get())
-        pav = numero(self.var_medidas["qtd_pavimentos"].get())
-        self.vista_bloco.definir(
-            pontos,
-            bool(fechado),
-            pe,
-            pav,
-            platibanda=numero(self.var_medidas["altura_platibanda_m"].get()),
-            blocos=numero(self.var_medidas["qtd_blocos"].get()),
-        )
+    def _atualizar_vista_bloco(self, *_args):
+        self.aba_dados.mostrar_desenho()
 
     def _ao_sair_municipio(self, _event=None):
         self._resolver_uf_municipio()
@@ -2313,60 +1674,10 @@ class AreaComumFrame(tk.Frame):
                 pass
         self._job_calculo = None
         self._sincronizar_percentual_pintura_fachada()
-        medidas = {chave: var.get() for chave, var in self.var_medidas.items()}
-        esquadrias = []
-        for modelo in ESQUADRIAS_MODELO:
-            vars_e = self.var_esquadrias[modelo["id"]]
-            esquadrias.append(
-                {
-                    "id": modelo["id"],
-                    "sem_perimetro": bool(modelo.get("sem_perimetro")),
-                    "cobogo": bool(modelo.get("cobogo")),
-                    "dim_x": vars_e["dim_x"].get(),
-                    "dim_y": vars_e["dim_y"].get(),
-                    "h_peitoril": vars_e["h_peitoril"].get(),
-                    "qtd_por_pav": vars_e["qtd_por_pav"].get(),
-                }
-            )
-        percentuais = {chave: var.get() for chave, var in self.var_percentuais.items()}
-        q = calcular_quantitativos(medidas, esquadrias, percentuais)
-        self._quantitativos = q
-        self._atualizar_vista_bloco()
-
-        for chave, _rotulo, _unidade in CAMPOS_MEDIDA_AUTO:
-            self.var_medidas_auto[chave].set(
-                _fmt(q.get(chave, 0), inteiro=chave in CHAVES_INTEIRAS)
-            )
-        for chave, _rotulo, unidade in CAMPOS_RESUMO_FACHADA:
-            self.var_resumo[chave].set(
-                _fmt(q.get(chave, 0), inteiro=not unidade)
-            )
-        for chave, _rotulo, _padrao, qtd_chave, unidade in PERCENTUAIS_MODELO:
-            texto = _fmt(q.get(qtd_chave, 0))
-            if texto != "—":
-                texto = f"{texto} {unidade}"
-            self.var_pct_qtd[chave].set(texto)
-
-        linhas_esq = q.get("esquadrias") or {}
-        for modelo in ESQUADRIAS_MODELO:
-            calc = linhas_esq.get(modelo["id"]) or {}
-            vars_e = self.var_esquadrias[modelo["id"]]
-            vars_e["perimetro"].set(_fmt_medida(calc.get("perimetro_pav_m", 0), "m"))
-            vars_e["pingadeira"].set(_fmt_medida(calc.get("pingadeira_pav_m", 0), "m"))
-            vars_e["area"].set(_fmt_medida(calc.get("area_pav_m2", 0), "m²"))
-        qtd_pav = q.get("esquadria_qtd_pav", 0)
-        self.var_esquadrias_total["qtd_por_pav"].set(
-            _numero_br_fixo(qtd_pav) if qtd_pav else "—"
-        )
-        self.var_esquadrias_total["perimetro"].set(
-            _fmt_medida(q.get("esquadria_perimetro_pav_m", 0), "m")
-        )
-        self.var_esquadrias_total["pingadeira"].set(
-            _fmt_medida(q.get("esquadria_pingadeira_pav_m", 0), "m")
-        )
-        self.var_esquadrias_total["area"].set(
-            _fmt_medida(q.get("esquadria_area_pav_m2", 0), "m²")
-        )
+        # Blocos residenciais somados + itens do condomínio (ver quantitativos_do_rascunho).
+        self._quantitativos = quantitativos_do_rascunho(self.aba_dados.dados_para_calculo())
+        self.aba_dados.atualizar_exibicao()
+        self._atualizar_rotulo_percentual_pintura()
 
         self._atualizar_preview_orcamento()
         self._atualizar_valores_anomalias_orcamento()
@@ -2378,40 +1689,7 @@ class AreaComumFrame(tk.Frame):
         dados["condominio"]["municipio"] = self.var_municipio.get().strip()
         dados["condominio"]["uf"] = estado_do_combo(self.var_uf.get())
         dados["dados_iniciais"]["bdi_percent"] = self.var_bdi.get().strip() or BDI_PADRAO
-        dados["dados_iniciais"]["tipo_estrutura"] = estado_do_combo(
-            self.var_tipo_estrutura.get()
-        )
-        dados["dados_iniciais"]["tipo_cobertura"] = estado_do_combo(
-            self.var_tipo_cobertura.get()
-        )
-        for chave, var in self.var_medidas.items():
-            dados["dados_iniciais"]["medidas"][chave] = var.get().strip()
-        dados["dados_iniciais"]["percentuais"] = {
-            chave: var.get().strip() for chave, var in self.var_percentuais.items()
-        }
-        dados["dados_iniciais"]["desenho_principal"] = deepcopy(
-            self._desenho_principal
-            or {
-                "externa": {"pontos": [], "fechado": False},
-                "hall": {"pontos": [], "fechado": False},
-            }
-        )
-        esquadrias = []
-        for modelo in ESQUADRIAS_MODELO:
-            vars_e = self.var_esquadrias[modelo["id"]]
-            esquadrias.append(
-                {
-                    "id": modelo["id"],
-                    "rotulo": modelo["rotulo"],
-                    "sem_perimetro": bool(modelo.get("sem_perimetro")),
-                    "cobogo": bool(modelo.get("cobogo")),
-                    "dim_x": vars_e["dim_x"].get().strip(),
-                    "dim_y": vars_e["dim_y"].get().strip(),
-                    "h_peitoril": vars_e["h_peitoril"].get().strip(),
-                    "qtd_por_pav": vars_e["qtd_por_pav"].get().strip(),
-                }
-            )
-        dados["esquadrias"] = esquadrias
+        self.aba_dados.coletar_em(dados)
         dados["anomalias_orcamento"] = list(self._anomalias_orcamento)
         dados["considerar_servicos_preliminares"] = bool(self.var_considerar_sp.get())
         dados["considerar_pintura"] = bool(self.var_considerar_pintura.get())
@@ -2528,36 +1806,9 @@ class AreaComumFrame(tk.Frame):
             self.var_uf.set(uf if uf else PLACEHOLDER_ESTADO)
             iniciais = dados.get("dados_iniciais") or {}
             self.var_bdi.set(iniciais.get("bdi_percent") or BDI_PADRAO)
-            estrutura = (iniciais.get("tipo_estrutura") or "").strip()
-            self.var_tipo_estrutura.set(estrutura if estrutura else PLACEHOLDER_ESTADO)
-            cobertura = (iniciais.get("tipo_cobertura") or "").strip()
-            self.var_tipo_cobertura.set(cobertura if cobertura else PLACEHOLDER_ESTADO)
-            medidas = iniciais.get("medidas") or {}
-            for chave, var in self.var_medidas.items():
-                var.set(medidas.get(chave, ""))
-            percentuais = iniciais.get("percentuais") or {}
-            for chave, var in self.var_percentuais.items():
-                var.set(percentuais.get(chave, ""))
-            from core.desenho_geometria import dict_para_camadas, desenho_camadas_para_dict
-
-            brutos = iniciais.get("desenho_principal") or {}
-            camadas = dict_para_camadas(brutos)
-            self._desenho_principal = desenho_camadas_para_dict(
-                externa_pontos=camadas["externa"][0],
-                externa_fechado=camadas["externa"][1],
-                hall_pontos=camadas["hall"][0],
-                hall_fechado=camadas["hall"][1],
-            )
-            self._atualizar_previa_desenho()
+            self._observacoes = (dados.get("observacoes") or "").strip()
+            self.aba_dados.aplicar(dados)
             self._atualizar_rotulo_condominio()
-            for item in dados.get("esquadrias") or []:
-                ident = item.get("id")
-                if ident not in self.var_esquadrias:
-                    continue
-                for chave_e in ("dim_x", "dim_y", "h_peitoril", "qtd_por_pav"):
-                    self.var_esquadrias[ident][chave_e].set(
-                        _texto_campo_numerico(item.get(chave_e), casas=2)
-                    )
             self._anomalias_orcamento = list(dados.get("anomalias_orcamento") or [])
             # normalizar_rascunho já preenche os padrões dessas chaves.
             self.var_considerar_sp.set(bool(dados["considerar_servicos_preliminares"]))
@@ -3186,8 +2437,8 @@ class AreaComumFrame(tk.Frame):
             nomes = [r.get("nome") or f"Reparo {i+1}" for i, r in enumerate(reparos)]
             sugerido, dica = reparo_recomendado(
                 anomalias[nome],
-                tipo_estrutura=estado_do_combo(self.var_tipo_estrutura.get()),
-                tipo_cobertura=estado_do_combo(self.var_tipo_cobertura.get()),
+                tipo_estrutura=self._tipos_para_reparo()[0],
+                tipo_cobertura=self._tipos_para_reparo()[1],
             )
             selecionar = None
             if sugerido is not None:
@@ -3757,47 +3008,6 @@ class AreaComumFrame(tk.Frame):
             atual = getattr(atual, "master", None)
         return False
 
-    def _foco_em_entrada_esquadria(self) -> bool:
-        try:
-            foco = self.focus_get()
-        except tk.TclError:
-            return False
-        return isinstance(foco, (tk.Entry, ttk.Entry)) and self._widget_dentro(
-            foco, getattr(self, "_bloco_esquadrias", None)
-        )
-
-    def _soltar_foco_esquadrias(self):
-        try:
-            self.winfo_toplevel().focus_set()
-        except tk.TclError:
-            return
-
-    def _ao_esc_esquadrias(self, _event=None):
-        try:
-            if self.winfo_toplevel().grab_current():
-                return
-        except tk.TclError:
-            return
-        if not self._foco_em_entrada_esquadria():
-            return
-        self._soltar_foco_esquadrias()
-        return "break"
-
-    def _ao_clique_fora_esquadrias(self, event):
-        try:
-            if self.winfo_toplevel().grab_current():
-                return
-        except tk.TclError:
-            return
-        if not self._foco_em_entrada_esquadria():
-            return
-        widget = event.widget
-        if isinstance(widget, (tk.Entry, ttk.Entry)) and self._widget_dentro(
-            widget, self._bloco_esquadrias
-        ):
-            return
-        self._soltar_foco_esquadrias()
-
     def _ao_esc_anomalias(self, _event=None):
         if not self._aba_anomalias_visivel():
             return
@@ -3958,8 +3168,8 @@ class AreaComumFrame(tk.Frame):
         selecionar = atual if atual in nomes else None
         _sugerido, dica = reparo_recomendado(
             cadastro,
-            tipo_estrutura=estado_do_combo(self.var_tipo_estrutura.get()),
-            tipo_cobertura=estado_do_combo(self.var_tipo_cobertura.get()),
+            tipo_estrutura=self._tipos_para_reparo()[0],
+            tipo_cobertura=self._tipos_para_reparo()[1],
         )
         escolhido = self._escolher_lista(
             "Trocar reparo",
@@ -4000,18 +3210,21 @@ class AreaComumFrame(tk.Frame):
             self.tree_anomalias.selection_set(item_id)
             self.tree_anomalias.see(item_id)
 
-    def _ao_focar_percentual(self, chave):
-        self._pct_em_edicao[chave] = self.var_percentuais[chave].get()
+    def _ao_focar_percentual(self, chave, var=None):
+        """var: o campo da estrutura que está sendo editado (aba 1)."""
+        var = var if var is not None else self.var_percentuais[chave]
+        self._pct_em_edicao[chave] = var.get()
 
-    def _ao_sair_percentual(self, chave, widget):
+    def _ao_sair_percentual(self, chave, widget, var=None):
         self._resolver_formula(widget, percentual=True)
+        var = var if var is not None else self.var_percentuais[chave]
         if (
             self._carregando
             or self._aplicando_historico
             or self._sincronizando_percentuais
         ):
             return
-        atual = self.var_percentuais[chave].get()
+        atual = var.get()
         anterior = self._pct_em_edicao.get(chave)
         if str(atual or "").strip() == str(anterior or "").strip():
             return

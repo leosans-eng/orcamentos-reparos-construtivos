@@ -1648,81 +1648,6 @@
         "por_opcao": {}
       }
     },
-    "TESTE": {
-      "reparos": [
-        {
-          "id": "1068eea7-bafd-445f-a2d3-9d4ff3725982",
-          "nome": "Reparo padrão",
-          "origem": "etapa_predefinida",
-          "etapa_predefinida_id": "683c1be7-7f24-4eb3-8145-5798c12672b3",
-          "etapa_nome": "ACESSIBILIDADE (ADEQUAÇÃO DOS DEGRAUS)",
-          "tipo_calculo_etapa": "fixo",
-          "titulo_orcamento": "anomalia_reparo",
-          "titulo_personalizado": "",
-          "percentuais_aba1": [],
-          "itens": [
-            {
-              "id": "bd907b5c-ae6f-4cb6-a409-14d430373fe6",
-              "tipo": "sinapi",
-              "codigo_sinapi": "104790",
-              "unidade": "M3",
-              "da_etapa": true,
-              "multiplicador": 1.0,
-              "tipo_sinapi": "C",
-              "fatores": [
-                {
-                  "tipo_calculo": "fixo",
-                  "coeficiente": 1.0,
-                  "operacao": "multiplicar"
-                }
-              ],
-              "tipo_calculo": "fixo",
-              "coeficiente": 1.0
-            },
-            {
-              "id": "16582d11-aa3d-4d10-a551-ccac98afa29c",
-              "tipo": "sinapi",
-              "codigo_sinapi": "87692",
-              "unidade": "M2",
-              "da_etapa": true,
-              "multiplicador": 1.0,
-              "tipo_sinapi": "C",
-              "fatores": [
-                {
-                  "tipo_calculo": "fixo",
-                  "coeficiente": 1.0,
-                  "operacao": "multiplicar"
-                }
-              ],
-              "tipo_calculo": "fixo",
-              "coeficiente": 1.0
-            },
-            {
-              "id": "cd991604-29f0-45fc-85cf-7d11baae4f1d",
-              "tipo": "sinapi",
-              "codigo_sinapi": "102491",
-              "unidade": "M2",
-              "da_etapa": true,
-              "multiplicador": 1.0,
-              "tipo_sinapi": "C",
-              "fatores": [
-                {
-                  "tipo_calculo": "fixo",
-                  "coeficiente": 1.0,
-                  "operacao": "multiplicar"
-                }
-              ],
-              "tipo_calculo": "fixo",
-              "coeficiente": 1.0
-            }
-          ]
-        }
-      ],
-      "recomendacao": {
-        "criterio": "",
-        "por_opcao": {}
-      }
-    },
     "Umidade ascendente": {
       "reparos": [
         {
@@ -2529,6 +2454,81 @@
               ],
               "tipo_calculo": "fixo",
               "coeficiente": 1.0
+            }
+          ]
+        }
+      ],
+      "recomendacao": {
+        "criterio": "",
+        "por_opcao": {}
+      }
+    },
+    "Problemas no sistema de esgoto": {
+      "reparos": [
+        {
+          "id": "0f4ae4c7-0cb2-447e-a99c-3c40f47902d7",
+          "nome": "Inspeção e revisão do sistema",
+          "origem": "etapa_predefinida",
+          "etapa_predefinida_id": "c0a1b1b6-b46d-4c1d-bdba-af6f929aae8e",
+          "etapa_nome": "INSPEÇÃO E REVISÃO DO SISTEMA DE ESGOTO",
+          "tipo_calculo_etapa": "fixo",
+          "titulo_orcamento": "etapa",
+          "titulo_personalizado": "",
+          "percentuais_aba1": [],
+          "itens": [
+            {
+              "id": "352f5ac3-2ba9-4880-8090-8f10cd88fa3f",
+              "tipo": "sinapi",
+              "codigo_sinapi": "88267",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 16.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "por_bloco",
+              "coeficiente": 16.0
+            },
+            {
+              "id": "c7c96ce4-1b08-4856-beeb-7f537e045986",
+              "tipo": "sinapi",
+              "codigo_sinapi": "88248",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 16.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "por_bloco",
+              "coeficiente": 16.0
+            },
+            {
+              "id": "ce532287-a850-4cc1-b3bb-8046b9e988ce",
+              "tipo": "sinapi",
+              "codigo_sinapi": "92104",
+              "unidade": "H",
+              "da_etapa": true,
+              "multiplicador": 1.0,
+              "tipo_sinapi": "C",
+              "fatores": [
+                {
+                  "tipo_calculo": "por_bloco",
+                  "coeficiente": 16.0,
+                  "operacao": "multiplicar"
+                }
+              ],
+              "tipo_calculo": "por_bloco",
+              "coeficiente": 16.0
             }
           ]
         }

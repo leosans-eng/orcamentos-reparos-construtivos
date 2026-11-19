@@ -2379,10 +2379,7 @@ class PreviaDesenho2D(tk.Frame):
         )
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Configure>", self._ao_configurar)
-        self._texto_vazio = (
-            "Desenhe a planta (externa + hall) no ORCCAD\n"
-            "para ver aqui a prévia salva."
-        )
+        self._texto_vazio = "Sem planta"
 
     def definir(self, dados):
         self._camadas = dict_para_camadas(dados)
@@ -2661,15 +2658,10 @@ class VistaIsometricaBloco(tk.Frame):
             return
         c.delete("all")
         if not self._fechado:
-            self._mensagem(c, w, h, "A vista do bloco usa a planta externa fechada.")
+            self._mensagem(c, w, h, "Sem planta")
             return
         if self._pe_direito <= 0 or self._pavimentos <= 0:
-            self._mensagem(
-                c,
-                w,
-                h,
-                "Informe o pé-direito e a quantidade de pavimentos\npara ver o bloco.",
-            )
+            self._mensagem(c, w, h, "Sem pé-direito ou pavimentos")
             return
 
         pe = self._pe_direito
@@ -2768,6 +2760,15 @@ class VistaIsometricaBloco(tk.Frame):
                     c.create_line(
                         *tela(ax, ay, z), *tela(bx, by, z),
                         fill=cor_pav, width=largura_pav, tags=("pavimentos",),
+                    )
+            if destaque == "pe_direito":
+                # Pé-direito é a altura de um pavimento: as arestas verticais
+                # do térreo, do chão até a primeira laje. Desenhadas junto com
+                # a parede, a parede seguinte (mais próxima) já as encobre.
+                for x, y in ((ax, ay), (bx, by)):
+                    c.create_line(
+                        *tela(x, y, 0.0), *tela(x, y, pe),
+                        fill=_ISO_DESTAQUE_LINHA, width=3, tags=("pe_direito",),
                     )
         pts_laje = []
         for x, y in girado:
